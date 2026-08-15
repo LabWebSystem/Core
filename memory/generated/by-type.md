@@ -4,3 +4,6 @@
 
 ## ADR
 - ADR-001 | ACCEPTED | - | LWS配布とライフサイクルの基盤
+
+## CHG
+- CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐

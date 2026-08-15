@@ -27,3 +27,5 @@ sudo lwsctl uninstall --purge --force
 ```
 
 パッケージインストールはファイル配置だけを行います。Composeプロジェクトを起動するのは`lwsctl start`です。パッケージマネージャーを直接使用した場合も、APT/DNFの削除前hookがプロジェクトを停止します。LWSは専用のComposeプロジェクトとラベルを使うため、無関係なDockerリソースは削除しません。
+
+インストーラーは`/etc/os-release`を確認し、Ubuntu系ではGitHub Releasesから`.deb`を取得してAPTで、AlmaLinux系では`.rpm`を取得してDNFでインストールします。対応していないOSや必要なパッケージマネージャーがない環境では、コンテナやパッケージを変更せず日本語のエラーを表示して終了します。
