@@ -16,6 +16,7 @@
 - CHG-010 | SHIPPED | - | バージョン設定と公開操作を分離する
 - CHG-011 | SHIPPED | - | miseの表示形式に依存しないリリーステスト
 - CHG-012 | SHIPPED | - | GitHub ActionsのCIとリリースを段階並列化する
+- CHG-013 | SHIPPED | - | RPM成果物名とインストーラーの探索条件を整合させる
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
@@ -24,6 +25,7 @@
 
 ## installer
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
+- BUG-006 | VERIFIED | installer | アーキテクチャ名なしのRPMをインストーラーが見つけられない
 
 ## release
 - BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない

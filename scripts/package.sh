@@ -123,7 +123,7 @@ build_rpm() {
 
   cp \
     "$rpm_root"/RPMS/*/lws-"$VERSION"-1.*.rpm \
-    "$OUT/lws-${VERSION}.rpm"
+    "$OUT/lws-${VERSION}.x86_64.rpm"
 }
 
 write_checksums() {

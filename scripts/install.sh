@@ -101,7 +101,24 @@ find_package_asset() {
       awk \
         -v arch="$RPM_ARCH" \
         -F'"' \
-        '/browser_download_url/ && /\.rpm"/ && $0 ~ arch { print $4; exit }' \
+        '
+          /browser_download_url/ && /\.rpm"/ {
+            if ($0 ~ arch) {
+              print $4
+              exit
+            }
+
+            if (arch == "x86_64" && fallback == "") {
+              fallback = $4
+            }
+          }
+
+          END {
+            if (fallback != "") {
+              print fallback
+            }
+          }
+        ' \
         "$json"
       ;;
   esac

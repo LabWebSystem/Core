@@ -15,7 +15,7 @@ mise run release core sdk
 mise run release all
 ```
 
-`version`は引数なしで各コンポーネントの現在バージョンを一覧表示し、対象とバージョンを指定するとその正本を更新します。`release`には認証済みの`gh` CLIが必要で、指定した`core`または`sdk`の現在のバージョンをタグとして公開し、対応するWorkflowの完了まで待機します。`all`はCoreとSDKを並列に公開し、両方のWorkflow完了まで待機します。出力には`[LWS]`または`[SDK]`が付きます。既存Coreリリースを置き換える場合は、`--force`を指定します。公開済みSDKバージョンはGitHub Packagesの仕様上、再公開できません。
+`version`は引数なしで各コンポーネントの現在バージョンを一覧表示し、対象とバージョンを指定するとその正本を更新します。`release`には認証済みの`gh` CLIが必要で、指定した`core`または`sdk`の現在のバージョンをタグとして公開し、対応するWorkflowの完了まで待機します。`all`はCoreとSDKを並列に公開し、両方のWorkflow完了まで待機します。出力には`[LWS]`または`[SDK]`が付き、関連するステップだけを表示します。既存Coreリリースを置き換える場合は、`--force`を指定します。公開済みSDKバージョンはGitHub Packagesの仕様上、再公開できません。
 
 ## インストールとライフサイクル
 

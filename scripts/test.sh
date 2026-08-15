@@ -149,6 +149,7 @@ test_uninstall() {
 }
 
 test_installer_almalinux() {
+  local asset_name="$1"
   local installer_tmp="$TMP/installer"
   local fake_bin="$installer_tmp/bin"
   local os_release="$installer_tmp/os-release"
@@ -205,15 +206,10 @@ done
 
 case "$output" in
   */release.json)
-    cat >"$output" <<'JSON'
-{
-  "assets": [
-    {
-      "browser_download_url": "https://example.invalid/lws-0.1.0.x86_64.rpm"
-    }
-  ]
-}
-JSON
+    printf \
+      '{\n  "assets": [\n    {\n      "browser_download_url": "https://example.invalid/%s"\n    }\n  ]\n}\n' \
+      "${LWS_TEST_RPM_ASSET_NAME:?}" \
+      >"$output"
     ;;
   *)
     printf 'fake-rpm\n' >"$output"
@@ -234,10 +230,11 @@ EOF
 
   PATH="$fake_bin:$PATH" \
   LWS_OS_RELEASE_FILE="$os_release" \
+  LWS_TEST_RPM_ASSET_NAME="$asset_name" \
     "$ROOT/scripts/install.sh"
 
   grep -q \
-    'install -y .*lws-0.1.0.x86_64.rpm' \
+    "install -y .*${asset_name}" \
     "$dnf_log"
 }
 
@@ -304,7 +301,7 @@ EOF
   grep -qF 'push origin +sdk-v0.1.0' "$deploy_log"
   grep -qF 'gh run list --repo labwebsystem/core --workflow release-lws.yml' "$deploy_log"
   grep -qF 'gh run list --repo labwebsystem/core --workflow release-sdk.yml' "$deploy_log"
-  test "$(grep -cF 'gh run watch 100 --repo labwebsystem/core --exit-status' "$deploy_log")" -eq 4
+  test "$(grep -cF 'gh run watch 100 --repo labwebsystem/core --exit-status --compact' "$deploy_log")" -eq 4
   grep -qF '[LWS] Workflowの監視を完了しました' "$all_output"
   grep -qF '[SDK] Workflowの監視を完了しました' "$all_output"
 }
@@ -332,7 +329,8 @@ main() {
   test_domain_change
   test_update
   test_uninstall
-  test_installer_almalinux
+  test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
+  test_installer_almalinux 'lws-0.1.0.rpm'
   test_version_sources
   test_release_selected_components
 

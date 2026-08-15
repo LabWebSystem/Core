@@ -150,7 +150,7 @@ release_core() {
   push_release_tag "$tag"
   commit="$(git -C "$ROOT" rev-parse "$tag^{commit}")"
   run_id="$(find_workflow_run "$repository" "$LWS_WORKFLOW" "$commit")" || die 'CoreリリースWorkflowを確認できません'
-  gh run watch "$run_id" --repo "$repository" --exit-status
+  gh run watch "$run_id" --repo "$repository" --exit-status --compact
 }
 
 release_sdk() {
@@ -161,7 +161,7 @@ release_sdk() {
   push_release_tag "$tag"
   commit="$(git -C "$ROOT" rev-parse "$tag^{commit}")"
   run_id="$(find_workflow_run "$repository" "$SDK_WORKFLOW" "$commit")" || die 'SDKリリースWorkflowを確認できません'
-  gh run watch "$run_id" --repo "$repository" --exit-status
+  gh run watch "$run_id" --repo "$repository" --exit-status --compact
 }
 
 release_all() {
