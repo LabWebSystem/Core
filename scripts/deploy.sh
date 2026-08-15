@@ -21,7 +21,14 @@ if gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
   fi
   gh release delete "$TAG" --repo "$REPOSITORY" --yes
 fi
-"$ROOT/scripts/package.sh" --version "$VERSION"
 git -C "$ROOT" tag -f "$TAG"
 git -C "$ROOT" push origin "+$TAG"
-gh release create "$TAG" --repo "$REPOSITORY" "$ROOT/dist"/* --title "LWS $VERSION" --generate-notes
+TAG_COMMIT="$(git -C "$ROOT" rev-parse "$TAG^{commit}")"
+RUN_ID=""
+for _ in {1..15}; do
+  RUN_ID="$(gh run list --repo "$REPOSITORY" --workflow release-lws.yml --event push --commit "$TAG_COMMIT" --limit 1 --json databaseId --jq '.[0].databaseId')"
+  [[ -n "$RUN_ID" ]] && break
+  sleep 2
+done
+[[ -n "$RUN_ID" ]] || { printf 'リリースWorkflowを確認できません\n' >&2; exit 1; }
+gh run watch "$RUN_ID" --repo "$REPOSITORY" --exit-status

@@ -5,17 +5,46 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
 cat >"$TMP/bin/docker" <<'EOF'
 #!/bin/sh
-printf '%s\n' "$*" >>"${LWS_TEST_LOG:?}"
-printf 'LWS_BASE_DOMAIN=%s\n' "${LWS_BASE_DOMAIN:-}" >>"${LWS_TEST_LOG:?}"
+printf '%s | LWS_BASE_DOMAIN=%s\n' "$*" "${LWS_BASE_DOMAIN:-}" >>"${LWS_TEST_LOG:?}"
 EOF
 chmod +x "$TMP/bin/docker"
 export PATH="$TMP/bin:$PATH" LWS_TEST_LOG="$TMP/docker.log" LWS_CONFIG_DIR="$TMP/etc" LWS_STATE_DIR="$TMP/state" LWS_COMPOSE_FILE="$ROOT/infrastructure/compose.yaml" LWS_SKIP_PACKAGE_REMOVE=1
+LWSCTL="$ROOT/scripts/lwsctl"
+
+"$LWSCTL" status >"$TMP/status-before"
+grep -q '設定済み: いいえ' "$TMP/status-before"
 "$ROOT/scripts/lwsctl" start --domain example.internal
-grep -q 'compose --project-name lws' "$TMP/docker.log"
-grep -q 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
-grep -q 'LWS_BASE_DOMAIN=example.internal' "$TMP/docker.log"
-! "$ROOT/scripts/lwsctl" start --domain bad_domain >/dev/null 2>&1
-"$ROOT/scripts/lwsctl" stop >/dev/null
+grep -qx 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
+grep -qF 'compose --project-name lws --file' "$TMP/docker.log"
+grep -qF 'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal' "$TMP/docker.log"
+
+"$LWSCTL" status >"$TMP/status-after-start"
+grep -q '設定済み: はい' "$TMP/status-after-start"
+grep -q 'ドメイン: example.internal' "$TMP/status-after-start"
+grep -qF 'ps | LWS_BASE_DOMAIN=example.internal' "$TMP/docker.log"
+
+! printf 'n\n' | "$LWSCTL" start --domain changed.internal >/dev/null 2>&1
+grep -qx 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
+"$LWSCTL" start --domain changed.internal --force
+grep -qx 'LWS_BASE_DOMAIN=changed.internal' "$TMP/etc/config.env"
+grep -qF 'up -d --remove-orphans | LWS_BASE_DOMAIN=changed.internal' "$TMP/docker.log"
+
+"$LWSCTL" rebuild
+grep -qF 'config | LWS_BASE_DOMAIN=changed.internal' "$TMP/docker.log"
+grep -qF 'up -d --force-recreate --remove-orphans | LWS_BASE_DOMAIN=changed.internal' "$TMP/docker.log"
+"$LWSCTL" update
+grep -qF 'pull | LWS_BASE_DOMAIN=changed.internal' "$TMP/docker.log"
+
+"$LWSCTL" stop
+grep -qF 'down --remove-orphans | LWS_BASE_DOMAIN=changed.internal' "$TMP/docker.log"
+"$LWSCTL" uninstall >"$TMP/uninstall"
+grep -q 'パッケージマネージャーによる削除をスキップしました' "$TMP/uninstall"
+test -f "$TMP/etc/config.env"
+"$LWSCTL" uninstall --purge --force
+test ! -e "$TMP/etc"
+test ! -e "$TMP/state"
+
+! "$LWSCTL" start --domain bad_domain >/dev/null 2>&1
 
 INSTALLER_TMP="$TMP/installer"
 mkdir -p "$INSTALLER_TMP/bin"

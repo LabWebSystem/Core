@@ -22,13 +22,13 @@ jobs:
       - name: Backendイメージをビルドして公開
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
-          docker build --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-backend:${VERSION}" backend
-          docker push "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-backend:${VERSION}"
+          docker build --tag "ghcr.io/labwebsystem/lws-backend:${VERSION}" backend
+          docker push "ghcr.io/labwebsystem/lws-backend:${VERSION}"
       - name: Dashboardイメージをビルドして公開
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
-          docker build --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-dashboard:${VERSION}" dashboard
-          docker push "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-dashboard:${VERSION}"
+          docker build --tag "ghcr.io/labwebsystem/lws-dashboard:${VERSION}" dashboard
+          docker push "ghcr.io/labwebsystem/lws-dashboard:${VERSION}"
       - name: GitHubリリースを公開
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

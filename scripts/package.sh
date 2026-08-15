@@ -12,7 +12,8 @@ done
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'バージョンはx.y.z形式で指定してください\n' >&2; exit 2; }
 rm -rf "$OUT" "$ROOT/.package-work"
 mkdir -p "$OUT" "$ROOT/.package-work/deb/DEBIAN" "$ROOT/.package-work/deb/usr/bin" "$ROOT/.package-work/deb/usr/share/lws"
-install -m 0755 "$ROOT/scripts/lwsctl" "$ROOT/.package-work/deb/usr/bin/lwsctl"
+sed "s/^VERSION=\"0.1.0\"$/VERSION=\"$VERSION\"/" "$ROOT/scripts/lwsctl" >"$ROOT/.package-work/deb/usr/bin/lwsctl"
+chmod 0755 "$ROOT/.package-work/deb/usr/bin/lwsctl"
 install -m 0644 "$ROOT/infrastructure/compose.yaml" "$ROOT/.package-work/deb/usr/share/lws/compose.yaml"
 cat >"$ROOT/.package-work/deb/DEBIAN/control" <<EOF
 Package: lws
@@ -36,7 +37,7 @@ fi
 command -v rpmbuild >/dev/null 2>&1 || { printf 'rpmbuildが必要です\n' >&2; exit 1; }
 RPMROOT="$ROOT/.package-work/rpm"
 mkdir -p "$RPMROOT/BUILD" "$RPMROOT/RPMS" "$RPMROOT/SOURCES" "$RPMROOT/SPECS" "$RPMROOT/SRPMS"
-cp "$ROOT/scripts/lwsctl" "$RPMROOT/SOURCES/lwsctl"
+sed "s/^VERSION=\"0.1.0\"$/VERSION=\"$VERSION\"/" "$ROOT/scripts/lwsctl" >"$RPMROOT/SOURCES/lwsctl"
 cp "$ROOT/infrastructure/compose.yaml" "$RPMROOT/SOURCES/compose.yaml"
 sed "s/^Version: VERSION$/Version: $VERSION/" "$ROOT/packaging/lws.spec.in" >"$RPMROOT/SPECS/lws.spec"
 rpmbuild --define "_topdir $RPMROOT" -bb "$RPMROOT/SPECS/lws.spec" >/dev/null
