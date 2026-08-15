@@ -6,16 +6,41 @@ permissions:
   contents: write
   packages: write
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
       - name: Coreバージョンをリリースタグと照合
         run: test "$(scripts/version.sh core)" = "${GITHUB_REF_NAME#lws-v}"
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
       - run: mise run lint
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
       - run: mise run test
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
       - run: mise run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lws-release-assets
+          path: dist/*
+          if-no-files-found: error
+  backend-image:
+    needs: [version, lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -26,11 +51,29 @@ jobs:
           VERSION="${GITHUB_REF_NAME#lws-v}"
           docker build --tag "ghcr.io/labwebsystem/lws-backend:${VERSION}" backend
           docker push "ghcr.io/labwebsystem/lws-backend:${VERSION}"
+  dashboard-image:
+    needs: [version, lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Dashboardイメージをビルドして公開
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
           docker build --tag "ghcr.io/labwebsystem/lws-dashboard:${VERSION}" dashboard
           docker push "ghcr.io/labwebsystem/lws-dashboard:${VERSION}"
+  release:
+    needs: [version, lint, test, package, backend-image, dashboard-image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lws-release-assets
+          path: dist
       - name: GitHubリリースを公開
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

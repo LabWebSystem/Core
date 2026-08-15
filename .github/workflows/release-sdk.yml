@@ -5,7 +5,37 @@ on:
 permissions:
   packages: write
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: SDKバージョンをリリースタグと照合
+        run: test "$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME#sdk-v}"
+      - run: npm test
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lws-sdk-dist
+          path: sdk/dist
+          if-no-files-found: error
   publish:
+    needs: [test, build]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -16,10 +46,10 @@ jobs:
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
-      - name: SDKバージョンをリリースタグと照合
-        run: test "$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME#sdk-v}"
-      - run: npm test
-      - run: npm run build
+      - uses: actions/download-artifact@v4
+        with:
+          name: lws-sdk-dist
+          path: sdk/dist
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

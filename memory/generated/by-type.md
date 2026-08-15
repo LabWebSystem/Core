@@ -23,3 +23,4 @@
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
 - CHG-010 | SHIPPED | - | バージョン設定と公開操作を分離する
 - CHG-011 | SHIPPED | - | miseの表示形式に依存しないリリーステスト
+- CHG-012 | SHIPPED | - | GitHub ActionsのCIとリリースを段階並列化する
