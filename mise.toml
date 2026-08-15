@@ -1,0 +1,23 @@
+[tasks.lint]
+description = "Run static checks"
+run = "scripts/lint.sh"
+
+[tasks.test]
+description = "Run the integration-light test suite"
+run = "scripts/test.sh"
+
+[tasks.build]
+description = "Build release packages"
+run = "scripts/package.sh --version ${LWS_VERSION:-0.1.0}"
+
+[tasks.package]
+description = "Build .deb and .rpm artifacts"
+run = "scripts/package.sh --version ${LWS_VERSION:-0.1.0}"
+
+[tasks.deploy]
+description = "Create or overwrite a GitHub LWS release"
+run = "scripts/deploy.sh"
+
+[tasks.dev]
+description = "Start the mock Compose stack"
+run = "docker compose -f infrastructure/compose.yaml up"

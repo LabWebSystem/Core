@@ -1,0 +1,21 @@
+Name: lws
+Version: VERSION
+Release: 1%{?dist}
+Summary: LabWebSystem lifecycle tools
+License: MIT
+BuildArch: noarch
+%description
+LabWebSystem lifecycle CLI and Docker Compose definition.
+%prep
+%build
+%install
+mkdir -p %{buildroot}/usr/bin %{buildroot}/usr/share/lws
+install -m 0755 %{_sourcedir}/lwsctl %{buildroot}/usr/bin/lwsctl
+install -m 0644 %{_sourcedir}/compose.yaml %{buildroot}/usr/share/lws/compose.yaml
+%preun
+if [ "$1" -eq 0 ] && [ -x /usr/bin/lwsctl ]; then
+  LWS_SKIP_PACKAGE_REMOVE=1 /usr/bin/lwsctl stop || :
+fi
+%files
+/usr/bin/lwsctl
+/usr/share/lws/compose.yaml

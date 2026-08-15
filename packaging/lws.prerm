@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+if [ -x /usr/bin/lwsctl ]; then
+  LWS_SKIP_PACKAGE_REMOVE=1 /usr/bin/lwsctl stop || true
+fi
