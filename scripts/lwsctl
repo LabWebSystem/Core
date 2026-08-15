@@ -86,7 +86,7 @@ stop() {
   printf 'LWSを停止しました\n'
 }
 status() {
-  [[ -f "$CONFIG_FILE" ]] && load_config && printf '設定済み: はい\nドメイン: %s\n' "$LWS_BASE_DOMAIN" || printf '設定済み: いいえ\n'
+  [[ -f "$CONFIG_FILE" ]] && load_config && printf '設定済み: YES\nドメイン: %s\n' "$LWS_BASE_DOMAIN" || printf '設定済み: NO\n'
   [[ -f "$COMPOSE_FILE" ]] || { printf '実行環境: 未インストール\n'; return 0; }
   compose ps
 }

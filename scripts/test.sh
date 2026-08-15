@@ -20,14 +20,14 @@ export PATH="$TMP/bin:$PATH" LWS_TEST_LOG="$TMP/docker.log" LWS_CONFIG_DIR="$TMP
 LWSCTL="$ROOT/scripts/lwsctl"
 
 "$LWSCTL" status >"$TMP/status-before"
-grep -q '設定済み: いいえ' "$TMP/status-before"
+grep -q '設定済み: NO' "$TMP/status-before"
 "$ROOT/scripts/lwsctl" start --domain example.internal
 grep -qx 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
 grep -qF 'compose --project-name lws --file' "$TMP/docker.log"
 grep -qF 'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
 
 "$LWSCTL" status >"$TMP/status-after-start"
-grep -q '設定済み: はい' "$TMP/status-after-start"
+grep -q '設定済み: YES' "$TMP/status-after-start"
 grep -q 'ドメイン: example.internal' "$TMP/status-after-start"
 grep -qF 'ps | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
 
