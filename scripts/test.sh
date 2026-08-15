@@ -282,6 +282,9 @@ case "$1 $2" in
   'run list')
     printf '100\n'
     ;;
+  'run watch')
+    printf 'Workflowの監視を完了しました\n'
+    ;;
 esac
 EOF
 
@@ -291,15 +294,19 @@ EOF
   LWS_DEPLOY_TEST_LOG="$deploy_log" \
     "$ROOT/scripts/release.sh" core sdk
 
+  local all_output="$deploy_tmp/release-all"
+
   PATH="$fake_bin:$PATH" \
   LWS_DEPLOY_TEST_LOG="$deploy_log" \
-    "$ROOT/scripts/release.sh" all
+    "$ROOT/scripts/release.sh" all >"$all_output" 2>&1
 
   grep -qF 'push origin +lws-v0.1.0' "$deploy_log"
   grep -qF 'push origin +sdk-v0.1.0' "$deploy_log"
   grep -qF 'gh run list --repo labwebsystem/core --workflow release-lws.yml' "$deploy_log"
   grep -qF 'gh run list --repo labwebsystem/core --workflow release-sdk.yml' "$deploy_log"
   test "$(grep -cF 'gh run watch 100 --repo labwebsystem/core --exit-status' "$deploy_log")" -eq 4
+  grep -qF '[LWS] Workflowの監視を完了しました' "$all_output"
+  grep -qF '[SDK] Workflowの監視を完了しました' "$all_output"
 }
 
 test_version_sources() {

@@ -26,4 +26,4 @@
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 
 ## release
-- BUG-005 | OPEN | release | checkoutなしのReleaseジョブでリポジトリを解決できない
+- BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない

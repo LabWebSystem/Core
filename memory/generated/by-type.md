@@ -10,7 +10,7 @@
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
 - BUG-004 | VERIFIED | cli | 設定済みのLWSバージョンをComposeへ渡さない
-- BUG-005 | OPEN | release | checkoutなしのReleaseジョブでリポジトリを解決できない
+- BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐

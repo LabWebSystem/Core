@@ -8,6 +8,7 @@ readonly SDK_WORKFLOW="release-sdk.yml"
 FORCE=false
 RELEASE_CORE=false
 RELEASE_SDK=false
+RELEASE_ALL=false
 
 usage() {
   printf '使い方: mise run release <core|sdk|all>... [--force]\n'
@@ -39,6 +40,7 @@ parse_args() {
       all)
         RELEASE_CORE=true
         RELEASE_SDK=true
+        RELEASE_ALL=true
         ;;
       --force)
         FORCE=true
@@ -121,13 +123,30 @@ find_workflow_run() {
   return 1
 }
 
-release_core() {
+prepare_core_release() {
   local repository="$1"
-  local version tag commit run_id
+  local version tag
   version="$("$ROOT/scripts/version.sh" core)"
   tag="lws-v$version"
 
   delete_existing_core_release "$repository" "$tag"
+  printf '%s\n' "$tag"
+}
+
+prepare_sdk_release() {
+  local version tag
+  version="$("$ROOT/scripts/version.sh" sdk)"
+  tag="sdk-v$version"
+
+  ensure_sdk_tag_is_new "$tag"
+  printf '%s\n' "$tag"
+}
+
+release_core() {
+  local repository="$1"
+  local tag="$2"
+  local commit run_id
+
   push_release_tag "$tag"
   commit="$(git -C "$ROOT" rev-parse "$tag^{commit}")"
   run_id="$(find_workflow_run "$repository" "$LWS_WORKFLOW" "$commit")" || die 'CoreリリースWorkflowを確認できません'
@@ -136,15 +155,32 @@ release_core() {
 
 release_sdk() {
   local repository="$1"
-  local version tag commit run_id
-  version="$("$ROOT/scripts/version.sh" sdk)"
-  tag="sdk-v$version"
+  local tag="$2"
+  local commit run_id
 
-  ensure_sdk_tag_is_new "$tag"
   push_release_tag "$tag"
   commit="$(git -C "$ROOT" rev-parse "$tag^{commit}")"
   run_id="$(find_workflow_run "$repository" "$SDK_WORKFLOW" "$commit")" || die 'SDKリリースWorkflowを確認できません'
   gh run watch "$run_id" --repo "$repository" --exit-status
+}
+
+release_all() {
+  local repository="$1"
+  local core_tag sdk_tag core_pid sdk_pid
+  local core_status=0 sdk_status=0
+
+  core_tag="$(prepare_core_release "$repository")"
+  sdk_tag="$(prepare_sdk_release)"
+
+  (release_core "$repository" "$core_tag") 2>&1 | sed -u 's/^/[LWS] /' &
+  core_pid=$!
+  (release_sdk "$repository" "$sdk_tag") 2>&1 | sed -u 's/^/[SDK] /' &
+  sdk_pid=$!
+
+  wait "$core_pid" || core_status=$?
+  wait "$sdk_pid" || sdk_status=$?
+
+  ((core_status == 0 && sdk_status == 0)) || return 1
 }
 
 main() {
@@ -156,8 +192,18 @@ main() {
   local repository
   repository="$(resolve_repository)"
 
-  [[ "$RELEASE_CORE" != true ]] || release_core "$repository"
-  [[ "$RELEASE_SDK" != true ]] || release_sdk "$repository"
+  if [[ "$RELEASE_ALL" == true ]]; then
+    release_all "$repository"
+    return
+  fi
+
+  if [[ "$RELEASE_CORE" == true ]]; then
+    release_core "$repository" "$(prepare_core_release "$repository")"
+  fi
+
+  if [[ "$RELEASE_SDK" == true ]]; then
+    release_sdk "$repository" "$(prepare_sdk_release)"
+  fi
 }
 
 main "$@"
