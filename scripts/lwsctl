@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="0.1.0"
+VERSION_FILE="${LWS_VERSION_FILE:-/usr/share/lws/version}"
+INSTALLER_PATH="${LWS_INSTALLER_PATH:-/usr/share/lws/install.sh}"
 CONFIG_DIR="${LWS_CONFIG_DIR:-/etc/lws}"
 STATE_DIR="${LWS_STATE_DIR:-/var/lib/lws}"
 COMPOSE_FILE="${LWS_COMPOSE_FILE:-/usr/share/lws/compose.yaml}"
@@ -17,6 +18,9 @@ EOF
 }
 die() { printf 'lwsctl: %s\n' "$*" >&2; exit 1; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "必要なコマンドが見つかりません: $1"; }
+[[ -r "$VERSION_FILE" ]] || die "LWSバージョンファイルを読み取れません: $VERSION_FILE"
+VERSION="$(<"$VERSION_FILE")"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "LWSバージョンが不正です: $VERSION"
 
 valid_domain() {
   [[ "$1" =~ ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?[a-z0-9]*)+$ ]]
@@ -32,14 +36,14 @@ load_config() {
   # shellcheck disable=SC1090
   . "$CONFIG_FILE"
   [[ -n "${LWS_BASE_DOMAIN:-}" ]] || die "LWSの設定が不正です"
-  export LWS_BASE_DOMAIN
+  export LWS_BASE_DOMAIN LWS_VERSION
 }
 write_config() {
   local domain="$1"
   install -d -m 0755 "$CONFIG_DIR" "$STATE_DIR"
   printf 'LWS_BASE_DOMAIN=%q\nLWS_VERSION=%q\n' "$domain" "$VERSION" >"$CONFIG_FILE"
   chmod 0644 "$CONFIG_FILE"
-  export LWS_BASE_DOMAIN="$domain"
+  export LWS_BASE_DOMAIN="$domain" LWS_VERSION="$VERSION"
 }
 confirm() {
   local prompt="$1" answer
@@ -94,6 +98,12 @@ rebuild() {
 }
 update() {
   load_config || die '設定を作成するため、先にstartを実行してください'
+  if [[ "${LWS_SKIP_PACKAGE_UPDATE:-0}" != 1 ]]; then
+    [[ -x "$INSTALLER_PATH" ]] || die "インストーラーが見つかりません: $INSTALLER_PATH"
+    env -u LWS_VERSION "$INSTALLER_PATH"
+    exec env LWS_SKIP_PACKAGE_UPDATE=1 "$0" update
+  fi
+  write_config "$LWS_BASE_DOMAIN"
   compose pull
   compose up -d --remove-orphans
   printf 'LWSを更新しました\n'

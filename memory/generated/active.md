@@ -5,3 +5,4 @@
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
+- BUG-004 | VERIFIED | cli | 設定済みのLWSバージョンをComposeへ渡さない
