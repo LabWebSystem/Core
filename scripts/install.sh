@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-REPOSITORY="${LWS_REPOSITORY:-labwebsystem/Core}"
+REPOSITORY="${LWS_REPOSITORY:-LabWebSystem/Core}"
 VERSION="${LWS_VERSION:-latest}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT

@@ -16,10 +16,10 @@ mise run deploy --version 1.2.3 --force
 
 ## インストールとライフサイクル
 
-GitHub上のインストーラーは`scripts/install.sh`です。フォークを使う場合は`LWS_REPOSITORY=owner/repository`を設定してください。
+GitHub上のインストーラーは[LabWebSystem/Core](https://github.com/LabWebSystem/Core)の`scripts/install.sh`です。フォークを使う場合は`LWS_REPOSITORY=owner/repository`を設定してください。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/owner/repository/main/scripts/install.sh | sudo LWS_REPOSITORY=owner/repository bash
+curl -fsSL https://raw.githubusercontent.com/LabWebSystem/Core/main/scripts/install.sh | sudo bash
 sudo lwsctl start --domain example.internal
 sudo lwsctl stop
 sudo lwsctl uninstall
