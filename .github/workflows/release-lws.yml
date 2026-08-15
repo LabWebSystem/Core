@@ -77,4 +77,4 @@ jobs:
       - name: GitHubリリースを公開
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "LWS ${GITHUB_REF_NAME#lws-v}" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "LWS ${GITHUB_REF_NAME#lws-v}" --generate-notes

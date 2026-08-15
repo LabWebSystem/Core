@@ -5,6 +5,9 @@
 ## ACCEPTED
 - ADR-001 | ACCEPTED | - | LWS配布とライフサイクルの基盤
 
+## OPEN
+- BUG-005 | OPEN | release | checkoutなしのReleaseジョブでリポジトリを解決できない
+
 ## SHIPPED
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
