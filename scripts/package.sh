@@ -1,23 +1,88 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly OUT="$ROOT/dist"
+readonly WORK="$ROOT/.package-work"
+
 VERSION="0.1.0"
-OUT="$ROOT/dist"
-while (($#)); do
-  case "$1" in
-    --version) VERSION="$2"; shift 2 ;;
-    *) printf '不明なオプションです: %s\n' "$1" >&2; exit 2 ;;
-  esac
-done
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'バージョンはx.y.z形式で指定してください\n' >&2; exit 2; }
-rm -rf "$OUT" "$ROOT/.package-work"
-mkdir -p "$OUT" "$ROOT/.package-work/deb/DEBIAN" "$ROOT/.package-work/deb/usr/bin" "$ROOT/.package-work/deb/usr/share/lws"
-"$ROOT/scripts/build-lwsctl.sh" --output "$ROOT/.package-work/lwsctl" --goos linux --goarch amd64
-install -m 0755 "$ROOT/.package-work/lwsctl" "$ROOT/.package-work/deb/usr/bin/lwsctl"
-install -m 0644 "$ROOT/infrastructure/compose.yaml" "$ROOT/.package-work/deb/usr/share/lws/compose.yaml"
-printf '%s\n' "$VERSION" >"$ROOT/.package-work/deb/usr/share/lws/version"
-install -m 0755 "$ROOT/scripts/install.sh" "$ROOT/.package-work/deb/usr/share/lws/install.sh"
-cat >"$ROOT/.package-work/deb/DEBIAN/control" <<EOF
+
+usage() {
+  printf '使い方: scripts/package.sh [--version x.y.z]\n'
+}
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+cleanup() {
+  rm -rf "$WORK"
+}
+
+parse_args() {
+  while (($#)); do
+    case "$1" in
+      --version)
+        (($# >= 2)) || die '--versionには値が必要です'
+        VERSION="$2"
+        shift 2
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        usage >&2
+        exit 2
+        ;;
+    esac
+  done
+}
+
+validate_version() {
+  [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die 'バージョンはx.y.z形式で指定してください'
+}
+
+prepare() {
+  rm -rf "$OUT" "$WORK"
+
+  mkdir -p \
+    "$OUT" \
+    "$WORK/deb/DEBIAN" \
+    "$WORK/deb/usr/bin" \
+    "$WORK/deb/usr/share/lws"
+}
+
+build_lwsctl() {
+  "$ROOT/scripts/build-lwsctl.sh" \
+    --output "$WORK/lwsctl" \
+    --goos linux \
+    --goarch amd64
+}
+
+prepare_deb_tree() {
+  install -m 0755 \
+    "$WORK/lwsctl" \
+    "$WORK/deb/usr/bin/lwsctl"
+
+  install -m 0644 \
+    "$ROOT/infrastructure/compose.yaml" \
+    "$WORK/deb/usr/share/lws/compose.yaml"
+
+  install -m 0755 \
+    "$ROOT/scripts/install.sh" \
+    "$WORK/deb/usr/share/lws/install.sh"
+
+  install -m 0755 \
+    "$ROOT/packaging/lws.prerm" \
+    "$WORK/deb/DEBIAN/prerm"
+
+  printf '%s\n' "$VERSION" \
+    >"$WORK/deb/usr/share/lws/version"
+
+  cat >"$WORK/deb/DEBIAN/control" <<EOF
 Package: lws
 Version: $VERSION
 Section: admin
@@ -26,26 +91,93 @@ Architecture: amd64
 Maintainer: LabWebSystem maintainers
 Description: LabWebSystemのライフサイクルツール
 EOF
-install -m 0755 "$ROOT/packaging/lws.prerm" "$ROOT/.package-work/deb/DEBIAN/prerm"
-if command -v dpkg-deb >/dev/null 2>&1; then
-  dpkg-deb --build "$ROOT/.package-work/deb" "$OUT/lws_${VERSION}_amd64.deb" >/dev/null
-else
-  command -v ar >/dev/null 2>&1 || { printf 'dpkg-debまたはarが必要です\n' >&2; exit 1; }
-  (cd "$ROOT/.package-work/deb/DEBIAN" && tar -czf "$ROOT/.package-work/control.tar.gz" .)
-  (cd "$ROOT/.package-work/deb" && tar -czf "$ROOT/.package-work/data.tar.gz" --exclude=DEBIAN .)
-  printf '2.0\n' >"$ROOT/.package-work/debian-binary"
-  ar r "$OUT/lws_${VERSION}_amd64.deb" "$ROOT/.package-work/debian-binary" "$ROOT/.package-work/control.tar.gz" "$ROOT/.package-work/data.tar.gz" >/dev/null
-fi
-command -v rpmbuild >/dev/null 2>&1 || { printf 'rpmbuildが必要です\n' >&2; exit 1; }
-RPMROOT="$ROOT/.package-work/rpm"
-mkdir -p "$RPMROOT/BUILD" "$RPMROOT/RPMS" "$RPMROOT/SOURCES" "$RPMROOT/SPECS" "$RPMROOT/SRPMS"
-cp "$ROOT/.package-work/lwsctl" "$RPMROOT/SOURCES/lwsctl"
-cp "$ROOT/infrastructure/compose.yaml" "$RPMROOT/SOURCES/compose.yaml"
-printf '%s\n' "$VERSION" >"$RPMROOT/SOURCES/version"
-cp "$ROOT/scripts/install.sh" "$RPMROOT/SOURCES/install.sh"
-sed "s/^Version: VERSION$/Version: $VERSION/" "$ROOT/packaging/lws.spec.in" >"$RPMROOT/SPECS/lws.spec"
-rpmbuild --define "_topdir $RPMROOT" -bb "$RPMROOT/SPECS/lws.spec" >/dev/null
-cp "$RPMROOT"/RPMS/*/lws-"$VERSION"-1.*.rpm "$OUT/lws-${VERSION}.rpm"
-sha256sum "$OUT"/* >"$OUT/SHA256SUMS"
-rm -rf "$ROOT/.package-work"
-printf 'リリース成果物を%sに生成しました\n' "$OUT"
+}
+
+build_deb() {
+  local output="$OUT/lws_${VERSION}_amd64.deb"
+
+  if command -v dpkg-deb >/dev/null 2>&1; then
+    dpkg-deb --build "$WORK/deb" "$output" >/dev/null
+    return
+  fi
+
+  command -v ar >/dev/null 2>&1 ||
+    die 'dpkg-debまたはarが必要です'
+
+  (
+    cd "$WORK/deb/DEBIAN"
+    tar -czf "$WORK/control.tar.gz" .
+  )
+
+  (
+    cd "$WORK/deb"
+    tar -czf "$WORK/data.tar.gz" --exclude=DEBIAN .
+  )
+
+  printf '2.0\n' >"$WORK/debian-binary"
+
+  ar r "$output" \
+    "$WORK/debian-binary" \
+    "$WORK/control.tar.gz" \
+    "$WORK/data.tar.gz" \
+    >/dev/null
+}
+
+build_rpm() {
+  command -v rpmbuild >/dev/null 2>&1 ||
+    die 'rpmbuildが必要です'
+
+  local rpm_root="$WORK/rpm"
+
+  mkdir -p \
+    "$rpm_root/BUILD" \
+    "$rpm_root/RPMS" \
+    "$rpm_root/SOURCES" \
+    "$rpm_root/SPECS" \
+    "$rpm_root/SRPMS"
+
+  install -m 0755 "$WORK/lwsctl" "$rpm_root/SOURCES/lwsctl"
+  install -m 0644 "$ROOT/infrastructure/compose.yaml" "$rpm_root/SOURCES/compose.yaml"
+  install -m 0755 "$ROOT/scripts/install.sh" "$rpm_root/SOURCES/install.sh"
+
+  printf '%s\n' "$VERSION" >"$rpm_root/SOURCES/version"
+
+  sed \
+    "s/^Version: VERSION$/Version: $VERSION/" \
+    "$ROOT/packaging/lws.spec.in" \
+    >"$rpm_root/SPECS/lws.spec"
+
+  rpmbuild \
+    --define "_topdir $rpm_root" \
+    -bb "$rpm_root/SPECS/lws.spec" \
+    >/dev/null
+
+  cp \
+    "$rpm_root"/RPMS/*/lws-"$VERSION"-1.*.rpm \
+    "$OUT/lws-${VERSION}.rpm"
+}
+
+write_checksums() {
+  (
+    cd "$OUT"
+    sha256sum ./* >SHA256SUMS
+  )
+}
+
+main() {
+  parse_args "$@"
+  validate_version
+
+  trap cleanup EXIT
+
+  prepare
+  build_lwsctl
+  prepare_deb_tree
+  build_deb
+  build_rpm
+  write_checksums
+
+  printf 'リリース成果物を%sに生成しました\n' "$OUT"
+}
+
+main "$@"

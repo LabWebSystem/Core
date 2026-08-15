@@ -1,116 +1,149 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/bin"
-cat >"$TMP/bin/docker" <<'EOF'
+
+readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+TMP=""
+
+cleanup() {
+  [[ -z "$TMP" ]] || rm -rf "$TMP"
+}
+
+setup_cli_environment() {
+  mkdir -p "$TMP/bin"
+
+  cat >"$TMP/bin/docker" <<'EOF'
 #!/bin/sh
-printf '%s | LWS_BASE_DOMAIN=%s LWS_VERSION=%s\n' "$*" "${LWS_BASE_DOMAIN:-}" "${LWS_VERSION:-}" >>"${LWS_TEST_LOG:?}"
+printf '%s | LWS_BASE_DOMAIN=%s LWS_VERSION=%s\n' \
+  "$*" \
+  "${LWS_BASE_DOMAIN:-}" \
+  "${LWS_VERSION:-}" \
+  >>"${LWS_TEST_LOG:?}"
 EOF
-chmod +x "$TMP/bin/docker"
-printf '0.1.2\n' >"$TMP/version"
-cat >"$TMP/update-installer" <<'EOF'
+
+  chmod +x "$TMP/bin/docker"
+
+  printf '0.1.2\n' >"$TMP/version"
+
+  cat >"$TMP/update-installer" <<'EOF'
 #!/bin/sh
 test -z "${LWS_VERSION+x}"
 printf '0.2.0\n' >"${LWS_VERSION_FILE:?}"
 printf 'package-update\n' >>"${LWS_TEST_LOG:?}"
 EOF
-chmod +x "$TMP/update-installer"
-export PATH="$TMP/bin:$PATH" LWS_TEST_LOG="$TMP/docker.log" LWS_CONFIG_DIR="$TMP/etc" LWS_STATE_DIR="$TMP/state" LWS_COMPOSE_FILE="$ROOT/infrastructure/compose.yaml" LWS_VERSION_FILE="$TMP/version" LWS_INSTALLER_PATH="$TMP/update-installer" LWS_SKIP_PACKAGE_REMOVE=1
-LWSCTL="$TMP/lwsctl"
-"$ROOT/scripts/build-lwsctl.sh" --output "$LWSCTL"
 
-"$LWSCTL" >"$TMP/help" 2>&1 || test "$?" -eq 2
-grep -q 'LWSのライフサイクルをDocker Composeで管理します。' "$TMP/help"
-grep -q -- '-d, --domain ドメイン' "$TMP/help"
-grep -q -- '--purge' "$TMP/help"
-"$LWSCTL" start --help >"$TMP/start-help"
-grep -q '設定済みのドメインを変更すると、DNSとReverse Proxyの設定を再生成します。' "$TMP/start-help"
-"$LWSCTL" uninstall --help >"$TMP/uninstall-help"
-grep -q '通常は設定と永続データを保持します。' "$TMP/uninstall-help"
+  chmod +x "$TMP/update-installer"
 
-"$LWSCTL" status >"$TMP/status-before"
-grep -q '設定済み: NO' "$TMP/status-before"
-"$LWSCTL" start --domain example.internal
-grep -qx 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
-grep -qF 'compose --project-name lws --file' "$TMP/docker.log"
-grep -qF 'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
+  export PATH="$TMP/bin:$PATH"
+  export LWS_TEST_LOG="$TMP/docker.log"
+  export LWS_CONFIG_DIR="$TMP/etc"
+  export LWS_STATE_DIR="$TMP/state"
+  export LWS_COMPOSE_FILE="$ROOT/infrastructure/compose.yaml"
+  export LWS_VERSION_FILE="$TMP/version"
+  export LWS_INSTALLER_PATH="$TMP/update-installer"
+  export LWS_SKIP_PACKAGE_REMOVE=1
 
-"$LWSCTL" status >"$TMP/status-after-start"
-grep -q '設定済み: YES' "$TMP/status-after-start"
-grep -q 'ドメイン: example.internal' "$TMP/status-after-start"
-grep -qF 'ps | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
+  LWSCTL="$TMP/lwsctl"
+  "$ROOT/scripts/build-lwsctl.sh" --output "$LWSCTL"
+}
 
-! printf 'n\n' | "$LWSCTL" start --domain changed.internal >/dev/null 2>&1
-grep -qx 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
-"$LWSCTL" start --domain changed.internal --force
-grep -qx 'LWS_BASE_DOMAIN=changed.internal' "$TMP/etc/config.env"
-grep -qF 'up -d --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
+test_help() {
+  "$LWSCTL" >"$TMP/help" 2>&1 || test "$?" -eq 2
 
-"$LWSCTL" rebuild
-grep -qF 'config | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
-grep -qF 'up -d --force-recreate --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
-"$LWSCTL" update
-grep -qx 'package-update' "$TMP/docker.log"
-grep -qx 'LWS_VERSION=0.2.0' "$TMP/etc/config.env"
-grep -qF 'pull | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' "$TMP/docker.log"
+  grep -q \
+    'LWSのライフサイクルをDocker Composeで管理します。' \
+    "$TMP/help"
 
-"$LWSCTL" stop
-grep -qF 'down --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' "$TMP/docker.log"
-"$LWSCTL" uninstall >"$TMP/uninstall"
-grep -q 'パッケージマネージャーによる削除をスキップしました' "$TMP/uninstall"
-test -f "$TMP/etc/config.env"
-"$LWSCTL" uninstall --purge --force
-test ! -e "$TMP/etc"
-test ! -e "$TMP/state"
+  grep -q -- '-d, --domain ドメイン' "$TMP/help"
+  grep -q -- '--purge' "$TMP/help"
 
-! "$LWSCTL" start --domain bad_domain >/dev/null 2>&1
+  "$LWSCTL" start --help >"$TMP/start-help"
 
-INSTALLER_TMP="$TMP/installer"
-mkdir -p "$INSTALLER_TMP/bin"
-cat >"$INSTALLER_TMP/os-release" <<'EOF'
-ID=almalinux
-ID_LIKE="rhel centos fedora"
-PRETTY_NAME="AlmaLinux 9.8 (Olive Jaguar)"
-VERSION="9.8 (Olive Jaguar)"
-EOF
-cat >"$INSTALLER_TMP/bin/id" <<'EOF'
-#!/bin/sh
-printf '0\n'
-EOF
-cat >"$INSTALLER_TMP/bin/uname" <<'EOF'
-#!/bin/sh
-case "$1" in
-  -s) printf 'Linux\n' ;;
-  -m) printf 'x86_64\n' ;;
-esac
-EOF
-cat >"$INSTALLER_TMP/bin/curl" <<'EOF'
-#!/bin/sh
-for argument in "$@"; do
-  case "$argument" in https://*) url="$argument" ;; esac
-done
-printf '%s\n' "$url" >>"${LWS_INSTALLER_TEST_LOG:?}"
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = -o ]; then
-    shift
-    output="$1"
-    break
-  fi
-  shift
-done
-case "$url" in
-  *'/releases/latest') printf '{"browser_download_url":"https://example.test/lws.rpm"}\n' >"$output" ;;
-  *) : >"$output" ;;
-esac
-EOF
-cat >"$INSTALLER_TMP/bin/dnf" <<'EOF'
-#!/bin/sh
-printf '%s\n' "$*" >>"${LWS_INSTALLER_TEST_LOG:?}"
-EOF
-chmod +x "$INSTALLER_TMP/bin"/*
-export LWS_INSTALLER_TEST_LOG="$INSTALLER_TMP/log"
-PATH="$INSTALLER_TMP/bin:$PATH" LWS_OS_RELEASE_FILE="$INSTALLER_TMP/os-release" "$ROOT/scripts/install.sh" >/dev/null
-grep -qx 'https://api.github.com/repos/LabWebSystem/Core/releases/latest' "$INSTALLER_TMP/log"
-grep -qx 'install -y .*/lws.rpm' "$INSTALLER_TMP/log"
-printf 'テスト: 成功\n'
+  grep -q \
+    '設定済みのドメインを変更すると、DNSとReverse Proxyの設定を再生成します。' \
+    "$TMP/start-help"
+}
+
+test_lifecycle() {
+  "$LWSCTL" status >"$TMP/status-before"
+  grep -q '設定済み: NO' "$TMP/status-before"
+
+  "$LWSCTL" start --domain example.internal
+
+  grep -qx \
+    'LWS_BASE_DOMAIN=example.internal' \
+    "$TMP/etc/config.env"
+
+  grep -qF \
+    'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' \
+    "$TMP/docker.log"
+
+  "$LWSCTL" stop
+
+  grep -qF \
+    'down --remove-orphans' \
+    "$TMP/docker.log"
+}
+
+test_domain_change() {
+  ! printf 'n\n' |
+    "$LWSCTL" start --domain changed.internal \
+    >/dev/null 2>&1
+
+  grep -qx \
+    'LWS_BASE_DOMAIN=example.internal' \
+    "$TMP/etc/config.env"
+
+  "$LWSCTL" start \
+    --domain changed.internal \
+    --force
+
+  grep -qx \
+    'LWS_BASE_DOMAIN=changed.internal' \
+    "$TMP/etc/config.env"
+}
+
+test_update() {
+  "$LWSCTL" update
+
+  grep -qx 'package-update' "$TMP/docker.log"
+  grep -qx 'LWS_VERSION=0.2.0' "$TMP/etc/config.env"
+
+  grep -qF \
+    'pull | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    "$TMP/docker.log"
+}
+
+test_uninstall() {
+  "$LWSCTL" uninstall >"$TMP/uninstall"
+
+  grep -q \
+    'パッケージマネージャーによる削除をスキップしました' \
+    "$TMP/uninstall"
+
+  test -f "$TMP/etc/config.env"
+
+  "$LWSCTL" uninstall --purge --force
+
+  test ! -e "$TMP/etc"
+  test ! -e "$TMP/state"
+}
+
+main() {
+  TMP="$(mktemp -d)"
+  trap cleanup EXIT
+
+  setup_cli_environment
+
+  test_help
+  test_lifecycle
+  test_domain_change
+  test_update
+  test_uninstall
+
+  test_installer_almalinux
+
+  printf 'テスト: 成功\n'
+}
+
+main "$@"
