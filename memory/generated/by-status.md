@@ -14,6 +14,10 @@
 - CHG-006 | SHIPPED | - | LWSバージョンの正本をパッケージ管理下へ移行
 - CHG-007 | SHIPPED | - | lwsctlをGoバイナリとして配布する
 - CHG-008 | SHIPPED | - | lwsctlのGo実装を責務ごとに分割する
+- CHG-010 | SHIPPED | - | バージョン設定と公開操作を分離する
+
+## SUPERSEDED
+- CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
 
 ## VERIFIED
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する

@@ -5,12 +5,6 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly OUT="$ROOT/dist"
 readonly WORK="$ROOT/.package-work"
 
-VERSION="0.1.0"
-
-usage() {
-  printf '使い方: scripts/package.sh [--version x.y.z]\n'
-}
-
 die() {
   printf '%s\n' "$*" >&2
   exit 1
@@ -18,31 +12,6 @@ die() {
 
 cleanup() {
   rm -rf "$WORK"
-}
-
-parse_args() {
-  while (($#)); do
-    case "$1" in
-      --version)
-        (($# >= 2)) || die '--versionには値が必要です'
-        VERSION="$2"
-        shift 2
-        ;;
-      -h | --help)
-        usage
-        exit 0
-        ;;
-      *)
-        usage >&2
-        exit 2
-        ;;
-    esac
-  done
-}
-
-validate_version() {
-  [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-    die 'バージョンはx.y.z形式で指定してください'
 }
 
 prepare() {
@@ -165,8 +134,9 @@ write_checksums() {
 }
 
 main() {
-  parse_args "$@"
-  validate_version
+  (($# == 0)) || die 'パッケージのバージョンはmise run version coreで設定してください'
+
+  VERSION="$("$ROOT/scripts/version.sh" core)"
 
   trap cleanup EXIT
 

@@ -11,9 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
+      - name: Coreバージョンをリリースタグと照合
+        run: test "$(scripts/version.sh core)" = "${GITHUB_REF_NAME#lws-v}"
       - run: mise run lint
       - run: mise run test
-      - run: LWS_VERSION="${GITHUB_REF_NAME#lws-v}" mise run package
+      - run: mise run package
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io

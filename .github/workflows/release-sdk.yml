@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
+      - name: SDKバージョンをリリースタグと照合
+        run: test "$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME#sdk-v}"
       - run: npm test
       - run: npm run build
       - run: npm publish

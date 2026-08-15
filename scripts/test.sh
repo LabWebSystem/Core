@@ -241,6 +241,82 @@ EOF
     "$dnf_log"
 }
 
+test_release_selected_components() {
+  local deploy_tmp="$TMP/deploy"
+  local fake_bin="$deploy_tmp/bin"
+  local deploy_log="$deploy_tmp/deploy.log"
+
+  mkdir -p "$fake_bin"
+
+  cat >"$fake_bin/git" <<'EOF'
+#!/bin/sh
+printf 'git %s\n' "$*" >>"${LWS_DEPLOY_TEST_LOG:?}"
+
+case "$*" in
+  *'branch --show-current')
+    printf 'main\n'
+    ;;
+  *'ls-remote --exit-code --tags'*)
+    exit 2
+    ;;
+  *'rev-parse lws-v0.1.0^{commit}')
+    printf 'lws-commit\n'
+    ;;
+  *'rev-parse sdk-v0.1.0^{commit}')
+    printf 'sdk-commit\n'
+    ;;
+esac
+EOF
+
+  cat >"$fake_bin/gh" <<'EOF'
+#!/bin/sh
+printf 'gh %s\n' "$*" >>"${LWS_DEPLOY_TEST_LOG:?}"
+
+case "$1 $2" in
+  'repo view')
+    printf 'labwebsystem/core\n'
+    ;;
+  'release view')
+    exit 1
+    ;;
+  'run list')
+    printf '100\n'
+    ;;
+esac
+EOF
+
+  chmod +x "$fake_bin/git" "$fake_bin/gh"
+
+  PATH="$fake_bin:$PATH" \
+  LWS_DEPLOY_TEST_LOG="$deploy_log" \
+    "$ROOT/scripts/release.sh" core sdk
+
+  PATH="$fake_bin:$PATH" \
+  LWS_DEPLOY_TEST_LOG="$deploy_log" \
+    "$ROOT/scripts/release.sh" all
+
+  mise run --dry-run release core sdk >"$deploy_tmp/release-dry-run" 2>&1
+  grep -qF '[release] $ scripts/release.sh $usage_component' "$deploy_tmp/release-dry-run"
+
+  grep -qF 'push origin +lws-v0.1.0' "$deploy_log"
+  grep -qF 'push origin +sdk-v0.1.0' "$deploy_log"
+  grep -qF 'gh run list --repo labwebsystem/core --workflow release-lws.yml' "$deploy_log"
+  grep -qF 'gh run list --repo labwebsystem/core --workflow release-sdk.yml' "$deploy_log"
+  test "$(grep -cF 'gh run watch 100 --repo labwebsystem/core --exit-status' "$deploy_log")" -eq 4
+}
+
+test_version_sources() {
+  local versions
+
+  mise run version core 0.1.0
+  versions="$(mise run version)"
+
+  grep -qx 'core 0.1.0' <<<"$versions"
+  grep -qx 'sdk 0.1.0' <<<"$versions"
+  test "$("$ROOT/scripts/version.sh" core)" = '0.1.0'
+  test "$("$ROOT/scripts/version.sh" sdk)" = '0.1.0'
+}
+
 main() {
   TMP="$(mktemp -d)"
   trap cleanup EXIT
@@ -253,6 +329,8 @@ main() {
   test_update
   test_uninstall
   test_installer_almalinux
+  test_version_sources
+  test_release_selected_components
 
   printf 'テスト: 成功\n'
 }

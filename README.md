@@ -8,11 +8,14 @@ LabWebSystem（LWS）は、Docker Composeを基盤とするLAN向けWebアプリ
 mise run lint
 mise run test
 mise run package
-mise run deploy --version 1.2.3
-mise run deploy --version 1.2.3 --force
+mise run version
+mise run version core 1.2.3
+mise run version sdk 0.4.0
+mise run release core sdk
+mise run release all
 ```
 
-`deploy`には認証済みの`gh` CLIが必要です。`lws-vX.Y.Z`タグをプッシュし、既存リリースを置き換える場合は、`--force`を指定しない限り確認します。
+`version`は引数なしで各コンポーネントの現在バージョンを一覧表示し、対象とバージョンを指定するとその正本を更新します。`release`には認証済みの`gh` CLIが必要で、指定した`core`または`sdk`の現在のバージョンをタグとして公開し、対応するWorkflowの完了まで待機します。`all`は両方を公開します。既存Coreリリースを置き換える場合は、`--force`を指定します。公開済みSDKバージョンはGitHub Packagesの仕様上、再公開できません。
 
 ## インストールとライフサイクル
 
