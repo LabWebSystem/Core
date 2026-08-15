@@ -15,6 +15,7 @@
 - CHG-007 | SHIPPED | - | lwsctlをGoバイナリとして配布する
 - CHG-008 | SHIPPED | - | lwsctlのGo実装を責務ごとに分割する
 - CHG-010 | SHIPPED | - | バージョン設定と公開操作を分離する
+- CHG-011 | SHIPPED | - | miseの表示形式に依存しないリリーステスト
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
