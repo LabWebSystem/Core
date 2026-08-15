@@ -3,7 +3,7 @@ Version: VERSION
 Release: 1%{?dist}
 Summary: LabWebSystemのライフサイクルツール
 License: MIT
-BuildArch: noarch
+BuildArch: x86_64
 %description
 LabWebSystemのライフサイクルCLIとDocker Compose定義です。
 %prep

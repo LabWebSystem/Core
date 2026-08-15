@@ -12,7 +12,8 @@ done
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'バージョンはx.y.z形式で指定してください\n' >&2; exit 2; }
 rm -rf "$OUT" "$ROOT/.package-work"
 mkdir -p "$OUT" "$ROOT/.package-work/deb/DEBIAN" "$ROOT/.package-work/deb/usr/bin" "$ROOT/.package-work/deb/usr/share/lws"
-install -m 0755 "$ROOT/scripts/lwsctl" "$ROOT/.package-work/deb/usr/bin/lwsctl"
+"$ROOT/scripts/build-lwsctl.sh" --output "$ROOT/.package-work/lwsctl" --goos linux --goarch amd64
+install -m 0755 "$ROOT/.package-work/lwsctl" "$ROOT/.package-work/deb/usr/bin/lwsctl"
 install -m 0644 "$ROOT/infrastructure/compose.yaml" "$ROOT/.package-work/deb/usr/share/lws/compose.yaml"
 printf '%s\n' "$VERSION" >"$ROOT/.package-work/deb/usr/share/lws/version"
 install -m 0755 "$ROOT/scripts/install.sh" "$ROOT/.package-work/deb/usr/share/lws/install.sh"
@@ -38,7 +39,7 @@ fi
 command -v rpmbuild >/dev/null 2>&1 || { printf 'rpmbuildが必要です\n' >&2; exit 1; }
 RPMROOT="$ROOT/.package-work/rpm"
 mkdir -p "$RPMROOT/BUILD" "$RPMROOT/RPMS" "$RPMROOT/SOURCES" "$RPMROOT/SPECS" "$RPMROOT/SRPMS"
-cp "$ROOT/scripts/lwsctl" "$RPMROOT/SOURCES/lwsctl"
+cp "$ROOT/.package-work/lwsctl" "$RPMROOT/SOURCES/lwsctl"
 cp "$ROOT/infrastructure/compose.yaml" "$RPMROOT/SOURCES/compose.yaml"
 printf '%s\n' "$VERSION" >"$RPMROOT/SOURCES/version"
 cp "$ROOT/scripts/install.sh" "$RPMROOT/SOURCES/install.sh"

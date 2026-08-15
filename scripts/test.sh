@@ -17,11 +17,21 @@ printf 'package-update\n' >>"${LWS_TEST_LOG:?}"
 EOF
 chmod +x "$TMP/update-installer"
 export PATH="$TMP/bin:$PATH" LWS_TEST_LOG="$TMP/docker.log" LWS_CONFIG_DIR="$TMP/etc" LWS_STATE_DIR="$TMP/state" LWS_COMPOSE_FILE="$ROOT/infrastructure/compose.yaml" LWS_VERSION_FILE="$TMP/version" LWS_INSTALLER_PATH="$TMP/update-installer" LWS_SKIP_PACKAGE_REMOVE=1
-LWSCTL="$ROOT/scripts/lwsctl"
+LWSCTL="$TMP/lwsctl"
+"$ROOT/scripts/build-lwsctl.sh" --output "$LWSCTL"
+
+"$LWSCTL" >"$TMP/help" 2>&1 || test "$?" -eq 2
+grep -q 'LWSのライフサイクルをDocker Composeで管理します。' "$TMP/help"
+grep -q -- '-d, --domain ドメイン' "$TMP/help"
+grep -q -- '--purge' "$TMP/help"
+"$LWSCTL" start --help >"$TMP/start-help"
+grep -q '設定済みのドメインを変更すると、DNSとReverse Proxyの設定を再生成します。' "$TMP/start-help"
+"$LWSCTL" uninstall --help >"$TMP/uninstall-help"
+grep -q '通常は設定と永続データを保持します。' "$TMP/uninstall-help"
 
 "$LWSCTL" status >"$TMP/status-before"
 grep -q '設定済み: NO' "$TMP/status-before"
-"$ROOT/scripts/lwsctl" start --domain example.internal
+"$LWSCTL" start --domain example.internal
 grep -qx 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
 grep -qF 'compose --project-name lws --file' "$TMP/docker.log"
 grep -qF 'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' "$TMP/docker.log"
