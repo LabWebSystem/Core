@@ -8,6 +8,8 @@
 ## SHIPPED
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
+- CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
 
 ## VERIFIED
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
+- BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

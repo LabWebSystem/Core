@@ -39,6 +39,7 @@ write_config() {
   install -d -m 0755 "$CONFIG_DIR" "$STATE_DIR"
   printf 'LWS_BASE_DOMAIN=%q\nLWS_VERSION=%q\n' "$domain" "$VERSION" >"$CONFIG_FILE"
   chmod 0644 "$CONFIG_FILE"
+  export LWS_BASE_DOMAIN="$domain"
 }
 confirm() {
   local prompt="$1" answer
