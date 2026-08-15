@@ -1,4 +1,4 @@
-name: Release LWS
+name: LWSリリース
 on:
   push:
     tags: ['lws-v*']
@@ -19,17 +19,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish backend image
+      - name: Backendイメージをビルドして公開
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
           docker build --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-backend:${VERSION}" backend
           docker push "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-backend:${VERSION}"
-      - name: Build and publish dashboard image
+      - name: Dashboardイメージをビルドして公開
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
           docker build --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-dashboard:${VERSION}" dashboard
           docker push "ghcr.io/${GITHUB_REPOSITORY_OWNER}/lws-dashboard:${VERSION}"
-      - name: Publish GitHub Release
+      - name: GitHubリリースを公開
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --title "LWS ${GITHUB_REF_NAME#lws-v}" --generate-notes

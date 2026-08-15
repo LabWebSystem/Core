@@ -7,17 +7,17 @@ while (($#)); do
   case "$1" in
     --version) VERSION="${2:-}"; shift 2 ;;
     --force) FORCE=1; shift ;;
-    *) printf 'Usage: mise run deploy --version x.y.z [--force]\n' >&2; exit 2 ;;
+    *) printf '使い方: mise run deploy --version x.y.z [--force]\n' >&2; exit 2 ;;
   esac
 done
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'version must be x.y.z\n' >&2; exit 2; }
-command -v gh >/dev/null 2>&1 || { printf 'gh CLI is required for deploy.\n' >&2; exit 1; }
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'バージョンはx.y.z形式で指定してください\n' >&2; exit 2; }
+command -v gh >/dev/null 2>&1 || { printf 'デプロイにはgh CLIが必要です\n' >&2; exit 1; }
 REPOSITORY="${LWS_REPOSITORY:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 TAG="lws-v$VERSION"
 if gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
   if (( ! FORCE )); then
-    read -r -p "Release $TAG exists. Replace it? [y/N]: " answer
-    [[ "$answer" =~ ^(y|Y|yes|YES)$ ]] || { printf 'deploy cancelled\n'; exit 1; }
+    read -r -p "リリース$TAGは存在します。置き換えますか? [y/N]: " answer
+    [[ "$answer" =~ ^(y|Y|yes|YES)$ ]] || { printf 'デプロイをキャンセルしました\n'; exit 1; }
   fi
   gh release delete "$TAG" --repo "$REPOSITORY" --yes
 fi

@@ -1,11 +1,11 @@
 Name: lws
 Version: VERSION
 Release: 1%{?dist}
-Summary: LabWebSystem lifecycle tools
+Summary: LabWebSystemのライフサイクルツール
 License: MIT
 BuildArch: noarch
 %description
-LabWebSystem lifecycle CLI and Docker Compose definition.
+LabWebSystemのライフサイクルCLIとDocker Compose定義です。
 %prep
 %build
 %install

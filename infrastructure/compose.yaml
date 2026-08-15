@@ -4,7 +4,7 @@ services:
     image: ghcr.io/${LWS_GITHUB_OWNER:-example}/lws-backend:${LWS_VERSION:-0.1.0}
     restart: unless-stopped
     environment:
-      LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:?run lwsctl start first}
+      LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:?先にlwsctl startを実行してください}
     labels:
       com.labwebsystem.owner: lws
   dashboard:

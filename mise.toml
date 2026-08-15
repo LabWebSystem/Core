@@ -1,23 +1,23 @@
 [tasks.lint]
-description = "Run static checks"
+description = "静的検査を実行"
 run = "scripts/lint.sh"
 
 [tasks.test]
-description = "Run the integration-light test suite"
+description = "軽量な統合テストを実行"
 run = "scripts/test.sh"
 
 [tasks.build]
-description = "Build release packages"
+description = "リリースパッケージを生成"
 run = "scripts/package.sh --version ${LWS_VERSION:-0.1.0}"
 
 [tasks.package]
-description = "Build .deb and .rpm artifacts"
+description = ".debと.rpmの成果物を生成"
 run = "scripts/package.sh --version ${LWS_VERSION:-0.1.0}"
 
 [tasks.deploy]
-description = "Create or overwrite a GitHub LWS release"
+description = "GitHubのLWSリリースを作成または上書き"
 run = "scripts/deploy.sh"
 
 [tasks.dev]
-description = "Start the mock Compose stack"
+description = "モックCompose環境を起動"
 run = "docker compose -f infrastructure/compose.yaml up"

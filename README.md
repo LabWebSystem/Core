@@ -1,8 +1,8 @@
 # LabWebSystem
 
-LabWebSystem (LWS) is a Docker Compose based LAN web-app platform. Backend, Dashboard and SDK are intentionally mock components in this foundation.
+LabWebSystem（LWS）は、Docker Composeを基盤とするLAN向けWebアプリケーションプラットフォームです。現在の基盤では、Backend、Dashboard、SDKは意図的にモックコンポーネントとして実装しています。
 
-## Development
+## 開発
 
 ```sh
 mise run lint
@@ -12,11 +12,11 @@ mise run deploy --version 1.2.3
 mise run deploy --version 1.2.3 --force
 ```
 
-`deploy` requires an authenticated `gh` CLI, pushes the `lws-vX.Y.Z` tag, and asks before replacing an existing release unless `--force` is supplied.
+`deploy`には認証済みの`gh` CLIが必要です。`lws-vX.Y.Z`タグをプッシュし、既存リリースを置き換える場合は、`--force`を指定しない限り確認します。
 
-## Installation and lifecycle
+## インストールとライフサイクル
 
-The GitHub-hosted installer is `scripts/install.sh`. Set `LWS_REPOSITORY=owner/repository` when using a fork:
+GitHub上のインストーラーは`scripts/install.sh`です。フォークを使う場合は`LWS_REPOSITORY=owner/repository`を設定してください。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/owner/repository/main/scripts/install.sh | sudo LWS_REPOSITORY=owner/repository bash
@@ -26,4 +26,4 @@ sudo lwsctl uninstall
 sudo lwsctl uninstall --purge --force
 ```
 
-Package installation only places files. `lwsctl start` starts the Compose project. APT/DNF pre-remove hooks stop it when the package manager is used directly. LWS uses its own Compose project and labels, so unrelated Docker resources are not removed.
+パッケージインストールはファイル配置だけを行います。Composeプロジェクトを起動するのは`lwsctl start`です。パッケージマネージャーを直接使用した場合も、APT/DNFの削除前hookがプロジェクトを停止します。LWSは専用のComposeプロジェクトとラベルを使うため、無関係なDockerリソースは削除しません。

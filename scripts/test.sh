@@ -14,4 +14,4 @@ grep -q 'compose --project-name lws' "$TMP/docker.log"
 grep -q 'LWS_BASE_DOMAIN=example.internal' "$TMP/etc/config.env"
 ! "$ROOT/scripts/lwsctl" start --domain bad_domain >/dev/null 2>&1
 "$ROOT/scripts/lwsctl" stop >/dev/null
-printf 'test: ok\n'
+printf 'テスト: 成功\n'

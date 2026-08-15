@@ -1,7 +1,7 @@
 {
   "name": "@labwebsystem/sdk",
   "version": "0.1.0",
-  "description": "TypeScript SDK placeholder for LWS applications",
+  "description": "LWSアプリケーション用TypeScript SDKのモック",
   "license": "MIT",
   "files": ["dist"],
   "scripts": {"build": "mkdir -p dist && printf 'export {}\\n' > dist/index.js", "test": "node -e \"require('./package.json')\""}
