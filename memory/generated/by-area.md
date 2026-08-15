@@ -11,6 +11,7 @@
 - CHG-005 | SHIPPED | - | LWS本体イメージをGHCRへ公開
 - CHG-006 | SHIPPED | - | LWSバージョンの正本をパッケージ管理下へ移行
 - CHG-007 | SHIPPED | - | lwsctlをGoバイナリとして配布する
+- CHG-008 | SHIPPED | - | lwsctlのGo実装を責務ごとに分割する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
