@@ -284,6 +284,10 @@ test_release_selected_components() {
   local deploy_tmp="$TMP/deploy"
   local fake_bin="$deploy_tmp/bin"
   local deploy_log="$deploy_tmp/deploy.log"
+  local core_version sdk_version
+
+  core_version="$("$ROOT/scripts/version.sh" core)"
+  sdk_version="$("$ROOT/scripts/version.sh" sdk)"
 
   mkdir -p "$fake_bin"
 
@@ -298,10 +302,10 @@ case "$*" in
   *'ls-remote --exit-code --tags'*)
     exit 2
     ;;
-  *'rev-parse lws-v0.1.0^{commit}')
+  *"rev-parse lws-v${LWS_TEST_CORE_VERSION:?}^{commit}")
     printf 'lws-commit\n'
     ;;
-  *'rev-parse sdk-v0.1.0^{commit}')
+  *"rev-parse sdk-v${LWS_TEST_SDK_VERSION:?}^{commit}")
     printf 'sdk-commit\n'
     ;;
 esac
@@ -331,16 +335,20 @@ EOF
 
   PATH="$fake_bin:$PATH" \
   LWS_DEPLOY_TEST_LOG="$deploy_log" \
+  LWS_TEST_CORE_VERSION="$core_version" \
+  LWS_TEST_SDK_VERSION="$sdk_version" \
     "$ROOT/scripts/release.sh" core sdk
 
   local all_output="$deploy_tmp/release-all"
 
   PATH="$fake_bin:$PATH" \
   LWS_DEPLOY_TEST_LOG="$deploy_log" \
+  LWS_TEST_CORE_VERSION="$core_version" \
+  LWS_TEST_SDK_VERSION="$sdk_version" \
     "$ROOT/scripts/release.sh" all >"$all_output" 2>&1
 
-  grep -qF 'push origin +lws-v0.1.0' "$deploy_log"
-  grep -qF 'push origin +sdk-v0.1.0' "$deploy_log"
+  grep -qF "push origin +lws-v$core_version" "$deploy_log"
+  grep -qF "push origin +sdk-v$sdk_version" "$deploy_log"
   grep -qF 'gh run list --repo labwebsystem/core --workflow release-lws.yml' "$deploy_log"
   grep -qF 'gh run list --repo labwebsystem/core --workflow release-sdk.yml' "$deploy_log"
   test "$(grep -cF 'gh run watch 100 --repo labwebsystem/core --exit-status --compact' "$deploy_log")" -eq 4
@@ -349,15 +357,14 @@ EOF
 }
 
 test_version_sources() {
-  local versions
+  local core_version sdk_version versions
 
-  mise run version core 0.1.0
+  core_version="$("$ROOT/scripts/version.sh" core)"
+  sdk_version="$("$ROOT/scripts/version.sh" sdk)"
   versions="$(mise run version)"
 
-  grep -qx 'core 0.1.0' <<<"$versions"
-  grep -qx 'sdk 0.1.0' <<<"$versions"
-  test "$("$ROOT/scripts/version.sh" core)" = '0.1.0'
-  test "$("$ROOT/scripts/version.sh" sdk)" = '0.1.0'
+  grep -qx "core $core_version" <<<"$versions"
+  grep -qx "sdk $sdk_version" <<<"$versions"
 }
 
 main() {

@@ -26,6 +26,7 @@
 - CHG-015 | SHIPPED | - | downで保存済み設定をComposeへ渡す
 - CHG-016 | SHIPPED | - | updateで停止状態を維持する
 - CHG-017 | SHIPPED | - | 未設定時のstatusを案内表示で正常終了する
+- CHG-018 | SHIPPED | - | バージョン確認テストを非破壊化する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
@@ -41,3 +42,6 @@
 
 ## release
 - BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない
+
+## test
+- BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する

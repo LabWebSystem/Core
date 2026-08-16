@@ -16,3 +16,4 @@
 - BUG-007 | VERIFIED | cli | downが保存済みのベースドメインをComposeへ渡さない
 - BUG-008 | VERIFIED | cli | updateが停止中のLWSを起動する
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
+- BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する
