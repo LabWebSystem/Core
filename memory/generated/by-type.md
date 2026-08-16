@@ -68,3 +68,4 @@
 - CHG-041 | SHIPPED | - | CIのOSRunner timeoutテストを決定的にする
 - CHG-042 | SHIPPED | - | LWSリリースWorkflowのBackend build contextとActionを修正する
 - CHG-043 | SHIPPED | - | LWSリリースのDocker BuildKitキャッシュを有効化する
+- CHG-044 | SHIPPED | - | 旧設定ファイルの権限をパッケージ更新時に移行する
