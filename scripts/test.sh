@@ -399,12 +399,22 @@ main() {
     test_release_selected_components
   fi
 
-  case "$target" in
-    backend) (cd "$ROOT" && go test ./backend/...);;
-    backend-http) (cd "$ROOT" && go test ./backend/... -run 'TestHTTP|TestHealth');;
-    backend-docker) (cd "$ROOT" && go test ./backend/... -run 'TestCompose|TestOwnership');;
-    infrastructure) (cd "$ROOT" && go test ./backend/... -run 'TestDerived');;
-  esac
+  if [[ "$target" == all || "$target" == backend ]]; then
+    (cd "$ROOT" && go test -count=1 ./backend/...)
+  fi
+  if [[ "$target" == all || "$target" == backend-http ]]; then
+    (cd "$ROOT" && mise run check-openapi)
+    (cd "$ROOT" && go test -list 'TestHTTP' ./backend/... | grep -q '^TestHTTP') || { printf 'backend-http対象テストがありません\n' >&2; return 1; }
+    (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestHTTP')
+  fi
+  if [[ "$target" == all || "$target" == backend-docker ]]; then
+    (cd "$ROOT" && go test -list 'Test(Compose|Docker|Ownership)' ./backend/... | grep -Eq '^Test(Compose|Docker|Ownership)') || { printf 'backend-docker対象テストがありません\n' >&2; return 1; }
+    (cd "$ROOT" && go test -count=1 ./backend/... -run '^Test(Compose|Docker|Ownership)')
+  fi
+  if [[ "$target" == all || "$target" == infrastructure ]]; then
+    (cd "$ROOT" && go test -list '^TestDerived' ./backend/... | grep -q '^TestDerived') || { printf 'infrastructure対象テストがありません\n' >&2; return 1; }
+    (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestDerived')
+  fi
 
   printf 'テスト: 成功\n'
 }

@@ -39,3 +39,11 @@ flag "-f --force" help="既存Coreリリースを確認なしで置き換える"
 [tasks.dev]
 description = "モックCompose環境を起動"
 run = "docker compose -f infrastructure/compose.yaml up"
+
+[tasks.generate-backend]
+description = "BackendのOpenAPI生成物を更新"
+run = "scripts/generate-backend.sh"
+
+[tasks.check-openapi]
+description = "OpenAPI生成物の差分を検査"
+run = "scripts/generate-backend.sh && git diff --exit-code -- backend/openapi.gen.go"

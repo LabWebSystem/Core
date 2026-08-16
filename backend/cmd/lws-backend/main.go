@@ -41,12 +41,36 @@ func main() {
 		slog.Error("アプリ領域を作成できません", "error", err)
 		os.Exit(1)
 	}
+	secretKeyPath := os.Getenv("LWS_SECRET_KEY_PATH")
+	if secretKeyPath == "" {
+		secretKeyPath = "/var/lib/lws/secret.key"
+	}
+	secretKey, err := backend.LoadSecretKey(secretKeyPath)
+	if err != nil {
+		slog.Error("secret鍵を初期化できません", "error", err)
+		os.Exit(1)
+	}
 	runtime := backend.NewRuntimeExecutor(db, appsRoot)
-	runtime.Docker = backend.NewDockerResources(runtime.Runner, os.Getenv("LWS_INSTALLATION_ID"))
+	runtime.SecretKey = secretKey
+	runtime.InstallationID = os.Getenv("LWS_INSTALLATION_ID")
+	if err := backend.ValidateInstallationID(runtime.InstallationID); err != nil {
+		slog.Error("installation ID設定失敗", "error", err)
+		os.Exit(1)
+	}
+	runtime.Docker = backend.NewDockerResources(runtime.Runner, runtime.InstallationID)
+	if caddy := os.Getenv("LWS_CADDY_CONTAINER"); caddy != "" {
+		runtime.Docker.CaddyContainer = caddy
+	}
 	if domain, address := os.Getenv("LWS_BASE_DOMAIN"), os.Getenv("LWS_PUBLIC_ADDRESS"); address != "" {
 		runtime.Derived = &backend.DerivedManager{DB: db, GeneratedDir: "/var/lib/lws/generated", BaseDomain: domain, PublicAddress: address}
 	}
-	if err := http.ListenAndServe(addr, backend.NewServer(db, runtime.Run).Handler()); err != nil {
+	server := backend.NewServer(db, runtime.Run)
+	server.SecretKey = secretKey
+	server.AllowedHost = os.Getenv("LWS_ALLOWED_HOST")
+	if server.AllowedHost == "" {
+		server.AllowedHost = "api." + os.Getenv("LWS_BASE_DOMAIN")
+	}
+	if err := http.ListenAndServe(addr, server.Handler()); err != nil {
 		slog.Error("Backend停止", "error", err)
 		os.Exit(1)
 	}

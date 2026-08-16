@@ -3,8 +3,14 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 )
+
+type dockerNotFoundError struct{ message string }
+
+func (e *dockerNotFoundError) Error() string { return e.message }
 
 type DockerResource struct {
 	ID     string
@@ -14,14 +20,78 @@ type DockerResource struct {
 type DockerResources struct {
 	Runner         CommandRunner
 	InstallationID string
+	CaddyContainer string
 }
 
 func NewDockerResources(runner CommandRunner, installationID string) *DockerResources {
-	return &DockerResources{Runner: runner, InstallationID: installationID}
+	return &DockerResources{Runner: runner, InstallationID: installationID, CaddyContainer: "lws-caddy-1"}
+}
+
+func (d *DockerResources) EnsureCaddyConnected(ctx context.Context, app string) error {
+	if d.CaddyContainer == "" {
+		return fmt.Errorf("Caddy containerが設定されていません")
+	}
+	_, err := d.Runner.Run(ctx, "docker", "network", "connect", "--alias", "lws-"+app, EdgeNetworkName(app), d.CaddyContainer)
+	message := strings.ToLower(errString(err))
+	if err != nil && !strings.Contains(message, "already connected") && !strings.Contains(message, "already exists") {
+		return fmt.Errorf("Caddyをedge networkへ接続できません")
+	}
+	return nil
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func (d *DockerResources) DisconnectCaddy(ctx context.Context, app string) error {
+	if d.CaddyContainer == "" {
+		return fmt.Errorf("Caddy containerが設定されていません")
+	}
+	_, err := d.Runner.Run(ctx, "docker", "network", "disconnect", "-f", EdgeNetworkName(app), d.CaddyContainer)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "not connected") {
+		return fmt.Errorf("Caddyをedge networkから切断できません")
+	}
+	return nil
+}
+
+func (d *DockerResources) RemoveOwnedVolumes(ctx context.Context, app string) error {
+	out, err := d.Runner.Run(ctx, "docker", "volume", "ls", "--filter", "label=com.labwebsystem.owner=lws", "--filter", "label=com.labwebsystem.installation-id="+d.InstallationID, "--filter", "label=com.labwebsystem.app-id="+app, "--format", "{{.Name}}")
+	if err != nil {
+		return fmt.Errorf("アプリvolume一覧を取得できません")
+	}
+	for _, name := range strings.Fields(string(out)) {
+		if err := d.RemoveVolume(ctx, app, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DockerResources) VerifyProjectOwnership(ctx context.Context, app string) error {
+	out, err := d.Runner.Run(ctx, "docker", "ps", "-a", "--filter", "label=com.docker.compose.project="+ProjectName(app), "--format", "{{.ID}}")
+	if err != nil {
+		return fmt.Errorf("アプリcontainer一覧を取得できません")
+	}
+	for _, id := range strings.Fields(string(out)) {
+		resource, err := d.inspect(ctx, "container", id)
+		if err != nil {
+			return err
+		}
+		if err := VerifyOwnership(resource.Labels, d.InstallationID, app); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func (d *DockerResources) inspect(ctx context.Context, kind, name string) (DockerResource, error) {
 	out, err := d.Runner.Run(ctx, "docker", kind, "inspect", name)
 	if err != nil {
+		if strings.Contains(strings.ToLower(string(out)), "no such") || strings.Contains(strings.ToLower(err.Error()), "no such") {
+			return DockerResource{}, &dockerNotFoundError{message: "Docker資源が見つかりません"}
+		}
 		return DockerResource{}, fmt.Errorf("Docker資源を確認できません")
 	}
 	var raw []struct {
@@ -46,6 +116,10 @@ func (d *DockerResources) EnsureNetwork(ctx context.Context, app string) error {
 	r, err := d.inspect(ctx, "network", name)
 	if err == nil {
 		return VerifyOwnership(r.Labels, d.InstallationID, app)
+	}
+	var notFound *dockerNotFoundError
+	if !errors.As(err, &notFound) {
+		return err
 	}
 	_, err = d.Runner.Run(ctx, "docker", "network", "create", "--label", "com.labwebsystem.owner=lws", "--label", "com.labwebsystem.installation-id="+d.InstallationID, "--label", "com.labwebsystem.app-id="+app, name)
 	return err

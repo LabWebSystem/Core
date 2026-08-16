@@ -32,6 +32,14 @@
 - CHG-021 | SHIPPED | - | Composeの必須環境変数展開をBackend検証へ移す
 - CHG-022 | SHIPPED | - | Backend workerからCompose実行器へ接続する
 - CHG-023 | SHIPPED | - | Docker所有確認と共有派生設定領域を追加する
+- CHG-024 | SHIPPED | - | テストtargetの空実行を検出する
+- CHG-025 | SHIPPED | - | 未信頼sourceと実効Composeの検証境界を強化する
+- CHG-026 | SHIPPED | - | 設定値のsecret保護とHTTPエラー契約を強化する
+- CHG-027 | SHIPPED | - | OpenAPI生成serverをHTTP入口へ接続する
+- CHG-028 | SHIPPED | - | フェーズ2の入力・実効Compose検証を接続する
+- CHG-029 | SHIPPED | - | フェーズ1・2の契約とruntime検証を接続する
+- CHG-030 | SHIPPED | - | フェーズ3のOperation・source・Docker境界を実装する
+- CHG-031 | SHIPPED | - | フェーズ3のDocker境界テストを補強する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

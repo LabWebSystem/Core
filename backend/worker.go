@@ -63,6 +63,7 @@ func (w *Worker) execute(op Operation, lock chan struct{}) {
 	state, msg := "SUCCEEDED", ""
 	if err != nil {
 		state, msg = "FAILED", SafeError(err)
+		_, _ = w.db.ExecContext(ctx, `UPDATE applications SET observed_state='ERROR',latest_error=?,updated_at=datetime('now') WHERE id=?`, msg, op.ApplicationID)
 	}
 	_ = SetOperationState(ctx, w.db, op.ID, state, msg)
 	w.events.Publish(op.ID, stringsLower(state), map[string]string{"message": msg})

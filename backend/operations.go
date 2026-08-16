@@ -12,13 +12,22 @@ import (
 type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage string }
 
 func CreateOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind string) (Operation, error) {
+	return createOperation(ctx, db, applicationID, requestID, kind, "")
+}
+
+func CreateOperationWithFingerprint(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint string) (Operation, error) {
+	return createOperation(ctx, db, applicationID, requestID, kind, fingerprint)
+}
+
+func createOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint string) (Operation, error) {
 	if _, err := uuid.Parse(requestID); err != nil {
 		return Operation{}, errors.New("requestIdはUUIDで指定してください")
 	}
 	var op Operation
-	err := db.QueryRowContext(ctx, `SELECT id,application_id,request_id,kind,state,error_message FROM operations WHERE request_id=?`, requestID).Scan(&op.ID, &op.ApplicationID, &op.RequestID, &op.Kind, &op.State, &op.ErrorMessage)
+	var existingFingerprint string
+	err := db.QueryRowContext(ctx, `SELECT id,application_id,request_id,kind,state,error_message,request_fingerprint FROM operations WHERE request_id=?`, requestID).Scan(&op.ID, &op.ApplicationID, &op.RequestID, &op.Kind, &op.State, &op.ErrorMessage, &existingFingerprint)
 	if err == nil {
-		if op.ApplicationID != applicationID || op.Kind != kind {
+		if op.ApplicationID != applicationID || op.Kind != kind || (fingerprint != "" && existingFingerprint != "" && existingFingerprint != fingerprint) {
 			return Operation{}, errors.New("requestIdが異なる要求に再利用されています")
 		}
 		return op, nil
@@ -26,9 +35,16 @@ func CreateOperation(ctx context.Context, db *sql.DB, applicationID, requestID, 
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Operation{}, err
 	}
+	var active int
+	if err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM operations WHERE application_id=? AND state IN ('QUEUED','RUNNING')`, applicationID).Scan(&active); err != nil {
+		return Operation{}, err
+	}
+	if active > 0 {
+		return Operation{}, &ConflictError{Message: "同じアプリに未完了のOperationがあります"}
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	id := uuid.NewString()
-	if _, err = db.ExecContext(ctx, `INSERT INTO operations(id,application_id,request_id,kind,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, id, applicationID, requestID, kind, "QUEUED", now, now); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO operations(id,application_id,request_id,kind,state,error_message,request_fingerprint,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, id, applicationID, requestID, kind, "QUEUED", "", fingerprint, now, now); err != nil {
 		return Operation{}, err
 	}
 	return Operation{ID: id, ApplicationID: applicationID, RequestID: requestID, Kind: kind, State: "QUEUED"}, nil

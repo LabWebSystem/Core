@@ -34,6 +34,9 @@ func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest 
 	if _, err := runner.Run(ctx, "git", "clone", "--no-tags", "--depth", "1", "--branch", ref, url, tmp); err != nil {
 		return fmt.Errorf("リポジトリ取得に失敗しました")
 	}
+	if err := ValidateSourceTree(tmp); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(filepath.Join(tmp, "lws.manifest.yaml"))
 	if err != nil {
 		return fmt.Errorf("manifestが見つかりません")
@@ -57,8 +60,40 @@ func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest 
 		_ = os.Rename(old, dest)
 		return err
 	}
-	_ = os.RemoveAll(old)
 	return nil
+}
+
+func FinalizeSourceSwap(dest string) error {
+	return os.RemoveAll(dest + ".old")
+}
+
+func RestoreSourceSwap(dest string) error {
+	old := dest + ".old"
+	if _, err := os.Stat(old); err != nil {
+		if os.IsNotExist(err) {
+			return os.RemoveAll(dest)
+		}
+		return err
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		return err
+	}
+	return os.Rename(old, dest)
+}
+
+func ValidateSourceTree(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return NewValidationError("source", "source treeにsymlinkは許可されていません", "SYMLINK_FORBIDDEN")
+		}
+		if entry.Name() == ".env" {
+			return NewValidationError("source", "sourceの.envは使用できません", "EXTERNAL_ENVIRONMENT_FORBIDDEN")
+		}
+		return nil
+	})
 }
 func ValidateRef(ref string) error {
 	if strings.TrimSpace(ref) == "" || strings.ContainsAny(ref, "\x00\n\r") {

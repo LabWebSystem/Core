@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"sort"
 	"strings"
 
 	_ "modernc.org/sqlite"
 )
 
-//go:embed migrations/001_initial.sql
+//go:embed migrations/*.sql
 var migrations embed.FS
 
 func OpenDB(ctx context.Context, path string) (*sql.DB, error) {
@@ -22,14 +23,56 @@ func OpenDB(ctx context.Context, path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("データベースを初期化できません: %w", err)
 	}
-	contents, err := migrations.ReadFile("migrations/001_initial.sql")
+	if _, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY,
+		applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migration管理表を作成できません: %w", err)
+	}
+	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("migration一覧を読み込めません: %w", err)
 	}
-	if _, err = db.ExecContext(ctx, string(contents)); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("データベースmigrationに失敗しました: %w", err)
+	var names []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		var applied int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version = ?", name).Scan(&applied); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migration状態を確認できません: %w", err)
+		}
+		if applied != 0 {
+			continue
+		}
+		contents, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrationを読み込めません: %w", err)
+		}
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migration transactionを開始できません: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, string(contents)); err == nil {
+			_, err = tx.ExecContext(ctx, "INSERT INTO schema_migrations(version) VALUES (?)", name)
+		}
+		if err != nil {
+			_ = tx.Rollback()
+			db.Close()
+			return nil, fmt.Errorf("データベースmigrationに失敗しました: %w", err)
+		}
+		if err = tx.Commit(); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("データベースmigrationを確定できません: %w", err)
+		}
 	}
 	return db, nil
 }

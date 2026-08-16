@@ -35,6 +35,14 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"variables": v})
 }
 func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil || s.DB.Ping() != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
+	if r.Header.Get("Content-Type") != "application/json" && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json;") {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_CONTENT_TYPE", "状態を変更する要求はJSONで指定してください", "contentType")
+		return
+	}
 	var req struct {
 		Variables map[string]struct {
 			Value  string `json:"value"`
@@ -50,6 +58,12 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
+	type variableValue struct {
+		name   string
+		value  any
+		secret bool
+	}
+	prepared := make([]variableValue, 0, len(req.Variables))
 	for n, v := range req.Variables {
 		if err := ValidateVariableName(n); err != nil {
 			writeValidationError(w, err)
@@ -59,11 +73,40 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, 400, "INVALID_ARGUMENT", "環境変数の値が必要です", n)
 			return
 		}
-		_, err := s.DB.ExecContext(r.Context(), `INSERT INTO application_variables(application_id,name,value,is_secret,updated_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(application_id,name) DO UPDATE SET value=excluded.value,is_secret=excluded.is_secret,updated_at=excluded.updated_at`, appID(r), n, v.Value, v.Secret)
-		if err != nil {
-			writeAPIError(w, 500, "DATABASE_ERROR", "設定を保存できません", "")
+		if strings.ContainsRune(v.Value, '\x00') {
+			writeAPIError(w, 400, "INVALID_ARGUMENT", "環境変数の値にNUL文字は指定できません", n)
 			return
 		}
+		var stored any = v.Value
+		if v.Secret {
+			if len(s.SecretKey) == 0 {
+				writeAPIError(w, http.StatusServiceUnavailable, "SECRET_KEY_UNAVAILABLE", "secretを保存できません", n)
+				return
+			}
+			var err error
+			stored, err = Encrypt(s.SecretKey, []byte(v.Value))
+			if err != nil {
+				writeAPIError(w, http.StatusInternalServerError, "SECRET_ENCRYPTION_FAILED", "secretを保存できません", "")
+				return
+			}
+		}
+		prepared = append(prepared, variableValue{name: n, value: stored, secret: v.Secret})
+	}
+	tx, err := s.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "設定を保存できません", "")
+		return
+	}
+	for _, variable := range prepared {
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO application_variables(application_id,name,value,is_secret,updated_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(application_id,name) DO UPDATE SET value=excluded.value,is_secret=excluded.is_secret,updated_at=excluded.updated_at`, appID(r), variable.name, variable.value, variable.secret); err != nil {
+			_ = tx.Rollback()
+			writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
+		return
 	}
 	op, err := CreateOperation(r.Context(), s.DB, appID(r), req.RequestID, "CONFIGURE")
 	if err != nil {
@@ -112,6 +155,9 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "desiredState": desired, "observedState": observed, "registrationState": state, "createdAt": created, "updatedAt": updated})
 }
 func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
 	var p struct {
 		Ref       string `json:"ref"`
 		Subdomain string `json:"subdomain"`
@@ -137,6 +183,9 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 func (s *Server) deleteApplication(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
 	op, err := s.makeAppOp(r, "UNREGISTER")
 	if err != nil {
 		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
@@ -145,6 +194,9 @@ func (s *Server) deleteApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
 	kind := "OPERATION"
 	for _, name := range []string{"start", "stop", "sync", "rebuild", "purge"} {
 		if strings.HasSuffix(r.URL.Path, ":"+name) {
@@ -157,7 +209,11 @@ func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.worker != nil {
-		_ = s.worker.Enqueue(op)
+		if err := s.worker.Enqueue(op); err != nil {
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", err.Error())
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+			return
+		}
 	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }

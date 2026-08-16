@@ -2,8 +2,10 @@ package backend
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,10 +13,12 @@ import (
 )
 
 type Server struct {
-	DB     *sql.DB
-	Ready  func() bool
-	events *Events
-	worker *Worker
+	DB          *sql.DB
+	SecretKey   []byte
+	AllowedHost string
+	Ready       func() bool
+	events      *Events
+	worker      *Worker
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
@@ -26,27 +30,34 @@ func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) {
-		ready := s.DB != nil
-		if s.Ready != nil {
-			ready = ready && s.Ready()
-		}
-		if ready {
-			writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
-		} else {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
-		}
-	})
-	mux.HandleFunc("GET /api/v1/applications", s.listApplications)
-	mux.HandleFunc("POST /api/v1/applications", s.createApplication)
-	s.applicationRoutes(mux)
 	if s.events == nil {
 		s.events = NewEvents()
 	}
-	return noCORS(mux)
+	api := generatedAPI{server: s}
+	wrapper := ServerInterfaceWrapper{Handler: api}
+	// GoのServeMuxはwildcard直後のcustom method（{application}:start）を
+	// patternとして受け付けないため、生成wrapperの通常routeと分離する。
+	mux.HandleFunc("GET /api/v1/health/live", wrapper.HealthLive)
+	mux.HandleFunc("GET /api/v1/health/ready", wrapper.HealthReady)
+	mux.HandleFunc("GET /api/v1/applications", wrapper.ListApplications)
+	mux.HandleFunc("POST /api/v1/applications", wrapper.CreateApplication)
+	mux.HandleFunc("DELETE /api/v1/applications/{application}", wrapper.UnregisterApplication)
+	mux.HandleFunc("GET /api/v1/applications/{application}", wrapper.GetApplication)
+	mux.HandleFunc("PATCH /api/v1/applications/{application}", wrapper.UpdateApplication)
+	mux.HandleFunc("GET /api/v1/applications/{application}/configuration", wrapper.GetConfiguration)
+	mux.HandleFunc("PATCH /api/v1/applications/{application}/configuration", wrapper.UpdateConfiguration)
+	mux.HandleFunc("GET /api/v1/operations/{operation}", wrapper.GetOperation)
+	// custom methodとSSE tail routeはURL suffixを検査する既存dispatcherへ委譲する。
+	mux.HandleFunc("POST /api/v1/applications/", s.appOperation)
+	mux.HandleFunc("GET /api/v1/applications/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, ":tailLogs") {
+			api.TailLogs(w, r, "")
+			return
+		}
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
+	return requestBoundary(mux, s.AllowedHost)
 }
 
 func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
@@ -73,6 +84,10 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil || s.DB.Ping() != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	if r.Header.Get("Content-Type") != "application/json" && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json;") {
 		writeAPIError(w, 400, "INVALID_CONTENT_TYPE", "状態を変更する要求はJSONで指定してください", "contentType")
 		return
@@ -99,12 +114,27 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "refが必要です", "ref")
 		return
 	}
+	if err := ValidateRef(req.Ref); err != nil {
+		writeAPIError(w, 400, "INVALID_ARGUMENT", "refが不正です", "ref")
+		return
+	}
 	if _, err := uuid.Parse(req.RequestID); err != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
-	if s.DB == nil {
-		writeAPIError(w, 503, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+	fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(req.RepositoryURL+"\n"+req.Ref+"\n"+req.Subdomain)))
+	var existingID, existingKind, existingFingerprint string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,kind,request_fingerprint FROM operations WHERE request_id=?`, req.RequestID).Scan(&existingID, &existingKind, &existingFingerprint)
+	if err == nil {
+		if existingKind != "CREATE" || existingFingerprint == "" || existingFingerprint != fingerprint {
+			writeAPIError(w, http.StatusBadRequest, "REQUEST_ID_REUSED", "requestIdが異なる要求に再利用されています", "requestId")
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"name": "operations/" + existingID})
+		return
+	}
+	if err != sql.ErrNoRows {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operationを確認できません", "")
 		return
 	}
 	// 登録処理はOperationを先に永続化し、取得・検証・起動はworkerへ委譲する。
@@ -113,19 +143,27 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 409, "ALREADY_EXISTS", "同じsubdomainのアプリが既に存在します", "subdomain")
 		return
 	}
-	op, err := CreateOperation(r.Context(), s.DB, id, req.RequestID, "CREATE")
+	op, err := CreateOperationWithFingerprint(r.Context(), s.DB, id, req.RequestID, "CREATE", fingerprint)
 	if err != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", err.Error(), "requestId")
 		return
 	}
 	if s.worker != nil {
-		_ = s.worker.Enqueue(op)
+		if err := s.worker.Enqueue(op); err != nil {
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", err.Error())
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+			return
+		}
 	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 
-func noCORS(next http.Handler) http.Handler {
+func requestBoundary(next http.Handler, allowedHost string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if allowedHost != "" && r.Host != allowedHost {
+			writeAPIError(w, http.StatusForbidden, "HOST_FORBIDDEN", "許可されていないHostです", "host")
+			return
+		}
 		if r.Header.Get("Origin") != "" {
 			writeAPIError(w, http.StatusForbidden, "ORIGIN_FORBIDDEN", "許可されていないOriginです", "origin")
 			return
@@ -139,7 +177,15 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func writeAPIError(w http.ResponseWriter, status int, reason, message, field string) {
-	writeJSON(w, status, map[string]any{"error": map[string]any{"code": status, "message": message, "status": "INVALID_ARGUMENT", "details": []any{map[string]any{"@type": "type.googleapis.com/google.rpc.BadRequest", "fieldViolations": []any{map[string]string{"field": field, "description": message}}}, map[string]any{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason, "domain": "labwebsystem"}}}})
+	statusName := map[int]string{400: "INVALID_ARGUMENT", 403: "PERMISSION_DENIED", 404: "NOT_FOUND", 409: "ABORTED", 500: "INTERNAL", 503: "UNAVAILABLE"}[status]
+	if statusName == "" {
+		statusName = "UNKNOWN"
+	}
+	details := []any{map[string]any{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason, "domain": "labwebsystem"}}
+	if status == http.StatusBadRequest && field != "" {
+		details = append([]any{map[string]any{"@type": "type.googleapis.com/google.rpc.BadRequest", "fieldViolations": []any{map[string]string{"field": field, "description": message}}}}, details...)
+	}
+	writeJSON(w, status, map[string]any{"error": map[string]any{"code": status, "message": message, "status": statusName, "details": details}})
 }
 
 func writeValidationError(w http.ResponseWriter, err error) {
@@ -148,4 +194,13 @@ func writeValidationError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeAPIError(w, 400, "INVALID_ARGUMENT", err.Error(), "")
+}
+
+func requireJSON(w http.ResponseWriter, r *http.Request) bool {
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "application/json" || strings.HasPrefix(contentType, "application/json;") {
+		return true
+	}
+	writeAPIError(w, http.StatusBadRequest, "INVALID_CONTENT_TYPE", "状態を変更する要求はJSONで指定してください", "contentType")
+	return false
 }
