@@ -4,32 +4,32 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run lint
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run test
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run test backend
       - run: mise run test backend-http
       - run: mise run test backend-docker
   infrastructure:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run test infrastructure
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run package

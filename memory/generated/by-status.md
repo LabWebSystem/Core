@@ -51,6 +51,7 @@
 - CHG-037 | SHIPPED | - | Backendの未検証境界を自動テストで補完する
 - CHG-038 | SHIPPED | - | リリース時のBackend・Dashboard digestをパッケージへ反映する
 - CHG-039 | SHIPPED | - | CIのCLIテストで実ホストport競合を分離する
+- CHG-040 | SHIPPED | - | GitHub ActionsをNode.js 24対応版へ更新する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

@@ -9,27 +9,27 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - name: Coreバージョンをリリースタグと照合
         run: test "$(scripts/version.sh core)" = "${GITHUB_REF_NAME#lws-v}"
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run lint
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - run: mise run test
   backend-image:
     needs: [version, lint, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -51,7 +51,7 @@ jobs:
     needs: [version, lint, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -74,8 +74,8 @@ jobs:
     needs: [version, lint, test, backend-image, dashboard-image]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
       - name: リリースdigestを注入してパッケージ化
         env:
           LWS_BACKEND_DIGEST: ${{ needs.backend-image.outputs.digest }}
