@@ -35,16 +35,20 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Backendイメージをビルドして公開
+      - uses: docker/setup-buildx-action@v4
+      - name: Backendイメージ名を作成
+        id: image
+        run: echo "image=ghcr.io/labwebsystem/lws-backend:${GITHUB_REF_NAME#lws-v}" >> "$GITHUB_OUTPUT"
+      - name: Backendイメージをキャッシュ付きでビルドして公開
         id: publish
-        run: |
-          VERSION="${GITHUB_REF_NAME#lws-v}"
-          IMAGE="ghcr.io/labwebsystem/lws-backend:${VERSION}"
-          docker build --tag "$IMAGE" --file backend/Dockerfile .
-          docker push "$IMAGE"
-          DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)"
-          test -n "$DIGEST"
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.image }}
+          cache-from: type=gha,scope=lws-backend
+          cache-to: type=gha,mode=max,scope=lws-backend
     outputs:
       digest: ${{ steps.publish.outputs.digest }}
   dashboard-image:
@@ -57,16 +61,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Dashboardイメージをビルドして公開
+      - uses: docker/setup-buildx-action@v4
+      - name: Dashboardイメージ名を作成
+        id: image
+        run: echo "image=ghcr.io/labwebsystem/lws-dashboard:${GITHUB_REF_NAME#lws-v}" >> "$GITHUB_OUTPUT"
+      - name: Dashboardイメージをキャッシュ付きでビルドして公開
         id: publish
-        run: |
-          VERSION="${GITHUB_REF_NAME#lws-v}"
-          IMAGE="ghcr.io/labwebsystem/lws-dashboard:${VERSION}"
-          docker build --tag "$IMAGE" dashboard
-          docker push "$IMAGE"
-          DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)"
-          test -n "$DIGEST"
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@v7
+        with:
+          context: dashboard
+          push: true
+          tags: ${{ steps.image.outputs.image }}
+          cache-from: type=gha,scope=lws-dashboard
+          cache-to: type=gha,mode=max,scope=lws-dashboard
     outputs:
       digest: ${{ steps.publish.outputs.digest }}
 

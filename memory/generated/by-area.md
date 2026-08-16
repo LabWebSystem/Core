@@ -53,6 +53,7 @@
 - CHG-040 | SHIPPED | - | GitHub ActionsをNode.js 24対応版へ更新する
 - CHG-041 | SHIPPED | - | CIのOSRunner timeoutテストを決定的にする
 - CHG-042 | SHIPPED | - | LWSリリースWorkflowのBackend build contextとActionを修正する
+- CHG-043 | SHIPPED | - | LWSリリースのDocker BuildKitキャッシュを有効化する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
