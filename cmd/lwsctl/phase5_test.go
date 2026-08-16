@@ -26,6 +26,20 @@ func TestWriteConfigIsPrivate(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsInsecureFile(t *testing.T) {
+	dir := t.TempDir()
+	app := &application{paths: paths{configDir: filepath.Join(dir, "etc"), stateDir: filepath.Join(dir, "state")}, version: "0.1.0"}
+	if err := os.MkdirAll(app.paths.configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(app.configFile(), []byte("LWS_BASE_DOMAIN=example.internal\nLWS_VERSION=0.1.0\nLWS_INSTALLATION_ID=installation\nLWS_PUBLIC_ADDRESS=192.0.2.10\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.loadConfig(); err == nil {
+		t.Fatal("権限の弱いconfig.envを受理しました")
+	}
+}
+
 func TestStartRejectsOccupiedRequiredPortsBeforeCompose(t *testing.T) {
 	old := requiredPortProbe
 	t.Cleanup(func() { requiredPortProbe = old })

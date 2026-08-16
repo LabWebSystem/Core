@@ -32,6 +32,67 @@ func TestGetApplicationIncludesObservedAt(t *testing.T) {
 	}
 }
 
+func TestListApplicationsReturnsApplicationContract(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	NewServer(db, nil).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var response struct {
+		Applications []map[string]any `json:"applications"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Applications) != 1 {
+		t.Fatalf("一覧件数=%d", len(response.Applications))
+	}
+	for _, field := range []string{"name", "subdomain", "repositoryUrl", "ref", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
+		if _, ok := response.Applications[0][field]; !ok {
+			t.Fatalf("一覧Applicationの必須項目がありません: %s", field)
+		}
+	}
+}
+
+func TestUnknownApplicationOperationIsRejected(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications/app:unknown", strings.NewReader(`{"requestId":"550e8400-e29b-41d4-a716-446655440114"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	NewServer(db, nil).Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("未定義operationを受理しました: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestConfigurationRequiresExistingApplication(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rr := httptest.NewRecorder()
+	NewServer(db, nil).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications/missing/configuration", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("存在しないアプリの設定を返しました: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestInfrastructureImagesArePinnedAndRequiredPortsAreFixed(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "infrastructure", "compose.yaml"))
 	if err != nil {
@@ -299,5 +360,55 @@ func TestRestartMarksUnfinishedOperationsFailed(t *testing.T) {
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM operations WHERE state='FAILED' AND error_message LIKE '%再起動%'").Scan(&count); err != nil || count != 2 {
 		t.Fatalf("未完了Operationが整理されていません: count=%d err=%v", count, err)
+	}
+}
+
+func TestLoadSecretKeyRejectsInsecureExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.key")
+	if err := os.WriteFile(path, make([]byte, 32), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSecretKey(path); err == nil {
+		t.Fatal("権限の弱いsecret keyを受理しました")
+	}
+}
+
+func TestLoadSecretKeyRejectsCorruptExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.key")
+	if err := os.WriteFile(path, []byte("short"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSecretKey(path); err == nil {
+		t.Fatal("破損したsecret keyを受理しました")
+	}
+}
+
+func TestLoadSecretKeyRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	path := filepath.Join(dir, "secret.key")
+	if err := os.WriteFile(target, make([]byte, 32), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSecretKey(path); err == nil {
+		t.Fatal("symlinkのsecret keyを受理しました")
+	}
+}
+
+func TestLoadSecretKeyCreatesPrivateKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "secret.key")
+	key, err := LoadSecretKey(path)
+	if err != nil || len(key) != 32 {
+		t.Fatalf("secret keyを作成できません: len=%d err=%v", len(key), err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("secret keyの権限が0600ではありません: %o", info.Mode().Perm())
 	}
 }

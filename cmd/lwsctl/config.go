@@ -43,6 +43,13 @@ func newApplication() (*application, error) {
 func (a *application) configFile() string { return filepath.Join(a.paths.configDir, "config.env") }
 
 func (a *application) loadConfig() error {
+	info, err := os.Lstat(a.configFile())
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0600 {
+		return errors.New("LWSの設定が不正です")
+	}
 	file, err := os.Open(a.configFile())
 	if err != nil {
 		return err

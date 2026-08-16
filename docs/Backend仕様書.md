@@ -121,7 +121,7 @@ UIのINPは75パーセンタイル200ms以下とする。clone、build、起動�
 - Composeの変数参照から、必要な変数名、必須性、default有無を抽出する。値は推測しない。
 - 値の入力は管理クライアント、検証・保存・secret保護・`app.env`生成はBackendが担当する。sourceの`.env`を作成・更新・使用しない。
 - 変数名は`^[A-Z_][A-Z0-9_]*$`。未定義変数の値は保存できない。必須値がなければ起動・同期・再構成を失敗させる。
-- secretは`/etc/lws/secret.key`で暗号化してDBへ保存し、API、ログ、Operation結果、状態表示に含めない。`app.env`は起動直前に0600で生成する。
+- secretは`/etc/lws/secret.key`で暗号化してDBへ保存し、API、ログ、Operation結果、状態表示に含めない。secret keyはsymlinkを拒否し、既存ファイルは0600だけを受理する。`app.env`は起動直前に0600で生成する。
 - 値を反映した実効Composeを再検証し、禁止構成が現れた場合は起動しない。
 
 ## 6. Docker操作とテスト

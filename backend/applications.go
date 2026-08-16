@@ -22,6 +22,18 @@ func (s *Server) applicationRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/operations/", s.operationRoute)
 }
 func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
+	var exists string
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM applications WHERE id=?`, appID(r)).Scan(&exists); err == sql.ErrNoRows {
+		writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "アプリが見つかりません", "application")
+		return
+	} else if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリを確認できません", "")
+		return
+	}
 	rows, err := s.DB.QueryContext(r.Context(), `SELECT name,is_secret FROM application_variables WHERE application_id=?`, appID(r))
 	if err != nil {
 		writeAPIError(w, 500, "DATABASE_ERROR", "設定を取得できません", "")
@@ -171,6 +183,10 @@ func appID(r *http.Request) string {
 	return strings.TrimSuffix(p, "/")
 }
 func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	var id, sub, repo, ref, desired, observed, state, created, updated string
 	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,desired_state,observed_state,registration_state,created_at,updated_at FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &created, &updated)
 	if err == sql.ErrNoRows {
@@ -205,6 +221,10 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, response)
 }
 func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil || s.DB.Ping() != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	if !requireJSON(w, r) {
 		return
 	}
@@ -254,6 +274,10 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 func (s *Server) deleteApplication(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil || s.DB.Ping() != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	if !requireJSON(w, r) {
 		return
 	}
@@ -269,14 +293,23 @@ func (s *Server) deleteApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil || s.DB.Ping() != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	if !requireJSON(w, r) {
 		return
 	}
-	kind := "OPERATION"
+	kind := ""
 	for _, name := range []string{"register", "start", "stop", "sync", "rebuild", "purge"} {
 		if strings.HasSuffix(r.URL.Path, ":"+name) {
 			kind = strings.ToUpper(name)
+			break
 		}
+	}
+	if kind == "" {
+		writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "Operationが見つかりません", "operation")
+		return
 	}
 	op, err := s.makeAppOp(r, kind)
 	if err != nil {
@@ -322,6 +355,10 @@ func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	return CreateOperation(r.Context(), s.DB, id, request.RequestID, kind)
 }
 func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	var o Operation
 	err := s.DB.QueryRowContext(r.Context(), `SELECT id,application_id,request_id,kind,state,error_message FROM operations WHERE id=?`, operationID(r)).Scan(&o.ID, &o.ApplicationID, &o.RequestID, &o.Kind, &o.State, &o.ErrorMessage)
 	if err == sql.ErrNoRows {
@@ -335,6 +372,10 @@ func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"name": "operations/" + o.ID, "state": strings.ToLower(o.State), "errorMessage": o.ErrorMessage})
 }
 func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

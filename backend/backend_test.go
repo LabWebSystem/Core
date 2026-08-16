@@ -90,6 +90,20 @@ func TestValidateRequestIDRequiresUUIDv4(t *testing.T) {
 		t.Fatal("UUID v4以外のrequestIdを受け付けました")
 	}
 }
+
+func TestValidateBaseDomain(t *testing.T) {
+	for _, value := range []string{"example.internal", "lab.example.internal"} {
+		if err := ValidateBaseDomain(value); err != nil {
+			t.Errorf("有効なbase domainを拒否しました: %q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "example", ".example.internal", "example.internal.", "https://example.internal", "bad domain", "example..internal"} {
+		if err := ValidateBaseDomain(value); err == nil {
+			t.Errorf("不正なbase domainを受理しました: %q", value)
+		}
+	}
+}
+
 func TestValidateManifest(t *testing.T) {
 	m, err := ValidateManifest([]byte("apiVersion: lws/v1\nmetadata:\n  name: Demo\n  description: test\npublic:\n  service: web\n  port: 3000\n"))
 	if err != nil || m.Public.Port != 3000 {
@@ -211,6 +225,55 @@ func TestHTTPReadyRejectsClosedDatabase(t *testing.T) {
 	(&Server{DB: db}).Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/v1/health/ready", nil))
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d", rr.Code)
+	}
+}
+
+func TestHTTPReadyHonorsRuntimeReadiness(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rr := httptest.NewRecorder()
+	(&Server{DB: db, Ready: func() bool { return false }}).Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/v1/health/ready", nil))
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("runtime未準備状態をreadyとして返しました: %d", rr.Code)
+	}
+}
+
+func TestHTTPReadEndpointsRejectMissingDatabase(t *testing.T) {
+	for _, path := range []string{"/api/v1/applications/app", "/api/v1/operations/op", "/api/v1/applications/app/configuration"} {
+		t.Run(path, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			(&Server{}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+			if rr.Code != http.StatusServiceUnavailable {
+				t.Fatalf("DBなしのreadを受理しました: path=%s status=%d body=%s", path, rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestHTTPStateChangingEndpointsRejectMissingDatabase(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{name: "update", path: "/api/v1/applications/app", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440115","ref":"main"}`},
+		{name: "start", path: "/api/v1/applications/app:start", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440116"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPatch, tc.path, strings.NewReader(tc.body))
+			if tc.name == "start" {
+				req.Method = http.MethodPost
+			}
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			(&Server{}).Handler().ServeHTTP(rr, req)
+			if rr.Code != http.StatusServiceUnavailable {
+				t.Fatalf("DBなしのstate changeを受理しました: status=%d body=%s", rr.Code, rr.Body.String())
+			}
+		})
 	}
 }
 

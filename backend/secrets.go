@@ -11,6 +11,17 @@ import (
 )
 
 func LoadSecretKey(path string) ([]byte, error) {
+	info, statErr := os.Lstat(path)
+	if statErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("secret.keyがsymlinkです")
+		}
+		if info.Mode().Perm() != 0600 {
+			return nil, fmt.Errorf("secret.keyの権限が不正です")
+		}
+	} else if !os.IsNotExist(statErr) {
+		return nil, statErr
+	}
 	b, err := os.ReadFile(path)
 	if err == nil {
 		if len(b) != 32 {

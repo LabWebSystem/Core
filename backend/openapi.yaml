@@ -90,7 +90,7 @@ paths:
       responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
   /applications/{application}/configuration:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    get: { operationId: getConfiguration, responses: { '200': { description: 設定取得, content: { application/json: { schema: { $ref: '#/components/schemas/ConfigurationResponse' } } } } } }
+    get: { operationId: getConfiguration, responses: { '200': { description: 設定取得, content: { application/json: { schema: { $ref: '#/components/schemas/ConfigurationResponse' } } } }, '404': { description: 未検出 } } }
     patch:
       operationId: updateConfiguration
       requestBody:

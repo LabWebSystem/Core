@@ -48,6 +48,7 @@
 - CHG-034 | SHIPPED | - | フェーズ4未達項目のテスト先行実装
 - CHG-035 | SHIPPED | - | フェーズ5のSSEと再起動耐障害性を実装する
 - CHG-036 | SHIPPED | - | フェーズ0〜5の未達項目をテスト先行で補完する
+- CHG-037 | SHIPPED | - | Backendの未検証境界を自動テストで補完する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
