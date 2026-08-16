@@ -35,7 +35,7 @@
 | 生成物 | `/var/lib/lws/generated/Caddyfile`、`hosts` | SQLiteから生成する派生物 |
 
 - アプリ永続データはhost bind mountではなくDocker named volumeだけに置く。
-- 通常の`lwsctl uninstall`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl uninstall --purge`だけが確認後に削除する。
+- 通常の`lwsctl down`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl down --purge`だけが確認後に削除する。パッケージの削除はAPT / DNFへ委譲する。
 
 ## 4. ネットワーク、DNS、Reverse Proxy
 
@@ -111,6 +111,6 @@ docker compose --project-name lws-app-<app-id> \
 
 ## 7. ライフサイクルと禁止事項
 
-- `lwsctl start`は設定を確認してLWS本体Composeを起動する。`rebuild`は本体と派生設定を再構成するが、アプリsourceやvolumeを削除しない。
+- `lwsctl start`は設定を確認してLWS本体Composeを起動する。`stop`は実行中のLWS本体Composeを停止する。`down`はLWS本体Composeのコンテナとnetworkを削除する。`rebuild`は本体と派生設定を再構成するが、アプリsourceやvolumeを削除しない。
 - 通常の停止・同期・再構成で`docker compose down --volumes`を使わない。完全削除時だけ、project名、LWS所有label、installation ID、app-idが一致するvolumeを削除できる。
 - `docker system prune`、`docker volume prune`、未検証Composeの起動、外部リポジトリ由来bind mountの許可、`compose.override.yaml`の暗黙取込み、Backend以外へのDocker socket付与を禁止する。

@@ -35,7 +35,7 @@ lwsctl stop
 lwsctl status
 lwsctl rebuild
 lwsctl update
-lwsctl uninstall
+lwsctl down
 ```
 
 ---
@@ -507,16 +507,16 @@ GHCRから対応する新しいimageをpull
 
 ---
 
-## 🗑️ フロー3：アンインストール
+## 🗑️ フロー3：実行環境の撤去とパッケージ削除
 
-アンインストール時には、「パッケージだけ削除され、LWS管理下のDockerコンテナが動き続ける」状態を発生させません。
+`lwsctl down`はLWSの実行環境を撤去します。パッケージ削除はAPT/DNFの責務とし、パッケージだけ削除されてLWS管理下のDockerコンテナが動き続ける状態は、削除前hookで防ぎます。
 
-### 1. 通常アンインストール
+### 1. 通常の実行環境撤去
 
 ユーザー向けには、
 
 ```text
-sudo lwsctl uninstall
+sudo lwsctl down
 ```
 
 を用意します。
@@ -531,24 +531,20 @@ LWS管理下コンテナ停止
 LWS管理下コンテナ削除
 ↓
 LWS管理下network削除
-↓
-APT / DNFによるpackage remove
 ```
 
-通常アンインストールでは、再インストール可能性を考慮して永続データを保持します。
+通常の実行環境撤去では、再起動・再構成可能性を考慮して永続データを保持します。
 
 ```text
 削除
 ├─ Dashboard / Backend等のコンテナ
 ├─ LWS管理下network
-├─ lwsctl
-├─ Compose定義
-└─ package管理ファイル
 
 保持
 ├─ 永続データ
 ├─ Docker volume
-└─ 必要なユーザー状態
+├─ 必要なユーザー状態
+└─ lwsctl / Compose定義などのパッケージ管理ファイル
 ```
 
 ### 2. 完全削除
@@ -556,7 +552,7 @@ APT / DNFによるpackage remove
 完全に環境をクリーンにする場合は、
 
 ```text
-sudo lwsctl uninstall --purge
+sudo lwsctl down --purge
 ```
 
 を使用します。
@@ -573,13 +569,13 @@ sudo lwsctl uninstall --purge
 確認を省略する場合は、`--force` または `-f` を使用します。
 
 ```text
-sudo lwsctl uninstall --purge --force
-sudo lwsctl uninstall --purge -f
+sudo lwsctl down --purge --force
+sudo lwsctl down --purge -f
 ```
 
-### 3. APT/DNFを直接使った場合の安全網
+### 3. パッケージ削除と安全網
 
-利用者が `lwsctl` を使わず、
+パッケージを削除する場合は、APT/DNFを使用します。
 
 ```text
 sudo apt remove lws
@@ -593,7 +589,7 @@ sudo dnf remove lws
 
 を直接実行した場合にも、安全に削除できるようにします。
 
-パッケージの削除前スクリプトからLWSの停止処理を呼び出します。
+パッケージの削除前スクリプトから`lwsctl down`を呼び出します。
 
 ```text
 package remove
@@ -602,7 +598,7 @@ package remove
 ↓
 LWS runtime状態確認
 ↓
-安全にstop / down
+安全にdown
 ↓
 package削除
 ```
@@ -661,7 +657,7 @@ lwsctl
 ├─ status
 ├─ rebuild
 ├─ update
-└─ uninstall
+└─ down
 
 Docker Compose
 └─ LWSおよびWebアプリのランタイム

@@ -25,10 +25,10 @@ GitHub上のインストーラーは[LabWebSystem/Core](https://github.com/LabWe
 curl -fsSL https://raw.githubusercontent.com/LabWebSystem/Core/main/scripts/install.sh | sudo bash
 sudo lwsctl start --domain example.internal
 sudo lwsctl stop
-sudo lwsctl uninstall
-sudo lwsctl uninstall --purge --force
+sudo lwsctl down
+sudo lwsctl down --purge --force
 ```
 
-パッケージインストールはファイル配置だけを行います。Composeプロジェクトを起動するのは`lwsctl start`です。パッケージマネージャーを直接使用した場合も、APT/DNFの削除前hookがプロジェクトを停止します。LWSは専用のComposeプロジェクトとラベルを使うため、無関係なDockerリソースは削除しません。
+パッケージインストールはファイル配置だけを行います。Composeプロジェクトを起動するのは`lwsctl start`です。`lwsctl down`は実行環境だけを削除し、パッケージを削除する場合はAPT/DNFを使用します。パッケージマネージャーを直接使用した場合も、削除前hookがプロジェクトを撤去します。LWSは専用のComposeプロジェクトとラベルを使うため、無関係なDockerリソースは削除しません。
 
 インストーラーは`/etc/os-release`を確認し、Ubuntu系ではGitHub Releasesから`.deb`を取得してAPTで、AlmaLinux系では`.rpm`を取得してDNFでインストールします。対応していないOSや必要なパッケージマネージャーがない環境では、コンテナやパッケージを変更せず日本語のエラーを表示して終了します。

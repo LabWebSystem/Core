@@ -127,7 +127,7 @@ lwsctl stop
 lwsctl status
 lwsctl rebuild
 lwsctl update
-lwsctl uninstall
+lwsctl down
 ```
 
 仕様変更が明示されない限り、7個目のコマンドを追加しないでください。
@@ -162,12 +162,12 @@ LWSのランタイムや生成設定を再構成します。
 - 対応するGHCRイメージを取得する
 - 必要な再構成・再起動を行う
 
-### `uninstall`
+### `down`
 
-通常アンインストールでは、ランタイムとパッケージを削除し、永続データは保持します。
+LWS管理下のランタイムを停止して削除し、設定と永続データは保持します。パッケージの削除はAPT / DNFの責務とします。
 
 ```text
-lwsctl uninstall --purge
+lwsctl down --purge
 ```
 
 では、LWS設定・状態・永続データ・LWS管理下Docker volumeも削除します。
@@ -342,7 +342,7 @@ LAN内利用であっても、入力検証や最小権限を省略してはい�
 - Docker再調整
 - DNS / Reverse Proxy生成
 - install / update / remove lifecycle
-- 通常uninstallとpurgeの差異
+- 通常downとpurgeの差異
 - LWS外のDockerリソースを削除しないこと
 
 パッケージ処理はDebian系とRPM系の両方を考慮してください。

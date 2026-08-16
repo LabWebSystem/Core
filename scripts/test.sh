@@ -41,7 +41,6 @@ EOF
   export LWS_COMPOSE_FILE="$ROOT/infrastructure/compose.yaml"
   export LWS_VERSION_FILE="$TMP/version"
   export LWS_INSTALLER_PATH="$TMP/update-installer"
-  export LWS_SKIP_PACKAGE_REMOVE=1
 
   LWSCTL="$TMP/lwsctl"
 
@@ -63,6 +62,12 @@ test_help() {
   grep -q \
     -- '--purge' \
     "$TMP/help"
+
+  grep -q \
+    'down       LWS管理下の実行環境を停止して削除します。' \
+    "$TMP/help"
+
+  ! "$LWSCTL" uninstall >"$TMP/uninstall" 2>&1
 
   "$LWSCTL" start --help >"$TMP/start-help"
 
@@ -92,7 +97,7 @@ test_lifecycle() {
   "$LWSCTL" stop
 
   grep -qF \
-    'down --remove-orphans' \
+    'stop' \
     "$TMP/docker.log"
 }
 
@@ -131,16 +136,20 @@ test_update() {
     "$TMP/docker.log"
 }
 
-test_uninstall() {
-  "$LWSCTL" uninstall >"$TMP/uninstall"
+test_down() {
+  "$LWSCTL" down >"$TMP/down"
 
   grep -q \
-    'パッケージマネージャーによる削除をスキップしました' \
-    "$TMP/uninstall"
+    'LWSの実行環境を削除しました' \
+    "$TMP/down"
+
+  grep -qF \
+    'down --remove-orphans' \
+    "$TMP/docker.log"
 
   test -f "$TMP/etc/config.env"
 
-  "$LWSCTL" uninstall \
+  "$LWSCTL" down \
     --purge \
     --force
 
@@ -328,7 +337,7 @@ main() {
   test_lifecycle
   test_domain_change
   test_update
-  test_uninstall
+  test_down
   test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
   test_installer_almalinux 'lws-0.1.0.rpm'
   test_version_sources

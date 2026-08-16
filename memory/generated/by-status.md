@@ -23,6 +23,7 @@
 - CHG-011 | SHIPPED | - | miseの表示形式に依存しないリリーステスト
 - CHG-012 | SHIPPED | - | GitHub ActionsのCIとリリースを段階並列化する
 - CHG-013 | SHIPPED | - | RPM成果物名とインストーラーの探索条件を整合させる
+- CHG-014 | SHIPPED | - | lwsctlの実行環境撤去をdownへ改名
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

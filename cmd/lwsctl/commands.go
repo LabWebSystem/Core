@@ -31,6 +31,8 @@ func (a *application) run(args []string) error {
 			return fmt.Errorf("stopにはオプションを指定できません")
 		}
 		return a.stop()
+	case "down":
+		return a.down(options)
 	case "status":
 		if len(options) != 0 {
 			return fmt.Errorf("statusにはオプションを指定できません")
@@ -46,8 +48,6 @@ func (a *application) run(args []string) error {
 			return fmt.Errorf("updateにはオプションを指定できません")
 		}
 		return a.update()
-	case "uninstall":
-		return a.uninstall(options)
 	default:
 		printUsage(os.Stderr)
 		return exitError{code: 2}
@@ -136,7 +136,7 @@ func (a *application) stop() error {
 	if err := a.loadConfig(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := a.compose("down", "--remove-orphans"); err != nil {
+	if err := a.compose("stop"); err != nil {
 		return err
 	}
 	fmt.Println("LWSを停止しました")
@@ -213,8 +213,8 @@ func (a *application) update() error {
 	return nil
 }
 
-func (a *application) uninstall(options []string) error {
-	purge, force, err := parseUninstallOptions(options)
+func (a *application) down(options []string) error {
+	purge, force, err := parseDownOptions(options)
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (a *application) uninstall(options []string) error {
 			return errors.New("完全削除をキャンセルしました")
 		}
 	}
-	if err := a.stop(); err != nil {
+	if err := a.compose("down", "--remove-orphans"); err != nil {
 		return err
 	}
 	if purge {
@@ -238,26 +238,15 @@ func (a *application) uninstall(options []string) error {
 			return err
 		}
 	}
-	if os.Getenv("LWS_SKIP_PACKAGE_REMOVE") == "1" {
-		fmt.Println("パッケージマネージャーによる削除をスキップしました（有効にするにはLWS_SKIP_PACKAGE_REMOVE=0を設定してください）。")
+	if purge {
+		fmt.Println("LWSの実行環境、設定、状態、永続データを削除しました")
 		return nil
 	}
-	manager := ""
-	if _, err := exec.LookPath("apt-get"); err == nil {
-		manager = "apt-get"
-	} else if _, err := exec.LookPath("dnf"); err == nil {
-		manager = "dnf"
-	}
-	if manager == "" {
-		fmt.Println("パッケージマネージャーによる削除をスキップしました（有効にするにはLWS_SKIP_PACKAGE_REMOVE=0を設定してください）。")
-		return nil
-	}
-	command := exec.Command(manager, "remove", "-y", "lws")
-	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return command.Run()
+	fmt.Println("LWSの実行環境を削除しました")
+	return nil
 }
 
-func parseUninstallOptions(options []string) (bool, bool, error) {
+func parseDownOptions(options []string) (bool, bool, error) {
 	purge, force := false, false
 	for len(options) > 0 {
 		switch options[0] {
@@ -266,7 +255,7 @@ func parseUninstallOptions(options []string) (bool, bool, error) {
 		case "-f", "--force":
 			force, options = true, options[1:]
 		default:
-			return false, false, fmt.Errorf("uninstallの不明なオプションです: %s", options[0])
+			return false, false, fmt.Errorf("downの不明なオプションです: %s", options[0])
 		}
 	}
 	return purge, force, nil

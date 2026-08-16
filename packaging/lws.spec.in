@@ -16,7 +16,7 @@ install -m 0644 %{_sourcedir}/version %{buildroot}/usr/share/lws/version
 install -m 0755 %{_sourcedir}/install.sh %{buildroot}/usr/share/lws/install.sh
 %preun
 if [ "$1" -eq 0 ] && [ -x /usr/bin/lwsctl ]; then
-  LWS_SKIP_PACKAGE_REMOVE=1 /usr/bin/lwsctl stop || :
+  /usr/bin/lwsctl down || :
 fi
 %files
 /usr/bin/lwsctl
