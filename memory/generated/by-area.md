@@ -27,6 +27,9 @@
 - CHG-016 | SHIPPED | - | updateで停止状態を維持する
 - CHG-017 | SHIPPED | - | 未設定時のstatusを案内表示で正常終了する
 - CHG-018 | SHIPPED | - | バージョン確認テストを非破壊化する
+- CHG-019 | SHIPPED | - | Backend基盤とテストtargetを追加する
+- CHG-020 | SHIPPED | - | Backend操作APIとworker境界を追加する
+- CHG-021 | SHIPPED | - | Composeの必須環境変数展開をBackend検証へ移す
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

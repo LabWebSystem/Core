@@ -1,0 +1,35 @@
+openapi: 3.1.0
+info:
+  title: LabWebSystem Backend API
+  version: 1.0.0
+  description: LWSのアプリ管理API
+servers:
+  - url: /api/v1
+paths:
+  /health/live:
+    get:
+      operationId: healthLive
+      responses:
+        '200': { description: 稼働中 }
+  /health/ready:
+    get:
+      operationId: healthReady
+      responses:
+        '200': { description: 利用可能 }
+        '503': { description: 利用不可 }
+  /applications:
+    get:
+      operationId: listApplications
+      responses:
+        '200': { description: アプリ一覧 }
+    post:
+      operationId: createApplication
+      responses:
+        '202': { description: Operationを作成 }
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: object }

@@ -7,7 +7,10 @@ run = "scripts/lint.sh"
 
 [tasks.test]
 description = "軽量な統合テストを実行"
-run = "scripts/test.sh"
+run = "scripts/test.sh ${usage_target:-}"
+usage = '''
+arg "[target]" help="テスト対象（cli、installer、release、backend、backend-http、backend-docker、infrastructure）"
+'''
 
 [tasks.build]
 description = "lwsctlバイナリとリリースパッケージを生成"

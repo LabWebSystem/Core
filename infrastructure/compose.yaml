@@ -1,15 +1,46 @@
 name: lws
 services:
   backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}
     restart: unless-stopped
     environment:
-      LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:?先にlwsctl startを実行してください}
+      LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
+      LWS_DATABASE_PATH: /var/lib/lws/database.sqlite
+    volumes:
+      - lws-backend-data:/var/lib/lws
+    networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
   dashboard:
     image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}
     restart: unless-stopped
     depends_on: [backend]
+    labels:
+      com.labwebsystem.owner: lws
+    networks: [lws-internal]
+
+  caddy:
+    image: caddy:2.10-alpine
+    networks: [lws-internal]
+    labels:
+      com.labwebsystem.owner: lws
+
+  coredns:
+    image: coredns/coredns:1.12.4
+    networks: [lws-internal]
+    labels:
+      com.labwebsystem.owner: lws
+
+volumes:
+  lws-backend-data:
+    labels:
+      com.labwebsystem.owner: lws
+
+networks:
+  lws-internal:
+    name: lws-internal
     labels:
       com.labwebsystem.owner: lws

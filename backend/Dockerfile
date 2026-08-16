@@ -1,4 +1,15 @@
-FROM alpine:3.20
-COPY mock-server.sh /usr/local/bin/mock-server
-RUN chmod +x /usr/local/bin/mock-server
-CMD ["mock-server", "backend"]
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY backend ./backend
+COPY version ./version
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/lws-backend ./backend/cmd/lws-backend
+
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates docker-cli docker-cli-compose git
+COPY --from=build /out/lws-backend /usr/local/bin/lws-backend
+RUN addgroup -S lws && adduser -S -G lws lws
+USER lws
+EXPOSE 8080
+ENTRYPOINT ["lws-backend"]

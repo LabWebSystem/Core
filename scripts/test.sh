@@ -368,21 +368,43 @@ test_version_sources() {
 }
 
 main() {
+  local target="${1:-all}"
+
+  case "$target" in
+    all|cli|installer|release|backend|backend-http|backend-docker|infrastructure) ;;
+    *)
+      printf '不明なテスト対象です: %s\n' "$target" >&2
+      return 2
+      ;;
+  esac
+
   TMP="$(mktemp -d)"
   trap cleanup EXIT
 
-  setup_cli_environment
+  if [[ "$target" == all || "$target" == cli ]]; then
+    setup_cli_environment
+    test_help
+    test_lifecycle
+    test_domain_change
+    test_update
+    test_update_running
+    test_down
+    test_version_sources
+  fi
+  if [[ "$target" == all || "$target" == installer ]]; then
+    test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
+    test_installer_almalinux 'lws-0.1.0.rpm'
+  fi
+  if [[ "$target" == all || "$target" == release ]]; then
+    test_release_selected_components
+  fi
 
-  test_help
-  test_lifecycle
-  test_domain_change
-  test_update
-  test_update_running
-  test_down
-  test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
-  test_installer_almalinux 'lws-0.1.0.rpm'
-  test_version_sources
-  test_release_selected_components
+  case "$target" in
+    backend) (cd "$ROOT" && go test ./backend/...);;
+    backend-http) (cd "$ROOT" && go test ./backend/... -run 'TestHTTP|TestHealth');;
+    backend-docker) (cd "$ROOT" && go test ./backend/... -run 'TestCompose|TestOwnership');;
+    infrastructure) (cd "$ROOT" && go test ./backend/... -run 'TestDerived');;
+  esac
 
   printf 'テスト: 成功\n'
 }

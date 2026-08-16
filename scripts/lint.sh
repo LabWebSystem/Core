@@ -14,7 +14,7 @@ check_shell() {
 check_go_format() {
   local diff
 
-  diff="$(gofmt -d "$ROOT"/cmd/lwsctl/*.go)"
+  diff="$(gofmt -d "$ROOT"/cmd/lwsctl/*.go "$ROOT"/backend/*.go "$ROOT"/backend/cmd/lws-backend/*.go)"
 
   if [[ -n "$diff" ]]; then
     printf '%s\n' "$diff"
@@ -29,7 +29,7 @@ main() {
 
   (
     cd "$ROOT"
-    go vet ./cmd/lwsctl
+    go vet ./...
   )
 
   printf '静的検査: 成功\n'
