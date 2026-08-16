@@ -100,8 +100,14 @@ func TestInfrastructureImagesArePinnedAndRequiredPortsAreFixed(t *testing.T) {
 	}
 	text := string(data)
 	for _, image := range []string{"lws-backend:", "lws-dashboard:", "caddy:", "coredns/coredns:"} {
-		start := strings.Index(text, image)
-		if start < 0 || !strings.Contains(text[start:start+180], "@sha256:") {
+		found := false
+		for _, line := range strings.Split(text, "\n") {
+			if strings.Contains(line, image) && strings.Contains(line, "@") && strings.Contains(line, "sha256:") {
+				found = true
+				break
+			}
+		}
+		if !found {
 			t.Fatalf("固定digestのimageがありません: %s", image)
 		}
 	}
