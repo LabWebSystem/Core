@@ -44,22 +44,44 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateApplicationRequest'
       responses: { '202': { description: Operationを作成 } }
-    delete: { operationId: unregisterApplication, responses: { '202': { description: Operationを作成 } } }
+    delete:
+      operationId: unregisterApplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActionRequest' }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}:start:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    post: { operationId: startApplication, responses: { '202': { description: Operationを作成 } } }
+    post:
+      operationId: startApplication
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}:stop:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    post: { operationId: stopApplication, responses: { '202': { description: Operationを作成 } } }
+    post:
+      operationId: stopApplication
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}:sync:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    post: { operationId: syncApplication, responses: { '202': { description: Operationを作成 } } }
+    post:
+      operationId: syncApplication
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}:rebuild:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    post: { operationId: rebuildApplication, responses: { '202': { description: Operationを作成 } } }
+    post:
+      operationId: rebuildApplication
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}:purge:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    post: { operationId: purgeApplication, responses: { '202': { description: Operationを作成 } } }
+    post:
+      operationId: purgeApplication
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}/configuration:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     get: { operationId: getConfiguration, responses: { '200': { description: 設定取得 } } }
@@ -103,6 +125,11 @@ components:
       required: [variables, requestId]
       properties:
         variables: { type: object, additionalProperties: { $ref: '#/components/schemas/Variable' } }
+        requestId: { type: string, format: uuid }
+    ActionRequest:
+      type: object
+      required: [requestId]
+      properties:
         requestId: { type: string, format: uuid }
     Variable:
       type: object

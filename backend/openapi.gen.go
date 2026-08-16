@@ -23,6 +23,11 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// ActionRequest defines model for ActionRequest.
+type ActionRequest struct {
+	RequestId openapi_types.UUID `json:"requestId"`
+}
+
 // ConfigurationRequest defines model for ConfigurationRequest.
 type ConfigurationRequest struct {
 	RequestId openapi_types.UUID  `json:"requestId"`
@@ -58,11 +63,29 @@ type Variable struct {
 // CreateApplicationJSONRequestBody defines body for CreateApplication for application/json ContentType.
 type CreateApplicationJSONRequestBody = CreateApplicationRequest
 
+// UnregisterApplicationJSONRequestBody defines body for UnregisterApplication for application/json ContentType.
+type UnregisterApplicationJSONRequestBody = ActionRequest
+
 // UpdateApplicationJSONRequestBody defines body for UpdateApplication for application/json ContentType.
 type UpdateApplicationJSONRequestBody = UpdateApplicationRequest
 
 // UpdateConfigurationJSONRequestBody defines body for UpdateConfiguration for application/json ContentType.
 type UpdateConfigurationJSONRequestBody = ConfigurationRequest
+
+// PurgeApplicationJSONRequestBody defines body for PurgeApplication for application/json ContentType.
+type PurgeApplicationJSONRequestBody = ActionRequest
+
+// RebuildApplicationJSONRequestBody defines body for RebuildApplication for application/json ContentType.
+type RebuildApplicationJSONRequestBody = ActionRequest
+
+// StartApplicationJSONRequestBody defines body for StartApplication for application/json ContentType.
+type StartApplicationJSONRequestBody = ActionRequest
+
+// StopApplicationJSONRequestBody defines body for StopApplication for application/json ContentType.
+type StopApplicationJSONRequestBody = ActionRequest
+
+// SyncApplicationJSONRequestBody defines body for SyncApplication for application/json ContentType.
+type SyncApplicationJSONRequestBody = ActionRequest
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -149,8 +172,13 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	CreateApplication(ctx context.Context, body CreateApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// UnregisterApplicationWithBody performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request,
+	// with any type of body and a specified content type.
+	UnregisterApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UnregisterApplication performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request.
-	UnregisterApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	UnregisterApplication(ctx context.Context, application string, body UnregisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApplication performs a GET /applications/{application} (the `GetApplication` operationId) request.
 	GetApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -174,20 +202,45 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	UpdateConfiguration(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PurgeApplicationWithBody performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
+	// with any type of body and a specified content type.
+	PurgeApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PurgeApplication performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request.
-	PurgeApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	PurgeApplication(ctx context.Context, application string, body PurgeApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RebuildApplicationWithBody performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request,
+	// with any type of body and a specified content type.
+	RebuildApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RebuildApplication performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request.
-	RebuildApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	RebuildApplication(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartApplicationWithBody performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
+	// with any type of body and a specified content type.
+	StartApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StartApplication performs a POST /applications/{application}:start (the `StartApplication` operationId) request.
-	StartApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	StartApplication(ctx context.Context, application string, body StartApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StopApplicationWithBody performs a POST /applications/{application}:stop (the `StopApplication` operationId) request,
+	// with any type of body and a specified content type.
+	StopApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StopApplication performs a POST /applications/{application}:stop (the `StopApplication` operationId) request.
-	StopApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	StopApplication(ctx context.Context, application string, body StopApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SyncApplicationWithBody performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request,
+	// with any type of body and a specified content type.
+	SyncApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SyncApplication performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
-	SyncApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Takes a body of the `application/json` content type.
+	SyncApplication(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TailLogs performs a GET /applications/{application}:tailLogs (the `TailLogs` operationId) request.
 	TailLogs(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -246,9 +299,24 @@ func (c *Client) CreateApplication(ctx context.Context, body CreateApplicationJS
 	return c.Client.Do(req)
 }
 
+// UnregisterApplicationWithBody performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) UnregisterApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUnregisterApplicationRequestWithBody(c.Server, application, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // UnregisterApplication performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request.
-func (c *Client) UnregisterApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUnregisterApplicationRequest(c.Server, application)
+// Takes a body of the `application/json` content type.
+func (c *Client) UnregisterApplication(ctx context.Context, application string, body UnregisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUnregisterApplicationRequest(c.Server, application, body)
 	if err != nil {
 		return nil, err
 	}
@@ -341,9 +409,38 @@ func (c *Client) UpdateConfiguration(ctx context.Context, application string, bo
 	return c.Client.Do(req)
 }
 
+// PurgeApplicationWithBody performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) PurgeApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPurgeApplicationRequestWithBody(c.Server, application, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // PurgeApplication performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request.
-func (c *Client) PurgeApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPurgeApplicationRequest(c.Server, application)
+// Takes a body of the `application/json` content type.
+func (c *Client) PurgeApplication(ctx context.Context, application string, body PurgeApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPurgeApplicationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RebuildApplicationWithBody performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) RebuildApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRebuildApplicationRequestWithBody(c.Server, application, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -355,8 +452,23 @@ func (c *Client) PurgeApplication(ctx context.Context, application string, reqEd
 }
 
 // RebuildApplication performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request.
-func (c *Client) RebuildApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRebuildApplicationRequest(c.Server, application)
+// Takes a body of the `application/json` content type.
+func (c *Client) RebuildApplication(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRebuildApplicationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartApplicationWithBody performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) StartApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartApplicationRequestWithBody(c.Server, application, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -368,8 +480,23 @@ func (c *Client) RebuildApplication(ctx context.Context, application string, req
 }
 
 // StartApplication performs a POST /applications/{application}:start (the `StartApplication` operationId) request.
-func (c *Client) StartApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStartApplicationRequest(c.Server, application)
+// Takes a body of the `application/json` content type.
+func (c *Client) StartApplication(ctx context.Context, application string, body StartApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartApplicationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StopApplicationWithBody performs a POST /applications/{application}:stop (the `StopApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) StopApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStopApplicationRequestWithBody(c.Server, application, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -381,8 +508,23 @@ func (c *Client) StartApplication(ctx context.Context, application string, reqEd
 }
 
 // StopApplication performs a POST /applications/{application}:stop (the `StopApplication` operationId) request.
-func (c *Client) StopApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStopApplicationRequest(c.Server, application)
+// Takes a body of the `application/json` content type.
+func (c *Client) StopApplication(ctx context.Context, application string, body StopApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStopApplicationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SyncApplicationWithBody performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) SyncApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSyncApplicationRequestWithBody(c.Server, application, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -394,8 +536,9 @@ func (c *Client) StopApplication(ctx context.Context, application string, reqEdi
 }
 
 // SyncApplication performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
-func (c *Client) SyncApplication(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSyncApplicationRequest(c.Server, application)
+// Takes a body of the `application/json` content type.
+func (c *Client) SyncApplication(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSyncApplicationRequest(c.Server, application, body)
 	if err != nil {
 		return nil, err
 	}
@@ -538,8 +681,19 @@ func NewCreateApplicationRequestWithBody(server string, contentType string, body
 	return req, nil
 }
 
-// NewUnregisterApplicationRequest constructs an http.Request for the UnregisterApplication method
-func NewUnregisterApplicationRequest(server string, application string) (*http.Request, error) {
+// NewUnregisterApplicationRequest calls the generic UnregisterApplication builder with application/json body
+func NewUnregisterApplicationRequest(server string, application string, body UnregisterApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUnregisterApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewUnregisterApplicationRequestWithBody constructs an http.Request for the UnregisterApplication method, with any body, and a specified content type
+func NewUnregisterApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -564,10 +718,12 @@ func NewUnregisterApplicationRequest(server string, application string) (*http.R
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -734,8 +890,19 @@ func NewUpdateConfigurationRequestWithBody(server string, application string, co
 	return req, nil
 }
 
-// NewPurgeApplicationRequest constructs an http.Request for the PurgeApplication method
-func NewPurgeApplicationRequest(server string, application string) (*http.Request, error) {
+// NewPurgeApplicationRequest calls the generic PurgeApplication builder with application/json body
+func NewPurgeApplicationRequest(server string, application string, body PurgeApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPurgeApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewPurgeApplicationRequestWithBody constructs an http.Request for the PurgeApplication method, with any body, and a specified content type
+func NewPurgeApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -760,16 +927,29 @@ func NewPurgeApplicationRequest(server string, application string) (*http.Reques
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Add("Content-Type", contentType)
+
 	return req, nil
 }
 
-// NewRebuildApplicationRequest constructs an http.Request for the RebuildApplication method
-func NewRebuildApplicationRequest(server string, application string) (*http.Request, error) {
+// NewRebuildApplicationRequest calls the generic RebuildApplication builder with application/json body
+func NewRebuildApplicationRequest(server string, application string, body RebuildApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRebuildApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewRebuildApplicationRequestWithBody constructs an http.Request for the RebuildApplication method, with any body, and a specified content type
+func NewRebuildApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -794,16 +974,29 @@ func NewRebuildApplicationRequest(server string, application string) (*http.Requ
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Add("Content-Type", contentType)
+
 	return req, nil
 }
 
-// NewStartApplicationRequest constructs an http.Request for the StartApplication method
-func NewStartApplicationRequest(server string, application string) (*http.Request, error) {
+// NewStartApplicationRequest calls the generic StartApplication builder with application/json body
+func NewStartApplicationRequest(server string, application string, body StartApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewStartApplicationRequestWithBody constructs an http.Request for the StartApplication method, with any body, and a specified content type
+func NewStartApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -828,16 +1021,29 @@ func NewStartApplicationRequest(server string, application string) (*http.Reques
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Add("Content-Type", contentType)
+
 	return req, nil
 }
 
-// NewStopApplicationRequest constructs an http.Request for the StopApplication method
-func NewStopApplicationRequest(server string, application string) (*http.Request, error) {
+// NewStopApplicationRequest calls the generic StopApplication builder with application/json body
+func NewStopApplicationRequest(server string, application string, body StopApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStopApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewStopApplicationRequestWithBody constructs an http.Request for the StopApplication method, with any body, and a specified content type
+func NewStopApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -862,16 +1068,29 @@ func NewStopApplicationRequest(server string, application string) (*http.Request
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Add("Content-Type", contentType)
+
 	return req, nil
 }
 
-// NewSyncApplicationRequest constructs an http.Request for the SyncApplication method
-func NewSyncApplicationRequest(server string, application string) (*http.Request, error) {
+// NewSyncApplicationRequest calls the generic SyncApplication builder with application/json body
+func NewSyncApplicationRequest(server string, application string, body SyncApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSyncApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewSyncApplicationRequestWithBody constructs an http.Request for the SyncApplication method, with any body, and a specified content type
+func NewSyncApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -896,10 +1115,12 @@ func NewSyncApplicationRequest(server string, application string) (*http.Request
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1119,10 +1340,15 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	CreateApplicationWithResponse(ctx context.Context, body CreateApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateApplicationResponse, error)
 
-	// UnregisterApplicationWithResponse performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request.
+	// UnregisterApplicationWithBodyWithResponse performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request,
+	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	UnregisterApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*UnregisterApplicationResponse, error)
+	UnregisterApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UnregisterApplicationResponse, error)
+
+	// UnregisterApplicationWithResponse performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	UnregisterApplicationWithResponse(ctx context.Context, application string, body UnregisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*UnregisterApplicationResponse, error)
 
 	// GetApplicationWithResponse performs a GET /applications/{application} (the `GetApplication` operationId) request.
 	//
@@ -1154,30 +1380,55 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	UpdateConfigurationWithResponse(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConfigurationResponse, error)
 
-	// PurgeApplicationWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request.
+	// PurgeApplicationWithBodyWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
+	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	PurgeApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*PurgeApplicationResponse, error)
+	PurgeApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PurgeApplicationResponse, error)
+
+	// PurgeApplicationWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	PurgeApplicationWithResponse(ctx context.Context, application string, body PurgeApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*PurgeApplicationResponse, error)
+
+	// RebuildApplicationWithBodyWithResponse performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	RebuildApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error)
 
 	// RebuildApplicationWithResponse performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	RebuildApplicationWithResponse(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error)
+
+	// StartApplicationWithBodyWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
+	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	RebuildApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error)
+	StartApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartApplicationResponse, error)
 
 	// StartApplicationWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	StartApplicationWithResponse(ctx context.Context, application string, body StartApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*StartApplicationResponse, error)
+
+	// StopApplicationWithBodyWithResponse performs a POST /applications/{application}:stop (the `StopApplication` operationId) request,
+	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	StartApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*StartApplicationResponse, error)
+	StopApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StopApplicationResponse, error)
 
 	// StopApplicationWithResponse performs a POST /applications/{application}:stop (the `StopApplication` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	StopApplicationWithResponse(ctx context.Context, application string, body StopApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*StopApplicationResponse, error)
+
+	// SyncApplicationWithBodyWithResponse performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request,
+	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	StopApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*StopApplicationResponse, error)
+	SyncApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error)
 
 	// SyncApplicationWithResponse performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	SyncApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error)
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	SyncApplicationWithResponse(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error)
 
 	// TailLogsWithResponse performs a GET /applications/{application}:tailLogs (the `TailLogs` operationId) request.
 	//
@@ -1816,11 +2067,22 @@ func (c *ClientWithResponses) CreateApplicationWithResponse(ctx context.Context,
 	return ParseCreateApplicationResponse(rsp)
 }
 
-// UnregisterApplicationWithResponse performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request.
+// UnregisterApplicationWithBodyWithResponse performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UnregisterApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*UnregisterApplicationResponse, error) {
-	rsp, err := c.UnregisterApplication(ctx, application, reqEditors...)
+func (c *ClientWithResponses) UnregisterApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UnregisterApplicationResponse, error) {
+	rsp, err := c.UnregisterApplicationWithBody(ctx, application, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUnregisterApplicationResponse(rsp)
+}
+
+// UnregisterApplicationWithResponse performs a DELETE /applications/{application} (the `UnregisterApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) UnregisterApplicationWithResponse(ctx context.Context, application string, body UnregisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*UnregisterApplicationResponse, error) {
+	rsp, err := c.UnregisterApplication(ctx, application, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -1893,55 +2155,110 @@ func (c *ClientWithResponses) UpdateConfigurationWithResponse(ctx context.Contex
 	return ParseUpdateConfigurationResponse(rsp)
 }
 
-// PurgeApplicationWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request.
+// PurgeApplicationWithBodyWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) PurgeApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*PurgeApplicationResponse, error) {
-	rsp, err := c.PurgeApplication(ctx, application, reqEditors...)
+func (c *ClientWithResponses) PurgeApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PurgeApplicationResponse, error) {
+	rsp, err := c.PurgeApplicationWithBody(ctx, application, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParsePurgeApplicationResponse(rsp)
 }
 
-// RebuildApplicationWithResponse performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request.
+// PurgeApplicationWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PurgeApplicationWithResponse(ctx context.Context, application string, body PurgeApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*PurgeApplicationResponse, error) {
+	rsp, err := c.PurgeApplication(ctx, application, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePurgeApplicationResponse(rsp)
+}
+
+// RebuildApplicationWithBodyWithResponse performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) RebuildApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error) {
-	rsp, err := c.RebuildApplication(ctx, application, reqEditors...)
+func (c *ClientWithResponses) RebuildApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error) {
+	rsp, err := c.RebuildApplicationWithBody(ctx, application, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseRebuildApplicationResponse(rsp)
 }
 
-// StartApplicationWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request.
+// RebuildApplicationWithResponse performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) RebuildApplicationWithResponse(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error) {
+	rsp, err := c.RebuildApplication(ctx, application, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRebuildApplicationResponse(rsp)
+}
+
+// StartApplicationWithBodyWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) StartApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*StartApplicationResponse, error) {
-	rsp, err := c.StartApplication(ctx, application, reqEditors...)
+func (c *ClientWithResponses) StartApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartApplicationResponse, error) {
+	rsp, err := c.StartApplicationWithBody(ctx, application, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseStartApplicationResponse(rsp)
 }
 
-// StopApplicationWithResponse performs a POST /applications/{application}:stop (the `StopApplication` operationId) request.
+// StartApplicationWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) StartApplicationWithResponse(ctx context.Context, application string, body StartApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*StartApplicationResponse, error) {
+	rsp, err := c.StartApplication(ctx, application, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartApplicationResponse(rsp)
+}
+
+// StopApplicationWithBodyWithResponse performs a POST /applications/{application}:stop (the `StopApplication` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) StopApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*StopApplicationResponse, error) {
-	rsp, err := c.StopApplication(ctx, application, reqEditors...)
+func (c *ClientWithResponses) StopApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StopApplicationResponse, error) {
+	rsp, err := c.StopApplicationWithBody(ctx, application, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseStopApplicationResponse(rsp)
 }
 
-// SyncApplicationWithResponse performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
+// StopApplicationWithResponse performs a POST /applications/{application}:stop (the `StopApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) StopApplicationWithResponse(ctx context.Context, application string, body StopApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*StopApplicationResponse, error) {
+	rsp, err := c.StopApplication(ctx, application, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStopApplicationResponse(rsp)
+}
+
+// SyncApplicationWithBodyWithResponse performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request,
+// with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) SyncApplicationWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error) {
-	rsp, err := c.SyncApplication(ctx, application, reqEditors...)
+func (c *ClientWithResponses) SyncApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error) {
+	rsp, err := c.SyncApplicationWithBody(ctx, application, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSyncApplicationResponse(rsp)
+}
+
+// SyncApplicationWithResponse performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) SyncApplicationWithResponse(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error) {
+	rsp, err := c.SyncApplication(ctx, application, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -2907,6 +3224,7 @@ func (response CreateApplication202Response) VisitCreateApplicationResponse(w ht
 
 type UnregisterApplicationRequestObject struct {
 	Application string `json:"application"`
+	Body        *UnregisterApplicationJSONRequestBody
 }
 
 type UnregisterApplicationResponseObject interface {
@@ -2997,6 +3315,7 @@ func (response UpdateConfiguration202Response) VisitUpdateConfigurationResponse(
 
 type PurgeApplicationRequestObject struct {
 	Application string `json:"application"`
+	Body        *PurgeApplicationJSONRequestBody
 }
 
 type PurgeApplicationResponseObject interface {
@@ -3013,6 +3332,7 @@ func (response PurgeApplication202Response) VisitPurgeApplicationResponse(w http
 
 type RebuildApplicationRequestObject struct {
 	Application string `json:"application"`
+	Body        *RebuildApplicationJSONRequestBody
 }
 
 type RebuildApplicationResponseObject interface {
@@ -3029,6 +3349,7 @@ func (response RebuildApplication202Response) VisitRebuildApplicationResponse(w 
 
 type StartApplicationRequestObject struct {
 	Application string `json:"application"`
+	Body        *StartApplicationJSONRequestBody
 }
 
 type StartApplicationResponseObject interface {
@@ -3045,6 +3366,7 @@ func (response StartApplication202Response) VisitStartApplicationResponse(w http
 
 type StopApplicationRequestObject struct {
 	Application string `json:"application"`
+	Body        *StopApplicationJSONRequestBody
 }
 
 type StopApplicationResponseObject interface {
@@ -3061,6 +3383,7 @@ func (response StopApplication202Response) VisitStopApplicationResponse(w http.R
 
 type SyncApplicationRequestObject struct {
 	Application string `json:"application"`
+	Body        *SyncApplicationJSONRequestBody
 }
 
 type SyncApplicationResponseObject interface {
@@ -3316,6 +3639,13 @@ func (sh *strictHandler) UnregisterApplication(w http.ResponseWriter, r *http.Re
 
 	request.Application = application
 
+	var body UnregisterApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.UnregisterApplication(ctx, request.(UnregisterApplicationRequestObject))
 	}
@@ -3460,6 +3790,13 @@ func (sh *strictHandler) PurgeApplication(w http.ResponseWriter, r *http.Request
 
 	request.Application = application
 
+	var body PurgeApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.PurgeApplication(ctx, request.(PurgeApplicationRequestObject))
 	}
@@ -3485,6 +3822,13 @@ func (sh *strictHandler) RebuildApplication(w http.ResponseWriter, r *http.Reque
 	var request RebuildApplicationRequestObject
 
 	request.Application = application
+
+	var body RebuildApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.RebuildApplication(ctx, request.(RebuildApplicationRequestObject))
@@ -3512,6 +3856,13 @@ func (sh *strictHandler) StartApplication(w http.ResponseWriter, r *http.Request
 
 	request.Application = application
 
+	var body StartApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.StartApplication(ctx, request.(StartApplicationRequestObject))
 	}
@@ -3538,6 +3889,13 @@ func (sh *strictHandler) StopApplication(w http.ResponseWriter, r *http.Request,
 
 	request.Application = application
 
+	var body StopApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.StopApplication(ctx, request.(StopApplicationRequestObject))
 	}
@@ -3563,6 +3921,13 @@ func (sh *strictHandler) SyncApplication(w http.ResponseWriter, r *http.Request,
 	var request SyncApplicationRequestObject
 
 	request.Application = application
+
+	var body SyncApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.SyncApplication(ctx, request.(SyncApplicationRequestObject))
@@ -3715,22 +4080,22 @@ func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"xFdPaxtHFP8q4TWHFtbeVZIWupfghJAGBDVWXR+MCqPdJ2nS1cx0ZlZFFQttDG0uwaGUBoovLaV1A3Gu",
-	"pjT9MvLa/hhhdrXSyrv6F2Lp5NXum/d+f968GffB4x3BGTKtwO2D8trYIcnjfc6atBVKoilnO/hNiEqb",
-	"90JygVJTTKJk+uGRb340uewQDS6EIfXBAt0TCC4oLSlrQWRBl0hKGkG6lPg+NblJsD2R8qbEJrjwgT2G",
-	"Zg9x2V8OE5hkw+y88Rg9DVFkJWCoRB/c/VwpKweyXlhmwX2JROOWEAH15pFtmj8dyqrIWroNbqWEpETB",
-	"FdVc9nZlMCmLpFC6YBkNVdjweYdQluAjWqNk4MJX+2TjO2fj0/qHd93h40a971ifVKLsy0d3bxYTXpFt",
-	"EryVUM7XnCfmAym5LCqH2evZpqVhZXl3hb+cSe9T5XmSzRJk1LEFoAo9iTqXv8F5gISlGyUIcX7pNMzK",
-	"UhXrmwWUNblJ5aPyJBVGPHChulcb/HAyePLH4ODF4ODlxcnvF89/3Np+ZMSg2uCFKmnsYaPWUxo7N+4R",
-	"72tk/o00pItSpXkqm86mYyBzgYwICi7c3qxsOmCZ5mwnTG0y9i150Up5GzWSl8YUqFKlt/KBhqsSnKlU",
-	"r1uOU6QxInB2+v3lX3+njAVXJfkL+3zczPe43zMLPM40smRtDrL9WHE2no7zZtTUeRJN2qdliFGB460i",
-	"x88zGoMnP5+9OTp/+tykiqxJXe1+7leUZglQY1GIXSaxRZVGeVWMd0Nilfv5EPXM/LPcjA9/jf9/Ydrq",
-	"jnOnGHd+9PL8z6P4p3+HfhNJOqhRKnD3+2A2bdJ8YAEjHdPKpOD62AMr5+vV7VZPuthrl4h4dSBdUzdN",
-	"HXyr7Cbby18Gpu7gh6gnbg0LeX55/Co++S0zfL12FtFfw3gou1et0kxXhLKVnkfXKnTpEN42td/P2JnD",
-	"UmIjpIG/Jp47afWVMFWaSL0mnjVTe0UsuVgbSS5Ww7HHvHVx7DFvJRw1oUGVt6bfA7/IAhY5PWq1B9d+",
-	"aBhCbSSBbtsB7eJU4J8lMVUTsgj0i+P/4oNnZ6evMtGGNSSS9LiZUWQniVmkSvz0n4tfjuPD15cHb8x9",
-	"6mPn9rSgs9Nn8eHrDM2orLL7o+do1tk/aoeFgI2ilzv6+USRpTwsZ+R+m90ISnntma/LMVuiJ9+VjfkP",
-	"FWU3yxzKAFyz66jdrUBUj94GAAD//w==",
+	"3FdRaxtHEP4rYZqHFs6+U5IWei/BKSENCGqsun4wKqzuRtKmp93t7p6KKg7aGNq8BIdSGih+aSmtG4jz",
+	"akrTPyPL9s8oe6eTTrqTJbVWRPSku93Zmfm+b3Zu1AWPtwRnyLQCtwvKa2KLxI9bnqac7eCXISptFoTk",
+	"AqWmGG/LZOOhb17qXLaIBhfCkPpgge4IBBeUlpQ1IIqs2JxK9MHdzxytDk157RF6GiILPuKsThuhJNcW",
+	"3oI2kZTUguQo8X1qfJNge8zlTYl1cOEde0SJPeDD/mzgwDibyHgC3CiUNQuoRKJxS4iAerPA1s1Pi7Iy",
+	"soZuglsqAClRcEU1l51dGYzTIikUHliEQxXWfN4ilMX5Ea1RMnDh832y8bWz8WH13bvu4HGj2nWsD0pR",
+	"uvPe3Ztz1EQ2eSuGnI05i8z7UnKZZw7T5atFS8yK/O4KfzGRrpPl/3ONhhWbS1ShJ1Fn/Nc4D5Cw5KIE",
+	"Ic4OnZhZqat8fHOAsjo3rnxUnqTCkAculPcqvW9Peo9/7R087x28uDj55eLZd1vbDw0ZVJt8oUxqe1ir",
+	"dJTG1o17xPsCmX8jMWmjVImf0qaz6ZiUuUBGBAUXbm+WNh2wTHE2Y6Q2GekWLzQS3IaNeNGIAmWq9FbW",
+	"0GBVgjOV8HXLcfIwhgDOTr+5/P2PBLHgqsB/7p6Pivke9zvmgMeZRhafzaRsP1KcjbryrB41tZ9E4/Jp",
+	"GWKUw3grj/GTFEbv8Q9nr4/OnzwzriJrnFe7m3mLEi8BaswTscskNqjSKJdPxvjX63oZsIrr6AHqSVxz",
+	"V1H/8Kf+P89NOd9x7uTtzo9enP921P/+r0GdEUlaqFEqcPe7YJpFXPRgASMtc4VIjuARcitD4eQ1r8a3",
+	"x2sWiDfZCJck3NSG+yar2PayQ8jUzvEA9di0Mpfml8cv+yc/p4KvVs589ktoS0Xz3JsU0xWhbCTfwaUS",
+	"Xdj8t03st7vdzWBXYi2kgb8ifneS6GvNsNJE6hXxWzGx15xdLlZGLhfrzW2HeavitsO8teZWExqUeWP6",
+	"/5pPU4N5ppJK5f7ShxEDqIkk0E07oG2cmvjHsU3ZmMyT+sXx3/2Dp2enL1PSBjEkkkTpK4LsxDbzROk/",
+	"+fPix+P+4avLg9dmTn/fuT3N6Oz0af/wVZrNMKyyu8Pn6KqZclgOcyU2tF5spORjQRbSsBiR+1U6aRbi",
+	"2jO7iyFboCb/K5rIAoWynXoOZQCuuXXUbpcgqkb/BgAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

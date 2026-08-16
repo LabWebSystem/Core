@@ -24,8 +24,8 @@ func CreateOperationWithPayload(ctx context.Context, db *sql.DB, applicationID, 
 }
 
 func createOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint, payload string) (Operation, error) {
-	if _, err := uuid.Parse(requestID); err != nil {
-		return Operation{}, errors.New("requestIdはUUIDで指定してください")
+	if err := ValidateRequestID(requestID); err != nil {
+		return Operation{}, errors.New("requestIdはUUID v4で指定してください")
 	}
 	var op Operation
 	var existingFingerprint string

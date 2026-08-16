@@ -41,6 +41,7 @@
 - CHG-030 | SHIPPED | - | フェーズ3のOperation・source・Docker境界を実装する
 - CHG-031 | SHIPPED | - | フェーズ3のDocker境界テストを補強する
 - CHG-032 | SHIPPED | - | フェーズ3の更新Operationと失敗時復元を完成させる
+- CHG-033 | SHIPPED | - | フェーズ3の未達受け入れ条件をテストで固定する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

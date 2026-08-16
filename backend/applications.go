@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"net/http"
 	"strings"
 )
@@ -56,7 +56,7 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "JSONが不正です", "body")
 		return
 	}
-	if _, err := uuid.Parse(req.RequestID); err != nil {
+	if err := ValidateRequestID(req.RequestID); err != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
@@ -94,25 +94,44 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		}
 		prepared = append(prepared, variableValue{name: n, value: stored, secret: v.Secret})
 	}
+	payload, _ := json.Marshal(req.Variables)
+	fingerprint := fmt.Sprintf("%x", sha256.Sum256(payload))
+	var existingID, existingKind, existingFingerprint string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,kind,request_fingerprint FROM operations WHERE request_id=?`, req.RequestID).Scan(&existingID, &existingKind, &existingFingerprint)
+	if err == nil {
+		if existingKind != "CONFIGURE" || existingFingerprint == "" || existingFingerprint != fingerprint {
+			writeAPIError(w, http.StatusBadRequest, "REQUEST_ID_REUSED", "requestIdが異なる要求に再利用されています", "requestId")
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"name": "operations/" + existingID})
+		return
+	}
+	if err != sql.ErrNoRows {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operationを確認できません", "")
+		return
+	}
+	op, err := CreateOperationWithFingerprint(r.Context(), s.DB, appID(r), req.RequestID, "CONFIGURE", fingerprint)
+	if err != nil {
+		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
+		return
+	}
 	tx, err := s.DB.BeginTx(r.Context(), nil)
 	if err != nil {
+		_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "設定保存を開始できません")
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "設定を保存できません", "")
 		return
 	}
 	for _, variable := range prepared {
 		if _, err := tx.ExecContext(r.Context(), `INSERT INTO application_variables(application_id,name,value,is_secret,updated_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(application_id,name) DO UPDATE SET value=excluded.value,is_secret=excluded.is_secret,updated_at=excluded.updated_at`, appID(r), variable.name, variable.value, variable.secret); err != nil {
 			_ = tx.Rollback()
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "設定を保存できません")
 			writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
+		_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "設定を保存できません")
 		writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
-		return
-	}
-	op, err := CreateOperation(r.Context(), s.DB, appID(r), req.RequestID, "CONFIGURE")
-	if err != nil {
-		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
 		return
 	}
 	if s.worker != nil {
@@ -161,7 +180,27 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 500, "DATABASE_ERROR", "アプリを取得できません", "")
 		return
 	}
-	writeJSON(w, 200, map[string]string{"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "desiredState": desired, "observedState": observed, "registrationState": state, "createdAt": created, "updatedAt": updated})
+	var latestOperation string
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM operations WHERE application_id=? AND state IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1`, id).Scan(&latestOperation); err != nil && err != sql.ErrNoRows {
+		writeAPIError(w, 500, "DATABASE_ERROR", "Operation状態を取得できません", "")
+		return
+	}
+	etag := fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed)))
+	response := map[string]any{
+		"name":              "applications/" + id,
+		"subdomain":         sub,
+		"repositoryUrl":     repo,
+		"ref":               ref,
+		"desiredState":      desired,
+		"observedState":     observed,
+		"registrationState": state,
+		"createdAt":         created,
+		"updatedAt":         updated,
+		"reconciling":       latestOperation != "",
+		"latestOperation":   latestOperation,
+		"etag":              etag,
+	}
+	writeJSON(w, 200, response)
 }
 func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 	if !requireJSON(w, r) {
@@ -180,7 +219,7 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "変更項目が必要です", "updateMask")
 		return
 	}
-	if _, err := uuid.Parse(p.RequestID); err != nil {
+	if err := ValidateRequestID(p.RequestID); err != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
@@ -218,7 +257,11 @@ func (s *Server) deleteApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	op, err := s.makeAppOp(r, "UNREGISTER")
 	if err != nil {
-		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
+		if _, ok := err.(*ConflictError); ok {
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+		} else {
+			writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error(), "requestId")
+		}
 		return
 	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
@@ -235,7 +278,11 @@ func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	op, err := s.makeAppOp(r, kind)
 	if err != nil {
-		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
+		if _, ok := err.(*ConflictError); ok {
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+		} else {
+			writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error(), "requestId")
+		}
 		return
 	}
 	if s.worker != nil {
@@ -257,11 +304,16 @@ func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	if err := s.DB.QueryRowContext(context.Background(), `SELECT id FROM applications WHERE id=?`+clause, id).Scan(&exists); err != nil {
 		return Operation{}, err
 	}
-	rid := r.Header.Get("X-Request-Id")
-	if rid == "" {
-		rid = uuid.NewString()
+	var request struct {
+		RequestID string `json:"requestId"`
 	}
-	return CreateOperation(r.Context(), s.DB, id, rid, kind)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		return Operation{}, errors.New("requestIdはJSON bodyで指定してください")
+	}
+	if err := ValidateRequestID(request.RequestID); err != nil {
+		return Operation{}, errors.New("requestIdはUUIDで指定してください")
+	}
+	return CreateOperation(r.Context(), s.DB, id, request.RequestID, kind)
 }
 func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 	var o Operation

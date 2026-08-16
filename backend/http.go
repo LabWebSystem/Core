@@ -118,7 +118,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "refが不正です", "ref")
 		return
 	}
-	if _, err := uuid.Parse(req.RequestID); err != nil {
+	if err := ValidateRequestID(req.RequestID); err != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}

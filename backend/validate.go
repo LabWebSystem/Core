@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,6 +56,14 @@ func ValidateVariableName(value string) error {
 func ValidateInstallationID(value string) error {
 	if strings.TrimSpace(value) == "" || strings.ContainsAny(value, "\x00\r\n") {
 		return fmt.Errorf("installation IDが設定されていません")
+	}
+	return nil
+}
+
+func ValidateRequestID(value string) error {
+	id, err := uuid.Parse(value)
+	if err != nil || id.Version() != 4 {
+		return NewValidationError("requestId", "requestIdはUUID v4で指定してください", "INVALID_REQUEST_ID")
 	}
 	return nil
 }

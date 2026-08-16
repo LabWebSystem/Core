@@ -197,7 +197,7 @@ func (e *RuntimeExecutor) markApplicationState(ctx context.Context, id, desired,
 	_, err := e.DB.ExecContext(ctx, `UPDATE applications SET desired_state=?,observed_state=?,latest_error=?,updated_at=datetime('now') WHERE id=?`, desired, observed, latestError, id)
 	return err
 }
-func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime string, action ...string) error {
+func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime string, action ...string) (runErr error) {
 	compose := filepath.Join(source, "compose.yaml")
 	override := filepath.Join(runtime, "lws.override.yaml")
 	env := filepath.Join(runtime, "app.env")
@@ -254,6 +254,13 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 			if err := e.Docker.EnsureCaddyConnected(ctx, id); err != nil {
 				return err
 			}
+			caddyConnected := true
+			defer func() {
+				if runErr == nil || !caddyConnected {
+					return
+				}
+				_ = e.Docker.DisconnectCaddy(ctx, id)
+			}()
 		}
 	}
 	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override}

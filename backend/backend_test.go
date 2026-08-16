@@ -81,6 +81,15 @@ func TestValidateInstallationID(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateRequestIDRequiresUUIDv4(t *testing.T) {
+	if err := ValidateRequestID("550e8400-e29b-41d4-a716-446655440000"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRequestID("550e8400-e29b-11d4-a716-446655440000"); err == nil {
+		t.Fatal("UUID v4以外のrequestIdを受け付けました")
+	}
+}
 func TestValidateManifest(t *testing.T) {
 	m, err := ValidateManifest([]byte("apiVersion: lws/v1\nmetadata:\n  name: Demo\n  description: test\npublic:\n  service: web\n  port: 3000\n"))
 	if err != nil || m.Public.Port != 3000 {
@@ -234,9 +243,8 @@ func TestHTTPRejectsConcurrentApplicationOperation(t *testing.T) {
 	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440010", "START"); err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications/a:stop", strings.NewReader(`{}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications/a:stop", strings.NewReader(`{"requestId":"550e8400-e29b-41d4-a716-446655440011"}`))
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("X-Request-Id", "550e8400-e29b-41d4-a716-446655440011")
 	rr := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(rr, r)
 	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "CONFLICT") {
@@ -528,6 +536,84 @@ func TestSecretConfigurationIsEncryptedAndNeverReturned(t *testing.T) {
 	}
 }
 
+func TestConfigurationRequestIDRejectsDifferentContentWithoutSideEffect(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	server := (&Server{DB: db, SecretKey: []byte("01234567890123456789012345678901")})
+	requestID := "550e8400-e29b-41d4-a716-446655440099"
+	patch := func(value string) *httptest.ResponseRecorder {
+		body := fmt.Sprintf(`{"variables":{"TOKEN":{"value":%q,"secret":false}},"requestId":%q}`, value, requestID)
+		r := httptest.NewRequest(http.MethodPatch, "/api/v1/applications/a/configuration", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		server.Handler().ServeHTTP(rr, r)
+		return rr
+	}
+	if rr := patch("first"); rr.Code != http.StatusAccepted {
+		t.Fatalf("first status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if rr := patch("second"); rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "REQUEST_ID_REUSED") {
+		t.Fatalf("replay status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var value string
+	if err := db.QueryRow(`SELECT value FROM application_variables WHERE application_id='a' AND name='TOKEN'`).Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	if value != "first" {
+		t.Fatalf("異なるrequestId内容で設定が変更されました: %s", value)
+	}
+}
+
+func TestConfigurationConflictHasNoSideEffect(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440098", "START"); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPatch, "/api/v1/applications/a/configuration", strings.NewReader(`{"variables":{"TOKEN":{"value":"must-not-save","secret":false}},"requestId":"550e8400-e29b-41d4-a716-446655440097"}`))
+	r.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	(&Server{DB: db}).Handler().ServeHTTP(rr, r)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM application_variables WHERE application_id='a'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("競合要求で設定が保存されました: count=%d err=%v", count, err)
+	}
+}
+
+func TestGetApplicationIncludesOperationStateFields(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440096", "START"); err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	(&Server{DB: db}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications/a", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "latestOperation") || !strings.Contains(rr.Body.String(), "reconciling") || !strings.Contains(rr.Body.String(), "etag") {
+		t.Fatalf("state fields missing: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestDerivedConfigIsAtomic(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "hosts")
 	if err := WriteAtomic(p, []byte(GenerateHosts("example.internal", "192.0.2.1", []PublishedApplication{{Subdomain: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
@@ -779,6 +865,43 @@ func TestDockerPurgeRemovesOnlyOwnedVolumes(t *testing.T) {
 	}
 }
 
+func TestRuntimeCleansCaddyConnectionAfterComposeFailure(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source")
+	runtime := filepath.Join(dir, "app-id", "runtime")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtime, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services:\n  web:\n    image: example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "lws.manifest.yaml"), []byte("apiVersion: lws/v1\nmetadata:\n  name: App\n  description: test\npublic:\n  service: web\n  port: 3000\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	composeRunner := &composeFailureRunner{}
+	dockerRunner := &dockerBoundaryRunner{}
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: composeRunner, Docker: NewDockerResources(dockerRunner, "installation")}
+	err = e.reconcile(context.Background(), "app-id", source, runtime, "up", "-d")
+	if err == nil {
+		t.Fatal("Compose failureを成功扱いしました")
+	}
+	joined := strings.Join(dockerRunner.calls, "\n")
+	if !strings.Contains(joined, "network disconnect -f lws-app-app-id-edge lws-caddy-1") {
+		t.Fatalf("Compose失敗後にCaddy接続を解除していません: %s", joined)
+	}
+}
+
 type errorRunner struct {
 	output []byte
 	calls  [][]string
@@ -802,6 +925,33 @@ func (r *failingCommandRunner) Run(_ context.Context, name string, args ...strin
 type sequenceRunner struct {
 	outputs [][]byte
 	calls   [][]string
+}
+
+type composeFailureRunner struct{}
+
+func (r *composeFailureRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	if name == "docker" && len(args) > 0 && args[0] == "compose" {
+		if strings.Contains(strings.Join(args, " "), "config") {
+			return []byte(`{"services":{"web":{"image":"example","networks":{"lws-edge":{}}}}}`), nil
+		}
+		return nil, fmt.Errorf("compose failure")
+	}
+	return nil, nil
+}
+
+type dockerBoundaryRunner struct{ calls []string }
+
+func (r *dockerBoundaryRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	call := strings.Join(append([]string{name}, args...), " ")
+	r.calls = append(r.calls, call)
+	switch {
+	case strings.Contains(call, "docker ps -a"):
+		return nil, nil
+	case strings.Contains(call, "docker network inspect"):
+		return []byte(`[{"Name":"lws-app-app-id-edge","Labels":{"com.labwebsystem.owner":"lws","com.labwebsystem.installation-id":"installation","com.labwebsystem.app-id":"app-id"}}]`), nil
+	default:
+		return nil, nil
+	}
 }
 
 func (r *sequenceRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
