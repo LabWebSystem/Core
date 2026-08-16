@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -40,7 +40,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
           IMAGE="ghcr.io/labwebsystem/lws-backend:${VERSION}"
-          docker build --tag "$IMAGE" backend
+          docker build --tag "$IMAGE" --file backend/Dockerfile .
           docker push "$IMAGE"
           DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)"
           test -n "$DIGEST"
@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -81,7 +81,7 @@ jobs:
           LWS_BACKEND_DIGEST: ${{ needs.backend-image.outputs.digest }}
           LWS_DASHBOARD_DIGEST: ${{ needs.dashboard-image.outputs.digest }}
         run: mise run package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lws-release-assets
           path: dist/*
@@ -90,7 +90,7 @@ jobs:
     needs: [version, lint, test, package, backend-image, dashboard-image]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: lws-release-assets
           path: dist

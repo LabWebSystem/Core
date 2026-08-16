@@ -52,6 +52,7 @@
 - CHG-039 | SHIPPED | - | CIのCLIテストで実ホストport競合を分離する
 - CHG-040 | SHIPPED | - | GitHub ActionsをNode.js 24対応版へ更新する
 - CHG-041 | SHIPPED | - | CIのOSRunner timeoutテストを決定的にする
+- CHG-042 | SHIPPED | - | LWSリリースWorkflowのBackend build contextとActionを修正する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
