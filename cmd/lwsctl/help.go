@@ -16,7 +16,7 @@ LWSのライフサイクルをDocker Composeで管理します。
   down       LWS管理下の実行環境を停止して削除します。
   status     設定済みのベースドメインと実行環境の状態を表示します。
   rebuild    生成設定を検証し、LWS実行環境を再構成します。
-  update     パッケージを更新し、対応するイメージを取得して再起動します。
+  update     パッケージと対応するイメージを更新し、起動中の場合だけ再起動します。
 
 startのオプション:
   -d, --domain ドメイン  ベースドメインを指定します（例: example.internal）。
@@ -68,7 +68,7 @@ LWS実行環境を停止して削除します。通常は設定と永続デー�
 	case "rebuild":
 		fmt.Fprint(w, "使い方: lwsctl rebuild\n\n設定を検証し、LWS実行環境と生成設定を再構成します。パッケージは再インストールしません。\n")
 	case "update":
-		fmt.Fprint(w, "使い方: lwsctl update\n\nパッケージ更新をAPT/DNFへ委譲し、対応するDockerイメージを取得してLWSを再起動します。事前にstartで設定を作成してください。\n")
+		fmt.Fprint(w, "使い方: lwsctl update\n\nパッケージ更新をAPT/DNFへ委譲し、対応するDockerイメージを取得します。更新前に起動中だった場合だけLWSを再起動し、停止中なら停止状態を維持します。事前にstartで設定を作成してください。\n")
 	default:
 		printUsage(w)
 	}

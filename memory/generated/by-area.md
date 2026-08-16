@@ -24,12 +24,16 @@
 - CHG-013 | SHIPPED | - | RPM成果物名とインストーラーの探索条件を整合させる
 - CHG-014 | SHIPPED | - | lwsctlの実行環境撤去をdownへ改名
 - CHG-015 | SHIPPED | - | downで保存済み設定をComposeへ渡す
+- CHG-016 | SHIPPED | - | updateで停止状態を維持する
+- CHG-017 | SHIPPED | - | 未設定時のstatusを案内表示で正常終了する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
 - BUG-004 | VERIFIED | cli | 設定済みのLWSバージョンをComposeへ渡さない
 - BUG-007 | VERIFIED | cli | downが保存済みのベースドメインをComposeへ渡さない
+- BUG-008 | VERIFIED | cli | updateが停止中のLWSを起動する
+- BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
 
 ## installer
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する

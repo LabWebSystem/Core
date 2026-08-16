@@ -25,6 +25,8 @@
 - CHG-013 | SHIPPED | - | RPM成果物名とインストーラーの探索条件を整合させる
 - CHG-014 | SHIPPED | - | lwsctlの実行環境撤去をdownへ改名
 - CHG-015 | SHIPPED | - | downで保存済み設定をComposeへ渡す
+- CHG-016 | SHIPPED | - | updateで停止状態を維持する
+- CHG-017 | SHIPPED | - | 未設定時のstatusを案内表示で正常終了する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
@@ -37,3 +39,5 @@
 - BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない
 - BUG-006 | VERIFIED | installer | アーキテクチャ名なしのRPMをインストーラーが見つけられない
 - BUG-007 | VERIFIED | cli | downが保存済みのベースドメインをComposeへ渡さない
+- BUG-008 | VERIFIED | cli | updateが停止中のLWSを起動する
+- BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す

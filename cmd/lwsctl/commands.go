@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -148,6 +149,8 @@ func (a *application) status() error {
 		fmt.Printf("設定済み: YES\nドメイン: %s\n", a.domain)
 	} else if errors.Is(err, os.ErrNotExist) {
 		fmt.Println("設定済み: NO")
+		fmt.Println("先にlwsctl startを実行してください")
+		return nil
 	} else {
 		return err
 	}
@@ -185,6 +188,10 @@ func (a *application) update() error {
 		return err
 	}
 	if os.Getenv("LWS_SKIP_PACKAGE_UPDATE") != "1" {
+		wasRunning, err := a.hasRunningServices()
+		if err != nil {
+			return err
+		}
 		if info, err := os.Stat(a.paths.installerPath); err != nil || info.Mode()&0o111 == 0 {
 			return fmt.Errorf("インストーラーが見つかりません: %s", a.paths.installerPath)
 		}
@@ -198,7 +205,11 @@ func (a *application) update() error {
 		if err != nil {
 			return fmt.Errorf("lwsctlを再実行できません: %w", err)
 		}
-		return syscall.Exec(executable, []string{executable, "update"}, setEnvironment(os.Environ(), "LWS_SKIP_PACKAGE_UPDATE", "1"))
+		environment := setEnvironment(os.Environ(), "LWS_SKIP_PACKAGE_UPDATE", "1")
+		if wasRunning {
+			environment = setEnvironment(environment, "LWS_RESTART_AFTER_UPDATE", "1")
+		}
+		return syscall.Exec(executable, []string{executable, "update"}, environment)
 	}
 	if err := a.writeConfig(a.domain); err != nil {
 		return err
@@ -206,11 +217,21 @@ func (a *application) update() error {
 	if err := a.compose("pull"); err != nil {
 		return err
 	}
-	if err := a.compose("up", "-d", "--remove-orphans"); err != nil {
-		return err
+	if os.Getenv("LWS_RESTART_AFTER_UPDATE") == "1" {
+		if err := a.compose("up", "-d", "--remove-orphans"); err != nil {
+			return err
+		}
 	}
 	fmt.Println("LWSを更新しました")
 	return nil
+}
+
+func (a *application) hasRunningServices() (bool, error) {
+	output, err := a.composeOutput("ps", "--status", "running", "--services")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(string(output)) != "", nil
 }
 
 func (a *application) down(options []string) error {

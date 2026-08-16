@@ -14,6 +14,13 @@ setup_cli_environment() {
 
   cat >"$TMP/bin/docker" <<'EOF'
 #!/bin/sh
+case "$*" in
+  *'ps --status running --services'*)
+    if [ -n "${LWS_TEST_RUNNING_SERVICES:-}" ]; then
+      printf '%s\n' "$LWS_TEST_RUNNING_SERVICES"
+    fi
+    ;;
+esac
 printf '%s | LWS_BASE_DOMAIN=%s LWS_VERSION=%s\n' \
   "$*" \
   "${LWS_BASE_DOMAIN:-}" \
@@ -83,6 +90,13 @@ test_lifecycle() {
     '設定済み: NO' \
     "$TMP/status-before"
 
+  grep -q \
+    '先にlwsctl startを実行してください' \
+    "$TMP/status-before"
+
+  test "$(wc -l <"$TMP/status-before")" -eq 2
+  test ! -s "$TMP/docker.log"
+
   "$LWSCTL" start \
     --domain example.internal
 
@@ -121,6 +135,8 @@ test_domain_change() {
 }
 
 test_update() {
+	: >"$TMP/docker.log"
+
   "$LWSCTL" update
 
   grep -qx \
@@ -133,6 +149,23 @@ test_update() {
 
   grep -qF \
     'pull | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    "$TMP/docker.log"
+
+  ! grep -qF \
+    'up -d --remove-orphans' \
+    "$TMP/docker.log"
+}
+
+test_update_running() {
+  : >"$TMP/docker.log"
+  export LWS_TEST_RUNNING_SERVICES=backend
+
+  "$LWSCTL" update
+
+  unset LWS_TEST_RUNNING_SERVICES
+
+  grep -qF \
+    'up -d --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 }
 
@@ -337,6 +370,7 @@ main() {
   test_lifecycle
   test_domain_change
   test_update
+  test_update_running
   test_down
   test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
   test_installer_almalinux 'lws-0.1.0.rpm'
