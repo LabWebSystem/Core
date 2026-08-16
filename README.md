@@ -1,6 +1,6 @@
 # LabWebSystem
 
-LabWebSystem（LWS）は、Docker Composeを基盤とするLAN向けWebアプリケーションプラットフォームです。現在の基盤では、Backend、Dashboard、SDKは意図的にモックコンポーネントとして実装しています。
+LabWebSystem（LWS）は、Docker Composeを基盤とするLAN向けWebアプリケーションプラットフォームです。v0.1.7では、CLIとBackendを使ったアプリ登録・公開・管理の基盤を利用できます。利用者向けの操作方法は[LWS v0.1.7 利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)を参照してください。
 
 ## 開発
 
