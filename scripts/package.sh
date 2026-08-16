@@ -65,6 +65,10 @@ prepare_deb_tree() {
     "$ROOT/packaging/lws.prerm" \
     "$WORK/deb/DEBIAN/prerm"
 
+  install -m 0755 \
+    "$ROOT/packaging/lws.preinst" \
+    "$WORK/deb/DEBIAN/preinst"
+
   printf '%s\n' "$VERSION" \
     >"$WORK/deb/usr/share/lws/version"
 

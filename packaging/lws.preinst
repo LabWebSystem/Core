@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+if [ -f /etc/lws/config.env ]; then
+  chmod 0600 /etc/lws/config.env
+fi

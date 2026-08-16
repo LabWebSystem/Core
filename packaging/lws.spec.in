@@ -15,6 +15,10 @@ install -m 0644 %{_sourcedir}/compose.yaml %{buildroot}/usr/share/lws/compose.ya
 install -m 0644 %{_sourcedir}/Corefile %{buildroot}/usr/share/lws/Corefile
 install -m 0644 %{_sourcedir}/version %{buildroot}/usr/share/lws/version
 install -m 0755 %{_sourcedir}/install.sh %{buildroot}/usr/share/lws/install.sh
+%pre
+if [ -f /etc/lws/config.env ]; then
+  chmod 0600 /etc/lws/config.env
+fi
 %preun
 if [ "$1" -eq 0 ] && [ -x /usr/bin/lwsctl ]; then
   /usr/bin/lwsctl down || :

@@ -325,6 +325,12 @@ EOF
     "$dnf_log"
 }
 
+test_package_upgrade_config_hook() {
+  grep -qF 'chmod 0600 /etc/lws/config.env' "$ROOT/packaging/lws.preinst"
+  grep -qF 'chmod 0600 /etc/lws/config.env' "$ROOT/packaging/lws.spec.in"
+  grep -qF 'lws.preinst' "$ROOT/scripts/package.sh"
+}
+
 test_release_selected_components() {
   local deploy_tmp="$TMP/deploy"
   local fake_bin="$deploy_tmp/bin"
@@ -438,6 +444,7 @@ main() {
     test_version_sources
   fi
   if [[ "$target" == all || "$target" == installer ]]; then
+    test_package_upgrade_config_hook
     test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
     test_installer_almalinux 'lws-0.1.0.rpm'
   fi
