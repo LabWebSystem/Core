@@ -21,6 +21,34 @@ type RuntimeExecutor struct {
 	InstallationID string
 }
 
+func (e *RuntimeExecutor) TailLogs(ctx context.Context, app string) (<-chan string, error) {
+	if e.Docker == nil {
+		return nil, fmt.Errorf("Dockerが利用できません")
+	}
+	rows, err := e.DB.QueryContext(ctx, `SELECT value FROM application_variables WHERE application_id=? AND is_secret=1`, app)
+	if err != nil {
+		return nil, fmt.Errorf("secret設定を取得できません")
+	}
+	defer rows.Close()
+	redactions := []string{}
+	for rows.Next() {
+		var encrypted []byte
+		if err := rows.Scan(&encrypted); err != nil {
+			return nil, fmt.Errorf("secret設定を取得できません")
+		}
+		plain, err := Decrypt(e.SecretKey, encrypted)
+		if err != nil {
+			return nil, fmt.Errorf("secretを復号できません")
+		}
+		redactions = append(redactions, string(plain))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("secret設定を取得できません")
+	}
+	root := filepath.Join(e.Root, app)
+	return e.Docker.TailLogs(ctx, app, filepath.Join(root, "runtime", "app.env"), filepath.Join(root, "source", "compose.yaml"), filepath.Join(root, "runtime", "lws.override.yaml"), redactions)
+}
+
 func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
 	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}}
 }

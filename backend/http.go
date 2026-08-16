@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/legacy"
@@ -22,6 +23,7 @@ type Server struct {
 	Ready       func() bool
 	events      *Events
 	worker      *Worker
+	LogSource   func(context.Context, string) (<-chan string, error)
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
@@ -45,21 +47,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/applications", wrapper.ListApplications)
 	mux.HandleFunc("POST /api/v1/applications", wrapper.CreateApplication)
 	mux.HandleFunc("DELETE /api/v1/applications/{application}", wrapper.UnregisterApplication)
-	mux.HandleFunc("GET /api/v1/applications/{application}", wrapper.GetApplication)
+	// 通常取得とcustom method suffixは同じprefix dispatcherで分岐する。
+	mux.HandleFunc("GET /api/v1/applications/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ":tailLogs") {
+			s.tailLogs(w, r)
+			return
+		}
+		s.getApplication(w, r)
+	})
 	mux.HandleFunc("PATCH /api/v1/applications/{application}", wrapper.UpdateApplication)
 	mux.HandleFunc("GET /api/v1/applications/{application}/configuration", wrapper.GetConfiguration)
 	mux.HandleFunc("PATCH /api/v1/applications/{application}/configuration", wrapper.UpdateConfiguration)
-	mux.HandleFunc("GET /api/v1/operations/{operation}", wrapper.GetOperation)
+	// custom method suffix（{operation}:watch）はwildcardの末尾制約により
+	// 生成wrapperへ直接登録できないため、prefix dispatcherで振り分ける。
+	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
 	// custom methodとSSE tail routeはURL suffixを検査する既存dispatcherへ委譲する。
 	mux.HandleFunc("POST /api/v1/applications/", s.appOperation)
-	mux.HandleFunc("GET /api/v1/applications/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, ":tailLogs") {
-			api.TailLogs(w, r, "")
-			return
-		}
-		http.NotFound(w, r)
-	})
-	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
 	return requestBoundary(openAPIValidation(mux), s.AllowedHost)
 }
 
@@ -107,7 +110,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
-		items = append(items, map[string]string{"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "desiredState": desired, "observedState": observed, "registrationState": state})
+		items = append(items, map[string]string{"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "desiredState": desired, "observedState": observed, "registrationState": state, "observedAt": time.Now().UTC().Format(time.RFC3339Nano)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})
 }
@@ -166,15 +169,31 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operationを確認できません", "")
 		return
 	}
-	// 登録処理はOperationを先に永続化し、取得・検証・起動はworkerへ委譲する。
+	// アプリとOperationを同一transactionで作成し、片方だけが残る状態を防ぐ。
 	id := uuid.NewString()
-	if _, err := s.DB.ExecContext(context.Background(), `INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES(?,?,?,?,datetime('now'),datetime('now'))`, id, req.Subdomain, req.RepositoryURL, req.Ref); err != nil {
+	tx, err := s.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ登録を開始できません", "")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), `INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES(?,?,?,?,datetime('now'),datetime('now'))`, id, req.Subdomain, req.RepositoryURL, req.Ref); err != nil {
+		_ = tx.Rollback()
 		writeAPIError(w, 409, "ALREADY_EXISTS", "同じsubdomainのアプリが既に存在します", "subdomain")
 		return
 	}
-	op, err := CreateOperationWithFingerprint(r.Context(), s.DB, id, req.RequestID, "CREATE", fingerprint)
+	op, err := createOperationWithExecutor(r.Context(), tx, id, req.RequestID, "CREATE", fingerprint, "")
 	if err != nil {
-		writeAPIError(w, 400, "INVALID_ARGUMENT", err.Error(), "requestId")
+		_ = tx.Rollback()
+		if _, ok := err.(*ConflictError); ok {
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+		} else {
+			writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operationを作成できません", "")
+		}
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ登録を確定できません", "")
 		return
 	}
 	if s.worker != nil {

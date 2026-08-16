@@ -83,32 +83,55 @@ type ConflictError struct{ Message string }
 func (e *ConflictError) Error() string { return e.Message }
 
 type event struct {
-	ID       string
-	Sequence int64
-	Type     string
-	Data     any
+	ID        string    `json:"eventId"`
+	Sequence  int64     `json:"sequence"`
+	Timestamp time.Time `json:"timestamp"`
+	Type      string    `json:"type"`
+	Data      any       `json:"data"`
 }
+
+type eventSubscription struct {
+	events <-chan event
+	close  func()
+}
+
+func (s *eventSubscription) C() <-chan event { return s.events }
+func (s *eventSubscription) Close()          { s.close() }
+
 type Events struct {
 	mu        sync.Mutex
 	seq       int64
-	listeners map[string][]chan event
+	listeners map[string]map[*eventSubscription]chan event
 }
 
-func NewEvents() *Events { return &Events{listeners: map[string][]chan event{}} }
-func (e *Events) Subscribe(id string) <-chan event {
+func NewEvents() *Events { return &Events{listeners: map[string]map[*eventSubscription]chan event{}} }
+func (e *Events) Subscribe(id string) *eventSubscription {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	c := make(chan event, 16)
-	e.listeners[id] = append(e.listeners[id], c)
-	return c
+	s := &eventSubscription{events: c}
+	s.close = func() {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if _, ok := e.listeners[id][s]; ok {
+			delete(e.listeners[id], s)
+			close(c)
+		}
+	}
+	if e.listeners[id] == nil {
+		e.listeners[id] = map[*eventSubscription]chan event{}
+	}
+	e.listeners[id][s] = c
+	return s
 }
 func (e *Events) Publish(id, typ string, data any) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.seq++
+	value := event{ID: fmt.Sprintf("%s-%d", id, e.seq), Sequence: e.seq, Timestamp: time.Now().UTC(), Type: typ, Data: data}
 	for _, c := range e.listeners[id] {
 		select {
-		case c <- event{ID: id, Sequence: e.seq, Type: typ, Data: data}:
+		case c <- value:
 		default:
 		}
 	}

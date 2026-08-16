@@ -110,7 +110,7 @@ func (a *application) writeConfig(domain string) error {
 	}
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0o644); err != nil {
+	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err
 	}

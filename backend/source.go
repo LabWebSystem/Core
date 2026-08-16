@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,9 @@ import (
 
 type CommandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
+}
+type StreamRunner interface {
+	Stream(context.Context, string, ...string) (io.ReadCloser, error)
 }
 type OSRunner struct{ Timeout time.Duration }
 
@@ -24,6 +28,42 @@ func (r OSRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	cmd := exec.CommandContext(c, name, args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	return cmd.Output()
+}
+
+func (r OSRunner) Stream(ctx context.Context, name string, args ...string) (io.ReadCloser, error) {
+	if r.Timeout == 0 {
+		r.Timeout = 5 * time.Minute
+	}
+	streamCtx, cancel := context.WithTimeout(ctx, r.Timeout)
+	cmd := exec.CommandContext(streamCtx, name, args...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return nil, err
+	}
+	return &waitReadCloser{ReadCloser: stdout, wait: func() error {
+		err := cmd.Wait()
+		cancel()
+		return err
+	}}, nil
+}
+
+type waitReadCloser struct {
+	io.ReadCloser
+	wait func() error
+}
+
+func (r *waitReadCloser) Close() error {
+	closeErr := r.ReadCloser.Close()
+	if err := r.wait(); closeErr == nil {
+		closeErr = err
+	}
+	return closeErr
 }
 func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest string) error {
 	tmp := dest + ".tmp"

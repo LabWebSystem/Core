@@ -17,11 +17,57 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for ApplicationRegistrationState.
+const (
+	ACTIVE       ApplicationRegistrationState = "ACTIVE"
+	UNREGISTERED ApplicationRegistrationState = "UNREGISTERED"
+)
+
+// Valid indicates whether the value is a known member of the ApplicationRegistrationState enum.
+func (e ApplicationRegistrationState) Valid() bool {
+	switch e {
+	case ACTIVE:
+		return true
+	case UNREGISTERED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OperationResourceState.
+const (
+	Cancelled OperationResourceState = "cancelled"
+	Failed    OperationResourceState = "failed"
+	Queued    OperationResourceState = "queued"
+	Running   OperationResourceState = "running"
+	Succeeded OperationResourceState = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the OperationResourceState enum.
+func (e OperationResourceState) Valid() bool {
+	switch e {
+	case Cancelled:
+		return true
+	case Failed:
+		return true
+	case Queued:
+		return true
+	case Running:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for PurgeRequestConfirm.
 const (
@@ -43,10 +89,41 @@ type ActionRequest struct {
 	RequestId openapi_types.UUID `json:"requestId"`
 }
 
+// Application defines model for Application.
+type Application struct {
+	DesiredState      string                       `json:"desiredState"`
+	Etag              string                       `json:"etag"`
+	LatestOperation   *string                      `json:"latestOperation,omitempty"`
+	Name              string                       `json:"name"`
+	ObservedAt        time.Time                    `json:"observedAt"`
+	ObservedState     string                       `json:"observedState"`
+	Reconciling       bool                         `json:"reconciling"`
+	Ref               string                       `json:"ref"`
+	RegistrationState ApplicationRegistrationState `json:"registrationState"`
+	RepositoryUrl     string                       `json:"repositoryUrl"`
+	Subdomain         string                       `json:"subdomain"`
+}
+
+// ApplicationRegistrationState defines model for Application.RegistrationState.
+type ApplicationRegistrationState string
+
+// ApplicationList defines model for ApplicationList.
+type ApplicationList struct {
+	Applications []Application `json:"applications"`
+}
+
 // ConfigurationRequest defines model for ConfigurationRequest.
 type ConfigurationRequest struct {
 	RequestId openapi_types.UUID  `json:"requestId"`
 	Variables map[string]Variable `json:"variables"`
+}
+
+// ConfigurationResponse defines model for ConfigurationResponse.
+type ConfigurationResponse struct {
+	Variables []struct {
+		IsSecret bool   `json:"isSecret"`
+		Name     string `json:"name"`
+	} `json:"variables"`
 }
 
 // CreateApplicationRequest defines model for CreateApplicationRequest.
@@ -61,6 +138,21 @@ type CreateApplicationRequest struct {
 type Error struct {
 	Error map[string]interface{} `json:"error"`
 }
+
+// OperationReference defines model for OperationReference.
+type OperationReference struct {
+	Name string `json:"name"`
+}
+
+// OperationResource defines model for OperationResource.
+type OperationResource struct {
+	ErrorMessage *string                `json:"errorMessage,omitempty"`
+	Name         string                 `json:"name"`
+	State        OperationResourceState `json:"state"`
+}
+
+// OperationResourceState defines model for OperationResource.State.
+type OperationResourceState string
 
 // PurgeRequest defines model for PurgeRequest.
 type PurgeRequest struct {
@@ -1579,6 +1671,13 @@ type ClientWithResponsesInterface interface {
 type ListApplicationsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApplicationList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListApplicationsResponse) GetJSON200() *ApplicationList {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -1613,6 +1712,13 @@ func (r ListApplicationsResponse) ContentType() string {
 type CreateApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r CreateApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1647,6 +1753,13 @@ func (r CreateApplicationResponse) ContentType() string {
 type UnregisterApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r UnregisterApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1681,6 +1794,13 @@ func (r UnregisterApplicationResponse) ContentType() string {
 type GetApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Application
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApplicationResponse) GetJSON200() *Application {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -1715,6 +1835,13 @@ func (r GetApplicationResponse) ContentType() string {
 type UpdateApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r UpdateApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1749,6 +1876,13 @@ func (r UpdateApplicationResponse) ContentType() string {
 type GetConfigurationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConfigurationResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetConfigurationResponse) GetJSON200() *ConfigurationResponse {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -1783,6 +1917,13 @@ func (r GetConfigurationResponse) ContentType() string {
 type UpdateConfigurationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r UpdateConfigurationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1817,6 +1958,13 @@ func (r UpdateConfigurationResponse) ContentType() string {
 type PurgeApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r PurgeApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1851,6 +1999,13 @@ func (r PurgeApplicationResponse) ContentType() string {
 type RebuildApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RebuildApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1885,6 +2040,13 @@ func (r RebuildApplicationResponse) ContentType() string {
 type RegisterApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RegisterApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1919,6 +2081,13 @@ func (r RegisterApplicationResponse) ContentType() string {
 type StartApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r StartApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1953,6 +2122,13 @@ func (r StartApplicationResponse) ContentType() string {
 type StopApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r StopApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -1987,6 +2163,13 @@ func (r StopApplicationResponse) ContentType() string {
 type SyncApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r SyncApplicationResponse) GetJSON202() *OperationReference {
+	return r.JSON202
 }
 
 // GetBody returns the raw response body bytes
@@ -2123,6 +2306,13 @@ func (r HealthReadyResponse) ContentType() string {
 type GetOperationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OperationResource
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOperationResponse) GetJSON200() *OperationResource {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -2509,6 +2699,16 @@ func ParseListApplicationsResponse(rsp *http.Response) (*ListApplicationsRespons
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApplicationList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2523,6 +2723,16 @@ func ParseCreateApplicationResponse(rsp *http.Response) (*CreateApplicationRespo
 	response := &CreateApplicationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	}
 
 	return response, nil
@@ -2541,6 +2751,16 @@ func ParseUnregisterApplicationResponse(rsp *http.Response) (*UnregisterApplicat
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2555,6 +2775,19 @@ func ParseGetApplicationResponse(rsp *http.Response) (*GetApplicationResponse, e
 	response := &GetApplicationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Application
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 404:
+		break // No content-type
+
 	}
 
 	return response, nil
@@ -2573,6 +2806,16 @@ func ParseUpdateApplicationResponse(rsp *http.Response) (*UpdateApplicationRespo
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2587,6 +2830,16 @@ func ParseGetConfigurationResponse(rsp *http.Response) (*GetConfigurationRespons
 	response := &GetConfigurationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConfigurationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -2605,6 +2858,16 @@ func ParseUpdateConfigurationResponse(rsp *http.Response) (*UpdateConfigurationR
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2619,6 +2882,16 @@ func ParsePurgeApplicationResponse(rsp *http.Response) (*PurgeApplicationRespons
 	response := &PurgeApplicationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	}
 
 	return response, nil
@@ -2637,6 +2910,16 @@ func ParseRebuildApplicationResponse(rsp *http.Response) (*RebuildApplicationRes
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2651,6 +2934,16 @@ func ParseRegisterApplicationResponse(rsp *http.Response) (*RegisterApplicationR
 	response := &RegisterApplicationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	}
 
 	return response, nil
@@ -2669,6 +2962,16 @@ func ParseStartApplicationResponse(rsp *http.Response) (*StartApplicationRespons
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2685,6 +2988,16 @@ func ParseStopApplicationResponse(rsp *http.Response) (*StopApplicationResponse,
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -2699,6 +3012,16 @@ func ParseSyncApplicationResponse(rsp *http.Response) (*SyncApplicationResponse,
 	response := &SyncApplicationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	}
 
 	return response, nil
@@ -2763,6 +3086,16 @@ func ParseGetOperationResponse(rsp *http.Response) (*GetOperationResponse, error
 	response := &GetOperationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OperationResource
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -3420,12 +3753,18 @@ type ListApplicationsResponseObject interface {
 	VisitListApplicationsResponse(w http.ResponseWriter) error
 }
 
-type ListApplications200Response struct {
-}
+type ListApplications200JSONResponse ApplicationList
 
-func (response ListApplications200Response) VisitListApplicationsResponse(w http.ResponseWriter) error {
+func (response ListApplications200JSONResponse) VisitListApplicationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type CreateApplicationRequestObject struct {
@@ -3436,12 +3775,18 @@ type CreateApplicationResponseObject interface {
 	VisitCreateApplicationResponse(w http.ResponseWriter) error
 }
 
-type CreateApplication202Response struct {
-}
+type CreateApplication202JSONResponse OperationReference
 
-func (response CreateApplication202Response) VisitCreateApplicationResponse(w http.ResponseWriter) error {
+func (response CreateApplication202JSONResponse) VisitCreateApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type UnregisterApplicationRequestObject struct {
@@ -3453,12 +3798,18 @@ type UnregisterApplicationResponseObject interface {
 	VisitUnregisterApplicationResponse(w http.ResponseWriter) error
 }
 
-type UnregisterApplication202Response struct {
-}
+type UnregisterApplication202JSONResponse OperationReference
 
-func (response UnregisterApplication202Response) VisitUnregisterApplicationResponse(w http.ResponseWriter) error {
+func (response UnregisterApplication202JSONResponse) VisitUnregisterApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type GetApplicationRequestObject struct {
@@ -3469,12 +3820,18 @@ type GetApplicationResponseObject interface {
 	VisitGetApplicationResponse(w http.ResponseWriter) error
 }
 
-type GetApplication200Response struct {
-}
+type GetApplication200JSONResponse Application
 
-func (response GetApplication200Response) VisitGetApplicationResponse(w http.ResponseWriter) error {
+func (response GetApplication200JSONResponse) VisitGetApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type GetApplication404Response struct {
@@ -3494,12 +3851,18 @@ type UpdateApplicationResponseObject interface {
 	VisitUpdateApplicationResponse(w http.ResponseWriter) error
 }
 
-type UpdateApplication202Response struct {
-}
+type UpdateApplication202JSONResponse OperationReference
 
-func (response UpdateApplication202Response) VisitUpdateApplicationResponse(w http.ResponseWriter) error {
+func (response UpdateApplication202JSONResponse) VisitUpdateApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type GetConfigurationRequestObject struct {
@@ -3510,12 +3873,18 @@ type GetConfigurationResponseObject interface {
 	VisitGetConfigurationResponse(w http.ResponseWriter) error
 }
 
-type GetConfiguration200Response struct {
-}
+type GetConfiguration200JSONResponse ConfigurationResponse
 
-func (response GetConfiguration200Response) VisitGetConfigurationResponse(w http.ResponseWriter) error {
+func (response GetConfiguration200JSONResponse) VisitGetConfigurationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type UpdateConfigurationRequestObject struct {
@@ -3527,12 +3896,18 @@ type UpdateConfigurationResponseObject interface {
 	VisitUpdateConfigurationResponse(w http.ResponseWriter) error
 }
 
-type UpdateConfiguration202Response struct {
-}
+type UpdateConfiguration202JSONResponse OperationReference
 
-func (response UpdateConfiguration202Response) VisitUpdateConfigurationResponse(w http.ResponseWriter) error {
+func (response UpdateConfiguration202JSONResponse) VisitUpdateConfigurationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type PurgeApplicationRequestObject struct {
@@ -3544,12 +3919,18 @@ type PurgeApplicationResponseObject interface {
 	VisitPurgeApplicationResponse(w http.ResponseWriter) error
 }
 
-type PurgeApplication202Response struct {
-}
+type PurgeApplication202JSONResponse OperationReference
 
-func (response PurgeApplication202Response) VisitPurgeApplicationResponse(w http.ResponseWriter) error {
+func (response PurgeApplication202JSONResponse) VisitPurgeApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type RebuildApplicationRequestObject struct {
@@ -3561,12 +3942,18 @@ type RebuildApplicationResponseObject interface {
 	VisitRebuildApplicationResponse(w http.ResponseWriter) error
 }
 
-type RebuildApplication202Response struct {
-}
+type RebuildApplication202JSONResponse OperationReference
 
-func (response RebuildApplication202Response) VisitRebuildApplicationResponse(w http.ResponseWriter) error {
+func (response RebuildApplication202JSONResponse) VisitRebuildApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type RegisterApplicationRequestObject struct {
@@ -3578,12 +3965,18 @@ type RegisterApplicationResponseObject interface {
 	VisitRegisterApplicationResponse(w http.ResponseWriter) error
 }
 
-type RegisterApplication202Response struct {
-}
+type RegisterApplication202JSONResponse OperationReference
 
-func (response RegisterApplication202Response) VisitRegisterApplicationResponse(w http.ResponseWriter) error {
+func (response RegisterApplication202JSONResponse) VisitRegisterApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type StartApplicationRequestObject struct {
@@ -3595,12 +3988,18 @@ type StartApplicationResponseObject interface {
 	VisitStartApplicationResponse(w http.ResponseWriter) error
 }
 
-type StartApplication202Response struct {
-}
+type StartApplication202JSONResponse OperationReference
 
-func (response StartApplication202Response) VisitStartApplicationResponse(w http.ResponseWriter) error {
+func (response StartApplication202JSONResponse) VisitStartApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type StopApplicationRequestObject struct {
@@ -3612,12 +4011,18 @@ type StopApplicationResponseObject interface {
 	VisitStopApplicationResponse(w http.ResponseWriter) error
 }
 
-type StopApplication202Response struct {
-}
+type StopApplication202JSONResponse OperationReference
 
-func (response StopApplication202Response) VisitStopApplicationResponse(w http.ResponseWriter) error {
+func (response StopApplication202JSONResponse) VisitStopApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type SyncApplicationRequestObject struct {
@@ -3629,12 +4034,18 @@ type SyncApplicationResponseObject interface {
 	VisitSyncApplicationResponse(w http.ResponseWriter) error
 }
 
-type SyncApplication202Response struct {
-}
+type SyncApplication202JSONResponse OperationReference
 
-func (response SyncApplication202Response) VisitSyncApplicationResponse(w http.ResponseWriter) error {
+func (response SyncApplication202JSONResponse) VisitSyncApplicationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type TailLogsRequestObject struct {
@@ -3645,12 +4056,47 @@ type TailLogsResponseObject interface {
 	VisitTailLogsResponse(w http.ResponseWriter) error
 }
 
-type TailLogs200Response struct {
+type TailLogs200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
 }
 
-func (response TailLogs200Response) VisitTailLogsResponse(w http.ResponseWriter) error {
+func (response TailLogs200TexteventStreamResponse) VisitTailLogsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
 	w.WriteHeader(200)
-	return nil
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
 }
 
 type HealthLiveRequestObject struct {
@@ -3699,12 +4145,18 @@ type GetOperationResponseObject interface {
 	VisitGetOperationResponse(w http.ResponseWriter) error
 }
 
-type GetOperation200Response struct {
-}
+type GetOperation200JSONResponse OperationResource
 
-func (response GetOperation200Response) VisitGetOperationResponse(w http.ResponseWriter) error {
+func (response GetOperation200JSONResponse) VisitGetOperationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type WatchOperationRequestObject struct {
@@ -3715,12 +4167,47 @@ type WatchOperationResponseObject interface {
 	VisitWatchOperationResponse(w http.ResponseWriter) error
 }
 
-type WatchOperation200Response struct {
+type WatchOperation200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
 }
 
-func (response WatchOperation200Response) VisitWatchOperationResponse(w http.ResponseWriter) error {
+func (response WatchOperation200TexteventStreamResponse) VisitWatchOperationResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
 	w.WriteHeader(200)
-	return nil
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
 }
 
 // StrictServerInterface represents all server handlers.
@@ -4355,23 +4842,29 @@ func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"3FdfaxtHEP8qYZqHFs6+U5IWei/BKSENCGqsun4wKqzuRtKmd7vX3T0VVRy0MbR5CQ6lNFD80lJaNxDn",
-	"1ZS6X0aW7Y9R9k53OulOltRaFvGTVruzM/P7zZ+d64HD/YAzZEqC3QPptNEn8XLDUZSzLfwyRKn0RiB4",
-	"gEJRjI9FcvDY1X+aXPhEgQ1hSF0wQHUDBBukEpS1IIqMWJwKdMHezV2tZ6K88QQdBZEBH3HWpK1QkCsz",
-	"b0CHCEoaXnKVuC7Vuom3OabytsAm2PCOOaLEHPJhfjZUoJVNeDwBbmTKmAVUIFG4EQQedWaBbeofn7Iq",
-	"spZqg10pASkw4JIqLrrbwhunRVAovbAIhzJsuNwnlMX+EaVQMLDh812y9rW19mH93fv2cLlW71nGB5Uo",
-	"PXnv/u05ciLvvBFDztucReZDIbgoMofp9uVBS8TK9G6GooVTA+PoXBX+cKkllAgxU9Pg3EPCFuV6arkY",
-	"mcEyV7cDd7F8usqE+D8VnxVXwVGJjkCV059jtEO8EGebTsSMVFXRvr5AWZNrVS5KR9BAkwc2VHdq/W+P",
-	"+k9/7e+97O+9Oj/65fzFdxubjzUZVGl/oUoaO9iodaVC/9YD4nyBzL2ViHRQyERPZd1at7TLPEBGAgo2",
-	"3F2vrFtg6Dpqx0hNMopbvNFKcGs24k0dFKhSqTbyghqrDDiTCV93LKsIIwNwevzNxe9/JIgDLkv0F1rS",
-	"qO4ecLc7zHOFLL6bc9l8IjkbPSCz2unU1heNh09XU1TAeKeI8ZMURv/pD6cnB2fPXmhVkTHOq9nL/YsS",
-	"LR4qLBKxzQS2qFQolk/G+EN7tQwY5Xn0CNUkrrmzaLD/0+Cflzqd71n3inJnB6/OfjsYfP/XMM+IID4q",
-	"FBLs3R7oZhEnPRjAiK9LiBQIHiE3chROlnk9rh6nXRK8yUa4pMBNbbjXmcWmk5+XpnaOR6jGBqu5Yn5x",
-	"+Hpw9HMa8NWGs+j9EtpS2eh5ncG0Az1uJAPWMokubf7xqLP8qhmbqK6VXIGNkHruiujdSqy/3e/JTIaT",
-	"R3NlFN+EN3sGx1IRoVZEcE3bvuHs8mBl5PLgZnPbZc6quO0y50Zzqwj1qrw1/dPx01RgnsGvVnu49HlP",
-	"A2oj8VTb9GgHpzr+cSxT1SLzuH5++Pdg7/np8euUtKENgSSJ9CVGtmKZeawMnv15/uPhYP/Nxd6J/hR6",
-	"37o7Tej0+Plg/03qTWZWmr1sHV02tmfpMJdjmfRiUzsfM7JQDMsR2V+lw3wprh19uhiyBXLyv6KJDJAo",
-	"OqnmUHhg66qjZqcCUT36NwAA//8=",
+	"7FldbxtFF/4r1by9eBGb2GkLEntTucUqkQxUdtNcREYa7x7bU3ZntjOzBmOtBI0EvalSIUQllBsQglCp",
+	"6W2EKH8mcZKfgWbXu96PsWOnMRZR7ma9Z+ac85znfIx3gCzmeowClQKZAySsLrg4XFYsSRitw2MfhFQ/",
+	"eJx5wCWB8DWPXqzb6qHNuIslMpHvExsZSPY9QCYSkhPaQUFghOKEg43MrdTWZiLKWo/AkigwUMXzHGJh",
+	"pbyo1QahTmlILEE95xQZCCTuaF84WIKQn3rAk6MLMhS74akelhI4RSb6DI+tEaXVd68XnTMQawngPbAr",
+	"MoOFjSWsSOLCtD2TPeFgMWoRRz2O37cYcwDTSKA9YWOHCBm5mRwP1HcV9pW7D9YfVpGBNj6pV++tNx5U",
+	"69UPU3FIH+MxQSTj/Q3uaBUJv2UzFxMdmLmQh8imd+TPj9wxsgHOw6TzLQN/FrURG84gWY3o6J2Ou3om",
+	"EtxwcT2EHf2vNE6c0ihrSmnqBolWzDnuFxDJKNCZeJfRNun4ka8XkoYG6mFOcMsZuWjbRJ2NnfuZI6d5",
+	"+HB0QMq92OKcf2NVxhkJn3NUeIwKKHqasT0JR1aGiAZYHKQ+YeL0nomqyVE6k6dGdmyo1lsOWEKKKVNC",
+	"G+a3S2gNaEd2kbk2S5qOScAJ0m6YhzGZHE/VxS288lV55YPm/2+bo+VKc1A23l8L4jfv3L4+QyfQ1YBs",
+	"lZhGnSrnjBeRg/jn6RSNxHTnJm2iDm3gQC0NHzXNgsXbJrQKHdPOUC+Yz3XaQ9s/BiFwB2btZWeZZyCR",
+	"bxePffBBEYP7lEY1VfiWBWCHv7YxccKFhakFjlo3jRlbQahK5/19n3dgYlZYqlpwd7RUEpL7YGj74wVM",
+	"KEaiUGfqhmfPl8wXmY1vM2QldbxgqJhSQHvY8WeooJGYER9V1K82ENpmo4nO4sSLZjJU22wcfrN/+OSX",
+	"w+0Xh9svT/Z/Pnn+beX+ugKDSGUvquHWJrQafSHBvXYHW58Dta9FIj3gIjpnbbW8Wg7nLA8o9ggy0c3V",
+	"tdUyMlRCdENPS/ke34n8TtJEBQWp8aCSFlS+Rj0q3HSjXB5xUQKVudGh9EhEo2bUP+eYH8KpJAQqC1AC",
+	"zdHB16e//R6JeExoLC90mnE5vcPs/oVZPbGjBVliqDwNCujduDA7NEVbA2Aidfjk+6M3u8dPnyupwMjS",
+	"oTRIPQURTx2IamMW5Q0azaTAF4909kr2H4LX0OfWPZB50BafWVOzarjz4/DvF6pw3CrfKpan492Xx7/u",
+	"Dr/7c5R3mGMXJHCBzK0BUmU5LC8obr9pi1E+WEbK9nxBbYZ1yupq+JZvOQvi2sTWdmmyumSlLx4TG8A9",
+	"kJkbyiJpqr8Kafw93Xs13P8pZutyuVhEZwE9RncZvjRMND018kbT+iKjqB0TwnF78fUkM9VfnshxaPnE",
+	"sZcUu3qk/WryOH/4otltafG7Gh3fLoBCYi6XFL2G0n0VuvOHjnlLixzzrgJ37sD1qbWswPWpdRW48wZO",
+	"YuLUWGfyn10PYoEz7zgSvpQl6AGVK0JywG7WwXxAC/Y3GtWF31sUGl3AjuyWHNKDiV5/FMrUlIje76zp",
+	"J3t/DbefHR28ihEf6eCAIw5OUVIPZWbRMnz6x8kPe8Od16fbb1BgoPfKNycJHR08G+68jq1J/cs/SNbB",
+	"tOvt+KP4Aq+2xW8a01g9382WZRyYix96tMwv4guvFrNN9XYO1P7FZDkvFIGBwq/oo5N97iBT1RJS6q2h",
+	"oBn8EwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

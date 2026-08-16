@@ -3,11 +3,38 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 )
+
+var errPortOccupied = errors.New("LWSが使用する必須ポートは既に使用されています")
+
+var requiredPortProbe = func(network, address string) error {
+	listener, err := net.Listen(network, address)
+	if err != nil {
+		// 非rootの診断環境ではprivileged portへbindできないため、
+		// ssで既存listenerを確認してから判定する。
+		port := strings.TrimPrefix(address, ":")
+		if _, parseErr := strconv.Atoi(port); parseErr != nil {
+			return err
+		}
+		output, ssErr := exec.Command("ss", "-H", "-ltnup").Output()
+		if ssErr != nil {
+			return err
+		}
+		for _, field := range strings.Fields(string(output)) {
+			if strings.HasSuffix(field, ":"+port) || strings.Contains(field, ":"+port+"|") {
+				return errPortOccupied
+			}
+		}
+		return nil
+	}
+	return listener.Close()
+}
 
 func (a *application) run(args []string) error {
 	if len(args) == 0 {
@@ -63,6 +90,9 @@ func (a *application) start(options []string) error {
 	if requested != "" && !domainPattern.MatchString(requested) {
 		return fmt.Errorf("ドメインが不正です: %s", requested)
 	}
+	if err := a.checkRequiredPorts(); err != nil {
+		return err
+	}
 
 	if err := a.loadConfig(); err == nil {
 		current := a.domain
@@ -105,6 +135,19 @@ func (a *application) start(options []string) error {
 		return err
 	}
 	fmt.Printf("LWSを%s向けに起動しました\n", a.domain)
+	return nil
+}
+
+func (a *application) checkRequiredPorts() error {
+	for _, required := range []struct{ network, address string }{
+		{network: "tcp", address: ":80"},
+		{network: "tcp", address: ":53"},
+		{network: "udp", address: ":53"},
+	} {
+		if err := requiredPortProbe(required.network, required.address); err != nil {
+			return fmt.Errorf("%w: %s/%s", errPortOccupied, required.network, required.address)
+		}
+	}
 	return nil
 }
 

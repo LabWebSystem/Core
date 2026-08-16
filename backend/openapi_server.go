@@ -47,8 +47,8 @@ func (a generatedAPI) StopApplication(w http.ResponseWriter, r *http.Request, ap
 func (a generatedAPI) SyncApplication(w http.ResponseWriter, r *http.Request, application string) {
 	a.server.appOperation(w, withApplicationPath(r, application))
 }
-func (a generatedAPI) TailLogs(w http.ResponseWriter, _ *http.Request, _ string) {
-	writeAPIError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "ログ配信はまだ利用できません", "")
+func (a generatedAPI) TailLogs(w http.ResponseWriter, r *http.Request, application string) {
+	a.server.tailLogs(w, withApplicationPath(r, application))
 }
 func (a generatedAPI) HealthLive(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (s *Server) applicationRoutes(m *http.ServeMux) {
@@ -199,6 +200,7 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		"reconciling":       latestOperation != "",
 		"latestOperation":   latestOperation,
 		"etag":              etag,
+		"observedAt":        time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	writeJSON(w, 200, response)
 }
@@ -335,19 +337,78 @@ func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
 	f, ok := w.(http.Flusher)
 	if !ok {
 		return
 	}
-	ch := s.events.Subscribe(operationID(r))
+	id := operationID(r)
+	sub := s.events.Subscribe(id)
+	defer sub.Close()
+	var state, message string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT lower(state),error_message FROM operations WHERE id=?`, id).Scan(&state, &message)
+	if err == sql.ErrNoRows {
+		writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "Operationが見つかりません", "operation")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operationを取得できません", "")
+		return
+	}
+	s.writeEvent(w, f, event{ID: id + "-snapshot", Sequence: 0, Timestamp: time.Now().UTC(), Type: state, Data: map[string]string{"message": message}})
+	if state == "succeeded" || state == "failed" || state == "cancelled" {
+		return
+	}
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case e := <-ch:
-			b, _ := json.Marshal(e.Data)
-			_, _ = w.Write([]byte("id: " + e.ID + "\nevent: " + e.Type + "\ndata: " + string(b) + "\n\n"))
-			f.Flush()
+		case e, open := <-sub.C():
+			if !open {
+				return
+			}
+			s.writeEvent(w, f, e)
+		}
+	}
+}
+
+func (s *Server) writeEvent(w http.ResponseWriter, f http.Flusher, e event) {
+	b, _ := json.Marshal(e)
+	_, _ = fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", e.ID, e.Type, b)
+	f.Flush()
+}
+
+func (s *Server) tailLogs(w http.ResponseWriter, r *http.Request) {
+	if s.LogSource == nil {
+		writeAPIError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "ログ配信を利用できません", "")
+		return
+	}
+	lines, err := s.LogSource(r.Context(), appID(r))
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "LOG_UNAVAILABLE", "コンテナログを取得できません", "")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	f, ok := w.(http.Flusher)
+	if !ok {
+		return
+	}
+	// 接続確立を直ちに通知し、購読者が最初のログ行を送るまでHTTP接続を
+	// ブロックしない。
+	_, _ = fmt.Fprint(w, ": connected\n\n")
+	f.Flush()
+	seq := int64(0)
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case line, open := <-lines:
+			if !open {
+				return
+			}
+			seq++
+			s.writeEvent(w, f, event{ID: fmt.Sprintf("%s-log-%d", appID(r), seq), Sequence: seq, Timestamp: time.Now().UTC(), Type: "log", Data: map[string]string{"line": line}})
 		}
 	}
 }

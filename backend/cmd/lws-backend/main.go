@@ -44,7 +44,7 @@ func main() {
 	}
 	secretKeyPath := os.Getenv("LWS_SECRET_KEY_PATH")
 	if secretKeyPath == "" {
-		secretKeyPath = "/var/lib/lws/secret.key"
+		secretKeyPath = "/etc/lws/secret.key"
 	}
 	secretKey, err := backend.LoadSecretKey(secretKeyPath)
 	if err != nil {
@@ -85,6 +85,7 @@ func main() {
 		}()
 	}
 	server := backend.NewServer(db, runtime.Run)
+	server.LogSource = runtime.TailLogs
 	server.SecretKey = secretKey
 	server.AllowedHost = os.Getenv("LWS_ALLOWED_HOST")
 	if server.AllowedHost == "" {

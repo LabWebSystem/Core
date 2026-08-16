@@ -4,17 +4,19 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}@sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2
     restart: unless-stopped
     environment:
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
       LWS_INSTALLATION_ID: ${LWS_INSTALLATION_ID:-}
       LWS_PUBLIC_ADDRESS: ${LWS_PUBLIC_ADDRESS:-}
       LWS_DATABASE_PATH: /var/lib/lws/database.sqlite
+      LWS_SECRET_KEY_PATH: /etc/lws/secret.key
       LWS_CADDY_CONTAINER: ${LWS_CADDY_CONTAINER:-lws-caddy-1}
       LWS_COREDNS_CONTAINER: ${LWS_COREDNS_CONTAINER:-lws-coredns-1}
     volumes:
       - lws-backend-data:/var/lib/lws
+      - lws-backend-config:/etc/lws
       - lws-generated:/var/lib/lws/generated
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [lws-internal]
@@ -27,7 +29,7 @@ services:
       timeout: 2s
       retries: 30
   dashboard:
-    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}@sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4
     restart: unless-stopped
     depends_on: [backend]
     labels:
@@ -36,13 +38,13 @@ services:
     networks: [lws-internal]
 
   caddy:
-    image: caddy:2.10-alpine
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     command: ["sh", "-c", "while [ ! -f /var/lib/lws/generated/Caddyfile ]; do sleep 1; done; exec caddy run --config /var/lib/lws/generated/Caddyfile --adapter caddyfile"]
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - "${LWS_HTTP_PORT:-80}:80"
+      - "80:80"
     volumes:
       - lws-generated:/var/lib/lws/generated:ro
     networks: [lws-internal]
@@ -51,11 +53,11 @@ services:
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
 
   coredns:
-    image: coredns/coredns:1.12.4
+    image: coredns/coredns:1.12.4@sha256:986f04c2e15e147d00bdd51e8c51bcef3644b13ff806be7d2ff1b261d6dfbae1
     command: -conf /etc/coredns/Corefile
     ports:
-      - "${LWS_DNS_TCP_PORT:-53}:53/tcp"
-      - "${LWS_DNS_UDP_PORT:-53}:53/udp"
+      - "53:53/tcp"
+      - "53:53/udp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
       - lws-generated:/var/lib/lws/generated
@@ -66,6 +68,10 @@ services:
 
 volumes:
   lws-backend-data:
+    labels:
+      com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
+  lws-backend-config:
     labels:
       com.labwebsystem.owner: lws
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}

@@ -11,6 +11,11 @@ import (
 
 type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage, Payload string }
 
+type sqlExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 func CreateOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind string) (Operation, error) {
 	return createOperation(ctx, db, applicationID, requestID, kind, "", "")
 }
@@ -24,6 +29,10 @@ func CreateOperationWithPayload(ctx context.Context, db *sql.DB, applicationID, 
 }
 
 func createOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint, payload string) (Operation, error) {
+	return createOperationWithExecutor(ctx, db, applicationID, requestID, kind, fingerprint, payload)
+}
+
+func createOperationWithExecutor(ctx context.Context, db sqlExecutor, applicationID, requestID, kind, fingerprint, payload string) (Operation, error) {
 	if err := ValidateRequestID(requestID); err != nil {
 		return Operation{}, errors.New("requestIdはUUID v4で指定してください")
 	}
