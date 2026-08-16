@@ -62,7 +62,15 @@ func main() {
 		runtime.Docker.CaddyContainer = caddy
 	}
 	if domain, address := os.Getenv("LWS_BASE_DOMAIN"), os.Getenv("LWS_PUBLIC_ADDRESS"); address != "" {
-		runtime.Derived = &backend.DerivedManager{DB: db, GeneratedDir: "/var/lib/lws/generated", BaseDomain: domain, PublicAddress: address, Docker: runtime.Docker, CaddyContainer: runtime.Docker.CaddyContainer, CoreDNSContainer: os.Getenv("LWS_COREDNS_CONTAINER")}
+		derived := &backend.DerivedManager{DB: db, GeneratedDir: "/var/lib/lws/generated", BaseDomain: domain, PublicAddress: address}
+		if err := derived.Sync(context.Background()); err != nil {
+			slog.Error("派生設定の初期生成に失敗しました", "error", err)
+			os.Exit(1)
+		}
+		derived.Docker = runtime.Docker
+		derived.CaddyContainer = runtime.Docker.CaddyContainer
+		derived.CoreDNSContainer = os.Getenv("LWS_COREDNS_CONTAINER")
+		runtime.Derived = derived
 	}
 	server := backend.NewServer(db, runtime.Run)
 	server.SecretKey = secretKey

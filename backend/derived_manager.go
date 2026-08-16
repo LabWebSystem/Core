@@ -60,6 +60,14 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 		if m.CaddyContainer != "" {
 			m.Docker.CaddyContainer = m.CaddyContainer
 		}
+		if err := m.Docker.VerifyInfrastructureContainer(ctx, m.Docker.CaddyContainer); err != nil {
+			restore()
+			return err
+		}
+		if err := m.Docker.VerifyInfrastructureContainer(ctx, m.CoreDNSContainer); err != nil {
+			restore()
+			return err
+		}
 		if err := m.Docker.ValidateCaddyfile(ctx); err != nil {
 			restore()
 			return err
@@ -76,6 +84,7 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 		}
 		if err := m.Docker.ReloadCoreDNS(ctx, m.CoreDNSContainer); err != nil {
 			restore()
+			_ = m.Docker.ReloadCaddy(ctx)
 			return err
 		}
 	}

@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -16,9 +20,11 @@ var (
 )
 
 type application struct {
-	paths   paths
-	version string
-	domain  string
+	paths          paths
+	version        string
+	domain         string
+	installationID string
+	publicAddress  string
 }
 
 func newApplication() (*application, error) {
@@ -47,7 +53,7 @@ func (a *application) loadConfig() error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		key, value, ok := strings.Cut(scanner.Text(), "=")
-		if !ok || (key != "LWS_BASE_DOMAIN" && key != "LWS_VERSION") {
+		if !ok || (key != "LWS_BASE_DOMAIN" && key != "LWS_VERSION" && key != "LWS_INSTALLATION_ID" && key != "LWS_PUBLIC_ADDRESS") {
 			return errors.New("LWSの設定が不正です")
 		}
 		values[key] = value
@@ -59,6 +65,18 @@ func (a *application) loadConfig() error {
 		return errors.New("LWSの設定が不正です")
 	}
 	a.domain = values["LWS_BASE_DOMAIN"]
+	a.installationID = values["LWS_INSTALLATION_ID"]
+	a.publicAddress = values["LWS_PUBLIC_ADDRESS"]
+	if a.installationID == "" {
+		a.installationID = uuid.NewString()
+	}
+	if a.publicAddress == "" {
+		address, err := detectPublicIPv4()
+		if err != nil {
+			return err
+		}
+		a.publicAddress = address
+	}
 	return nil
 }
 
@@ -69,10 +87,42 @@ func (a *application) writeConfig(domain string) error {
 	if err := os.MkdirAll(a.paths.stateDir, 0o755); err != nil {
 		return err
 	}
-	contents := fmt.Sprintf("LWS_BASE_DOMAIN=%s\nLWS_VERSION=%s\n", domain, a.version)
+	if a.installationID == "" {
+		a.installationID = uuid.NewString()
+	}
+	if a.publicAddress == "" {
+		address, err := detectPublicIPv4()
+		if err != nil {
+			return err
+		}
+		a.publicAddress = address
+	}
+	contents := fmt.Sprintf("LWS_BASE_DOMAIN=%s\nLWS_VERSION=%s\nLWS_INSTALLATION_ID=%s\nLWS_PUBLIC_ADDRESS=%s\n", domain, a.version, a.installationID, a.publicAddress)
 	if err := os.WriteFile(a.configFile(), []byte(contents), 0o644); err != nil {
 		return err
 	}
 	a.domain = domain
 	return nil
+}
+
+func detectPublicIPv4() (string, error) {
+	if value := os.Getenv("LWS_PUBLIC_ADDRESS"); value != "" {
+		ip := net.ParseIP(value)
+		if ip != nil && ip.To4() != nil {
+			return value, nil
+		}
+		return "", errors.New("公開IPv4アドレスが不正です")
+	}
+	if output, err := exec.Command("ip", "-4", "route", "get", "8.8.8.8").Output(); err == nil {
+		fields := strings.Fields(string(output))
+		for i := 0; i+1 < len(fields); i++ {
+			if fields[i] == "src" {
+				ip := net.ParseIP(fields[i+1])
+				if ip != nil && ip.To4() != nil {
+					return fields[i+1], nil
+				}
+			}
+		}
+	}
+	return "", errors.New("公開IPv4アドレスを一意に決定できません")
 }

@@ -24,8 +24,9 @@ func GenerateHosts(baseDomain, publicAddress string, apps []PublishedApplication
 }
 func GenerateCaddyfile(baseDomain string, apps []PublishedApplication) string {
 	var b strings.Builder
+	fmt.Fprintf(&b, "{\n\tauto_https off\n}\n\nhttp://api.%s {\n\treverse_proxy backend:8080\n}\n", baseDomain)
 	for _, a := range apps {
-		fmt.Fprintf(&b, "%s.%s {\n\treverse_proxy lws-%s:%d\n}\n", a.Subdomain, baseDomain, a.AppID, a.Port)
+		fmt.Fprintf(&b, "http://%s.%s {\n\treverse_proxy lws-%s:%d\n}\n", a.Subdomain, baseDomain, a.AppID, a.Port)
 	}
 	return b.String()
 }

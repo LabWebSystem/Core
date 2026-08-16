@@ -31,12 +31,12 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 
 | エンティティ | 主な内容 |
 | --- | --- |
-| `applications` | app-id、subdomain、repository URL、ref、manifest表示情報、desired state、revision、最終エラー、登録状態、保持volume識別情報、時刻 |
+| `applications` | app-id、subdomain、repository URL、ref、manifest表示情報・公開service・公開port、desired state、revision、最終エラー、登録状態、保持volume識別情報、時刻 |
 | `application_variables` | app-id、変数名、secretフラグ、暗号化済み値または通常値、更新時刻 |
 | `operations` | operation ID、app-id、種別、状態、時刻、エラー概要 |
 
 - app-idはBackend発行UUID、subdomainは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開URLは`<subdomain>.<base-domain>`である。
-- `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。
+- `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
 - コンテナ、network、volumeの実在と状態はDockerから都度照会し、DBへ複製しない。
 - 登録状態は`ACTIVE`と`UNREGISTERED`。登録解除後はapp-id、installation ID、保持volume識別情報だけを削除済み記録として保持する。`UNREGISTERED`は通常の一覧から除外し、開始・停止・同期・再構成を受け付けない。
 

@@ -28,7 +28,7 @@
 | `mise run test backend` | BackendのUnit、DB、validatorテスト | フェーズ1以降 |
 | `mise run test backend-http` | OpenAPI生成・HTTP契約・handlerテスト | フェーズ1以降 |
 | `mise run test backend-docker` | fake Docker、Compose、Git境界テスト | フェーズ3以降 |
-| `mise run test infrastructure` | 実Compose、Caddy、CoreDNSの統合テスト | フェーズ4以降 |
+| `mise run test infrastructure` | 実Compose、Caddy、CoreDNS、edge network、volumeの統合テスト | フェーズ4以降 |
 
 `test`の引数なし実行は全targetを順に実行する。CIは対象別の並列jobへ分けてもよいが、通常CIとリリース前のどちらでも全targetの成功を必須とする。
 
@@ -127,6 +127,8 @@
 - Caddyfile検証後の無停止reloadとCoreDNS hosts再読込を実装する。
 - 登録解除、purge、保持volume識別情報、通常`down`と`down --purge`の差を実装する。
 - `mise run test infrastructure`で実Dockerの代表シナリオを実行する。
+
+`infrastructure` targetは、Caddy・CoreDNS・複数のapp edge networkを実Dockerで起動し、公開経路、名前解決、network分離、reload、反映失敗時の旧設定維持、volume所有範囲を検証する。
 
 **先行テスト:** `U-08`、`D-05`〜`D-07`、`I-01`〜`I-07`、`N-07`〜`N-08`、`E-20`〜`E-22`。
 

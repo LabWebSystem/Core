@@ -41,6 +41,12 @@ func (a *application) composeCommand(arguments ...string) (*exec.Cmd, error) {
 	if a.domain != "" {
 		command.Env = setEnvironment(command.Env, "LWS_BASE_DOMAIN", a.domain)
 	}
+	if a.installationID != "" {
+		command.Env = setEnvironment(command.Env, "LWS_INSTALLATION_ID", a.installationID)
+	}
+	if a.publicAddress != "" {
+		command.Env = setEnvironment(command.Env, "LWS_PUBLIC_ADDRESS", a.publicAddress)
+	}
 	return command, nil
 }
 

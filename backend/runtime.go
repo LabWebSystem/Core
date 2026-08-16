@@ -151,13 +151,15 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return e.markApplicationState(ctx, op.ApplicationID, "STOPPED", "STOPPED", "")
 	case "UNREGISTER":
-		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "down", "--remove-orphans"); err != nil {
-			return err
-		}
 		if e.Docker != nil {
 			if err := e.Docker.DisconnectCaddy(ctx, op.ApplicationID); err != nil {
 				return err
 			}
+		}
+		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "down", "--remove-orphans"); err != nil {
+			return err
+		}
+		if e.Docker != nil {
 			if err := e.Docker.RemoveNetwork(ctx, op.ApplicationID, EdgeNetworkName(op.ApplicationID)); err != nil {
 				return err
 			}

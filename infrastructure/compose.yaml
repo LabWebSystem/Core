@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     environment:
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
+      LWS_INSTALLATION_ID: ${LWS_INSTALLATION_ID:-}
+      LWS_PUBLIC_ADDRESS: ${LWS_PUBLIC_ADDRESS:-}
       LWS_DATABASE_PATH: /var/lib/lws/database.sqlite
       LWS_CADDY_CONTAINER: ${LWS_CADDY_CONTAINER:-lws-caddy-1}
       LWS_COREDNS_CONTAINER: ${LWS_COREDNS_CONTAINER:-lws-coredns-1}
@@ -18,47 +20,63 @@ services:
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --header=Host:api.$${LWS_BASE_DOMAIN} http://127.0.0.1:8080/api/v1/health/live -O - >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
   dashboard:
     image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}
     restart: unless-stopped
     depends_on: [backend]
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
     networks: [lws-internal]
 
   caddy:
     image: caddy:2.10-alpine
+    command: ["sh", "-c", "while [ ! -f /var/lib/lws/generated/Caddyfile ]; do sleep 1; done; exec caddy run --config /var/lib/lws/generated/Caddyfile --adapter caddyfile"]
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
-      - "80:80"
+      - "${LWS_HTTP_PORT:-80}:80"
     volumes:
-      - lws-generated:/etc/caddy:ro
+      - lws-generated:/var/lib/lws/generated:ro
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
 
   coredns:
     image: coredns/coredns:1.12.4
     command: -conf /etc/coredns/Corefile
     ports:
-      - "53:53/tcp"
-      - "53:53/udp"
+      - "${LWS_DNS_TCP_PORT:-53}:53/tcp"
+      - "${LWS_DNS_UDP_PORT:-53}:53/udp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
       - lws-generated:/var/lib/lws/generated
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
 
 volumes:
   lws-backend-data:
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
   lws-generated:
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
 
 networks:
   lws-internal:
     name: lws-internal
     labels:
       com.labwebsystem.owner: lws
+      com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}

@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly HOST_PATH="$PATH"
 
 TMP=""
 
@@ -104,6 +105,9 @@ test_lifecycle() {
     'LWS_BASE_DOMAIN=example.internal' \
     "$TMP/etc/config.env"
 
+  grep -Eq '^LWS_INSTALLATION_ID=[0-9a-f-]{36}$' "$TMP/etc/config.env"
+  grep -Eq '^LWS_PUBLIC_ADDRESS=[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' "$TMP/etc/config.env"
+
   grep -qF \
     'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' \
     "$TMP/docker.log"
@@ -185,6 +189,10 @@ test_down() {
   "$LWSCTL" down \
     --purge \
     --force
+
+  grep -qF \
+    'down --remove-orphans --volumes | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    "$TMP/docker.log"
 
   test ! -e "$TMP/etc"
   test ! -e "$TMP/state"
@@ -414,6 +422,7 @@ main() {
   if [[ "$target" == all || "$target" == infrastructure ]]; then
     (cd "$ROOT" && go test -list '^TestDerived' ./backend/... | grep -q '^TestDerived') || { printf 'infrastructure対象テストがありません\n' >&2; return 1; }
     (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestDerived')
+    PATH="$HOST_PATH" "$ROOT/scripts/test-infrastructure.sh"
   fi
 
   printf 'テスト: 成功\n'

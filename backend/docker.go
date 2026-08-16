@@ -61,8 +61,19 @@ func (d *DockerResources) ValidateCaddyfile(ctx context.Context) error {
 	if d.CaddyContainer == "" {
 		return fmt.Errorf("Caddy containerが設定されていません")
 	}
-	if _, err := d.Runner.Run(ctx, "docker", "exec", d.CaddyContainer, "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"); err != nil {
+	if _, err := d.Runner.Run(ctx, "docker", "exec", d.CaddyContainer, "caddy", "validate", "--config", "/var/lib/lws/generated/Caddyfile", "--adapter", "caddyfile"); err != nil {
 		return fmt.Errorf("Caddyfileの検証に失敗しました")
+	}
+	return nil
+}
+
+func (d *DockerResources) VerifyInfrastructureContainer(ctx context.Context, container string) error {
+	resource, err := d.inspect(ctx, "container", container)
+	if err != nil {
+		return err
+	}
+	if resource.Labels["com.labwebsystem.owner"] != "lws" || resource.Labels["com.labwebsystem.installation-id"] != d.InstallationID {
+		return fmt.Errorf("LWS所有確認に失敗しました")
 	}
 	return nil
 }
@@ -71,7 +82,7 @@ func (d *DockerResources) ReloadCaddy(ctx context.Context) error {
 	if d.CaddyContainer == "" {
 		return fmt.Errorf("Caddy containerが設定されていません")
 	}
-	if _, err := d.Runner.Run(ctx, "docker", "kill", "--signal", "USR1", d.CaddyContainer); err != nil {
+	if _, err := d.Runner.Run(ctx, "docker", "exec", d.CaddyContainer, "caddy", "reload", "--config", "/var/lib/lws/generated/Caddyfile", "--adapter", "caddyfile", "--address", "localhost:2019"); err != nil {
 		return fmt.Errorf("Caddyを再読込できません")
 	}
 	return nil

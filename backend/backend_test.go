@@ -653,7 +653,7 @@ func TestInfrastructureComposeUsesGeneratedCaddyfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "lws-generated:/etc/caddy:ro") || strings.Contains(text, "./Caddyfile:/etc/caddy/Caddyfile:ro") {
+	if !strings.Contains(text, "lws-generated:/var/lib/lws/generated:ro") || strings.Contains(text, "./Caddyfile:/etc/caddy/Caddyfile:ro") {
 		t.Fatal("Caddy is not configured to use the generated Caddyfile")
 	}
 }
@@ -667,7 +667,7 @@ func TestDerivedManagerValidatesAndReloadsInfrastructure(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
-	runner := &recordingRunner{}
+	runner := &recordingRunner{output: []byte(`[{"Id":"infra","Name":"infra","Config":{"Labels":{"com.labwebsystem.owner":"lws","com.labwebsystem.installation-id":"installation"}}}]`)}
 	manager := &DerivedManager{
 		DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.internal", PublicAddress: "192.0.2.10",
 		Docker:         NewDockerResources(runner, "installation"),
@@ -680,8 +680,8 @@ func TestDerivedManagerValidatesAndReloadsInfrastructure(t *testing.T) {
 	for _, call := range runner.calls {
 		joined += strings.Join(call, " ") + "\n"
 	}
-	if !strings.Contains(joined, "exec caddy-container caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile") ||
-		!strings.Contains(joined, "kill --signal USR1 caddy-container") ||
+	if !strings.Contains(joined, "exec caddy-container caddy validate --config /var/lib/lws/generated/Caddyfile --adapter caddyfile") ||
+		!strings.Contains(joined, "exec caddy-container caddy reload --config /var/lib/lws/generated/Caddyfile --adapter caddyfile --address localhost:2019") ||
 		!strings.Contains(joined, "kill --signal HUP coredns-container") {
 		t.Fatalf("infrastructure reload was not performed: %s", joined)
 	}
@@ -948,6 +948,14 @@ func TestDockerConnectsCaddyWithAppAlias(t *testing.T) {
 	got := strings.Join(r.args, " ")
 	if !strings.Contains(got, "network connect --alias lws-app-id lws-app-app-id-edge caddy-container") {
 		t.Fatalf("unexpected command: %s", got)
+	}
+}
+
+func TestDockerRejectsForeignInfrastructureContainer(t *testing.T) {
+	r := &recordingRunner{output: []byte(`[{"Id":"c1","Name":"foreign","Config":{"Labels":{"com.labwebsystem.owner":"other","com.labwebsystem.installation-id":"installation"}}}]`)}
+	d := NewDockerResources(r, "installation")
+	if err := d.VerifyInfrastructureContainer(context.Background(), "foreign"); err == nil {
+		t.Fatal("LWS外のInfrastructure containerを受理しました")
 	}
 }
 

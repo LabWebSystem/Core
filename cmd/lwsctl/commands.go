@@ -254,7 +254,11 @@ func (a *application) down(options []string) error {
 			return errors.New("完全削除をキャンセルしました")
 		}
 	}
-	if err := a.compose("down", "--remove-orphans"); err != nil {
+	downArgs := []string{"down", "--remove-orphans"}
+	if purge {
+		downArgs = append(downArgs, "--volumes")
+	}
+	if err := a.compose(downArgs...); err != nil {
 		return err
 	}
 	if purge {
