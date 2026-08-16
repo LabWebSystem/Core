@@ -25,7 +25,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v err=%v", fk, wal, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 2 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 3 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -34,7 +34,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 2 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 3 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -409,6 +409,31 @@ func TestOperationRequestIDIdempotency(t *testing.T) {
 	}
 	if _, err := CreateOperationWithFingerprint(context.Background(), db, "b", "550e8400-e29b-41d4-a716-446655440002", "CREATE", "second"); err == nil {
 		t.Fatal("異なる内容のrequestId再利用を受け付けました")
+	}
+}
+
+func TestRuntimeUpdateRestoresApplicationOnSourceFailure(t *testing.T) {
+	dir := t.TempDir()
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','old','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"ref":"feature","subdomain":"new"}`
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: &failingCommandRunner{err: fmt.Errorf("git failure")}}
+	err = e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "UPDATE", Payload: payload})
+	if err == nil {
+		t.Fatal("source failureを成功扱いしました")
+	}
+	var subdomain, ref string
+	if err := db.QueryRow(`SELECT subdomain,git_ref FROM applications WHERE id='app-id'`).Scan(&subdomain, &ref); err != nil {
+		t.Fatal(err)
+	}
+	if subdomain != "old" || ref != "main" {
+		t.Fatalf("更新前のアプリ情報を復元できません: subdomain=%s ref=%s", subdomain, ref)
 	}
 }
 

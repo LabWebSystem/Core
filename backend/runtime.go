@@ -25,14 +25,59 @@ func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
 	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}}
 }
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
-	var repo, ref, state string
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state); err != nil {
+	var repo, ref, state, previousName, previousDescription, previousRevision string
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,manifest_name,manifest_description,revision FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &previousName, &previousDescription, &previousRevision); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
 	}
 	root := filepath.Join(e.Root, op.ApplicationID)
 	source := filepath.Join(root, "source")
 	runtime := filepath.Join(root, "runtime")
 	switch op.Kind {
+	case "CONFIGURE":
+		var desired string
+		if err := e.DB.QueryRowContext(ctx, `SELECT desired_state FROM applications WHERE id=?`, op.ApplicationID).Scan(&desired); err != nil {
+			return fmt.Errorf("アプリ状態を取得できません")
+		}
+		if desired != "RUNNING" {
+			return nil
+		}
+		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+			return err
+		}
+		return e.syncDerived(ctx)
+	case "UPDATE":
+		var request struct {
+			Ref       string `json:"ref"`
+			Subdomain string `json:"subdomain"`
+		}
+		if err := json.Unmarshal([]byte(op.Payload), &request); err != nil {
+			return fmt.Errorf("更新内容が不正です")
+		}
+		var oldSubdomain, oldRef string
+		if err := e.DB.QueryRowContext(ctx, `SELECT subdomain,git_ref FROM applications WHERE id=?`, op.ApplicationID).Scan(&oldSubdomain, &oldRef); err != nil {
+			return fmt.Errorf("アプリ情報を取得できません")
+		}
+		newRef, newSubdomain := oldRef, oldSubdomain
+		if request.Ref != "" {
+			newRef = request.Ref
+		}
+		if request.Subdomain != "" {
+			newSubdomain = request.Subdomain
+		}
+		if err := ValidateRef(newRef); err != nil {
+			return err
+		}
+		if err := ValidateSubdomain(newSubdomain); err != nil {
+			return err
+		}
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, newSubdomain, newRef, op.ApplicationID); err != nil {
+			return err
+		}
+		if err := e.Run(ctx, Operation{ApplicationID: op.ApplicationID, Kind: "SYNC"}); err != nil {
+			_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, oldSubdomain, oldRef, op.ApplicationID)
+			return err
+		}
+		return nil
 	case "CREATE", "SYNC":
 		if err := ValidateRef(ref); err != nil {
 			return err
@@ -44,11 +89,15 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			return err
 		}
 		sourceSwapActive := true
+		metadataUpdated := false
 		defer func() {
 			if !sourceSwapActive {
 				return
 			}
 			if runErr != nil {
+				if metadataUpdated {
+					_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, op.ApplicationID)
+				}
 				if err := RestoreSourceSwap(source); err != nil {
 					runErr = fmt.Errorf("sourceを復元できません: %w（元のエラー: %v）", err, runErr)
 				}
@@ -75,6 +124,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, op.ApplicationID); err != nil {
 			return err
 		}
+		metadataUpdated = true
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}

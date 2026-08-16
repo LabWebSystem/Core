@@ -9,17 +9,21 @@ import (
 	"github.com/google/uuid"
 )
 
-type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage string }
+type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage, Payload string }
 
 func CreateOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind string) (Operation, error) {
-	return createOperation(ctx, db, applicationID, requestID, kind, "")
+	return createOperation(ctx, db, applicationID, requestID, kind, "", "")
 }
 
 func CreateOperationWithFingerprint(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint string) (Operation, error) {
-	return createOperation(ctx, db, applicationID, requestID, kind, fingerprint)
+	return createOperation(ctx, db, applicationID, requestID, kind, fingerprint, "")
 }
 
-func createOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint string) (Operation, error) {
+func CreateOperationWithPayload(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint, payload string) (Operation, error) {
+	return createOperation(ctx, db, applicationID, requestID, kind, fingerprint, payload)
+}
+
+func createOperation(ctx context.Context, db *sql.DB, applicationID, requestID, kind, fingerprint, payload string) (Operation, error) {
 	if _, err := uuid.Parse(requestID); err != nil {
 		return Operation{}, errors.New("requestIdはUUIDで指定してください")
 	}
@@ -44,10 +48,10 @@ func createOperation(ctx context.Context, db *sql.DB, applicationID, requestID, 
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	id := uuid.NewString()
-	if _, err = db.ExecContext(ctx, `INSERT INTO operations(id,application_id,request_id,kind,state,error_message,request_fingerprint,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, id, applicationID, requestID, kind, "QUEUED", "", fingerprint, now, now); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO operations(id,application_id,request_id,kind,state,error_message,request_fingerprint,payload,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, applicationID, requestID, kind, "QUEUED", "", fingerprint, payload, now, now); err != nil {
 		return Operation{}, err
 	}
-	return Operation{ID: id, ApplicationID: applicationID, RequestID: requestID, Kind: kind, State: "QUEUED"}, nil
+	return Operation{ID: id, ApplicationID: applicationID, RequestID: requestID, Kind: kind, State: "QUEUED", Payload: payload}, nil
 }
 
 func SetOperationState(ctx context.Context, db *sql.DB, id, state, message string) error {

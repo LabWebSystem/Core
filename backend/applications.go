@@ -2,8 +2,10 @@ package backend
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"net/http"
 	"strings"
@@ -113,6 +115,13 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
 		return
 	}
+	if s.worker != nil {
+		if err := s.worker.Enqueue(op); err != nil {
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", err.Error())
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+			return
+		}
+	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 func (s *Server) operationRoute(w http.ResponseWriter, r *http.Request) {
@@ -175,10 +184,31 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
-	op, err := CreateOperation(r.Context(), s.DB, appID(r), p.RequestID, "UPDATE")
+	if p.Ref != "" {
+		if err := ValidateRef(p.Ref); err != nil {
+			writeValidationError(w, err)
+			return
+		}
+	}
+	if p.Subdomain != "" {
+		if err := ValidateSubdomain(p.Subdomain); err != nil {
+			writeValidationError(w, err)
+			return
+		}
+	}
+	payload, _ := json.Marshal(p)
+	fingerprint := fmt.Sprintf("%x", sha256.Sum256(payload))
+	op, err := CreateOperationWithPayload(r.Context(), s.DB, appID(r), p.RequestID, "UPDATE", fingerprint, string(payload))
 	if err != nil {
 		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
 		return
+	}
+	if s.worker != nil {
+		if err := s.worker.Enqueue(op); err != nil {
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", err.Error())
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+			return
+		}
 	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }

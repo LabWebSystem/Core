@@ -41,6 +41,7 @@
 - CHG-029 | SHIPPED | - | フェーズ1・2の契約とruntime検証を接続する
 - CHG-030 | SHIPPED | - | フェーズ3のOperation・source・Docker境界を実装する
 - CHG-031 | SHIPPED | - | フェーズ3のDocker境界テストを補強する
+- CHG-032 | SHIPPED | - | フェーズ3の更新Operationと失敗時復元を完成させる
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

@@ -408,8 +408,8 @@ main() {
     (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestHTTP')
   fi
   if [[ "$target" == all || "$target" == backend-docker ]]; then
-    (cd "$ROOT" && go test -list 'Test(Compose|Docker|Ownership)' ./backend/... | grep -Eq '^Test(Compose|Docker|Ownership)') || { printf 'backend-docker対象テストがありません\n' >&2; return 1; }
-    (cd "$ROOT" && go test -count=1 ./backend/... -run '^Test(Compose|Docker|Ownership)')
+    (cd "$ROOT" && go test -list 'Test(Runtime|OSRunner|Compose|Docker|Ownership)' ./backend/... | grep -Eq '^Test(Runtime|OSRunner|Compose|Docker|Ownership)') || { printf 'backend-docker対象テストがありません\n' >&2; return 1; }
+    (cd "$ROOT" && go test -count=1 ./backend/... -run '^Test(Runtime|OSRunner|Compose|Docker|Ownership)')
   fi
   if [[ "$target" == all || "$target" == infrastructure ]]; then
     (cd "$ROOT" && go test -list '^TestDerived' ./backend/... | grep -q '^TestDerived') || { printf 'infrastructure対象テストがありません\n' >&2; return 1; }
