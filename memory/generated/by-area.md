@@ -8,6 +8,7 @@
 - ADR-003 | ACCEPTED | - | Backend APIのAIP準拠とOpenAPI契約
 - ADR-004 | ACCEPTED | - | Backendの応答性、SSE、およびOperation実行
 - ADR-005 | ACCEPTED | - | アプリ単位のedge networkとCompose事前検査
+- ADR-006 | ACCEPTED | - | Backend実装技術スタック
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す

@@ -6,6 +6,25 @@ BackendはLWSのアプリ管理と実行状態の唯一の管理者である。H
 
 Backendはアプリの登録、設定値の管理、開始、停止、同期、削除、Gitリポジトリとmanifestの検証、LWS所有Dockerリソースの操作を担当する。パッケージ操作、LWS本体Composeの開始停止、パッケージ管理下ファイルの変更、DNSプロトコルの実装、任意Composeの書換えは担当しない。
 
+### 1.1 実装技術
+
+| 領域 | 採用技術 | 方針 |
+| --- | --- | --- |
+| 言語・HTTP server | Go 1.26、標準`net/http` | Web frameworkを導入しない。`ServeMux`とmiddlewareで実装する |
+| API契約・Go生成 | OpenAPI 3.1、固定versionの`oapi-codegen` | `std-http-server`とstrict server interface、Go型を生成する |
+| OpenAPI入力検証 | `kin-openapi`のrequest validation middleware | OpenAPIから生成したrouteと同じ文書を用い、HTTP requestを検証する |
+| 管理API TypeScript client | OpenAPIから生成する型安全なclient | 外部アプリ向けSDKとは別パッケージとし、SDKへ管理API責務を混ぜない |
+| 永続化 | SQLite、`database/sql`、`modernc.org/sqlite` | CGOを使用しない。ORMを導入せず、SQLを明示的に記述する |
+| schema migration | SQL migrationと`go:embed` | migrationをBackendバイナリへ同梱し、起動時に一度だけ適用する |
+| Docker操作 | Docker Engine Go SDK（`github.com/moby/moby/client`） | network、container、volumeの照会・接続・所有確認・削除に使用する |
+| Compose・Git操作 | `docker compose` CLI、`git` CLI | argv形式と`context` timeoutで実行する。Composeの意味をGoで再実装しない |
+| YAML事前検査 | `gopkg.in/yaml.v3`のNode AST | manifestとComposeをmapへ単純変換せず、anchor、alias、duplicate key、禁止キー、path参照を検査する |
+| 非同期処理 | Backend内worker pool、SQLiteのOperation | Redis、メッセージキュー、外部job基盤を導入しない |
+| ログ | 標準`log/slog` | JSON構造化ログとし、secretを出力しない |
+| テスト | 標準`testing`、`httptest`、fake Docker/CLI | HTTP契約、DB、検証、Docker操作境界を分離してテストする |
+
+依存ライブラリとコード生成器は`go.mod`および生成設定で正確なversionを固定する。`oapi-codegen`はOpenAPI 3.1を扱えるv2.8.0以降を使用し、更新はOpenAPI生成物と互換性テストを伴う変更として扱う。
+
 ## 2. 正本と状態
 
 SQLiteを`/var/lib/lws/database.sqlite`に置き、WAL modeとforeign key制約を有効にする。

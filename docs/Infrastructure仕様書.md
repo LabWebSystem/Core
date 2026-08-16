@@ -26,6 +26,18 @@ Docker socketはDocker daemonを完全に操作できる強い権限である。
 
 Backendはホストポートを公開せず、管理HTTP APIはCaddy経由でだけ到達可能にする。CaddyはCORSを許可せず、状態変更APIにJSONの`Content-Type`と許可済み`Host`を要求する。`Origin` headerがあるブラウザ要求は許可済みoriginだけを受け付ける。これはLAN上の直接的な管理操作を制限する認証機構ではなく、別originのWebページがブラウザを踏み台に状態変更することを防ぐための入力検査である。
 
+### 2.1 実行技術
+
+| 対象 | 採用技術 | 方針 |
+| --- | --- | --- |
+| LWS本体の実行基盤 | Docker Compose | LWS本体と登録アプリの正規オーケストレーター |
+| Backend実行イメージ | Goバイナリを含む最小Linuxイメージ | `git`、Docker CLI、Docker Compose pluginを同梱する。BackendはDocker socketだけを利用する |
+| HTTP Reverse Proxy | Caddy公式イメージ | CaddyfileからHTTPを公開する |
+| DNS | CoreDNS公式イメージ | hosts pluginとforwardで名前解決する |
+| イメージ識別 | release versionとdigest | リリースごとにLWS本体イメージを同一versionへ揃え、実行用Composeではtagと一致するdigestを指定する |
+
+Backend、Caddy、CoreDNSの実行イメージは、公式またはLWSが所有するGHCRイメージを使用し、digestを固定する。`latest`タグは使用しない。BackendイメージはDocker Composeの仕様どおりCLIを実行するため、distrolessイメージを使用しない。
+
 ## 3. Linux上の配置
 
 ### 3.1 パッケージ管理下

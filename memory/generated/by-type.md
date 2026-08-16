@@ -8,6 +8,7 @@
 - ADR-003 | ACCEPTED | - | Backend APIのAIP準拠とOpenAPI契約
 - ADR-004 | ACCEPTED | - | Backendの応答性、SSE、およびOperation実行
 - ADR-005 | ACCEPTED | - | アプリ単位のedge networkとCompose事前検査
+- ADR-006 | ACCEPTED | - | Backend実装技術スタック
 
 ## BUG
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
