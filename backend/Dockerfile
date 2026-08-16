@@ -9,7 +9,5 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/lws-backend ./back
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates docker-cli docker-cli-compose git
 COPY --from=build /out/lws-backend /usr/local/bin/lws-backend
-RUN addgroup -S lws && adduser -S -G lws lws
-USER lws
 EXPOSE 8080
 ENTRYPOINT ["lws-backend"]

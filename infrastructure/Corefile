@@ -1,3 +1,6 @@
 .:53 {
+	hosts /var/lib/lws/generated/hosts {
+		fallthrough
+	}
 	forward . 8.8.8.8 1.1.1.1
 }

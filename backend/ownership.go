@@ -13,4 +13,5 @@ func VerifyOwnership(labels ResourceLabels, installation, app string) error {
 	}
 	return nil
 }
-func ProjectName(app string) string { return "lws-app-" + strings.ToLower(app) }
+func ProjectName(app string) string     { return "lws-app-" + strings.ToLower(app) }
+func EdgeNetworkName(app string) string { return ProjectName(app) + "-edge" }

@@ -10,9 +10,11 @@ import (
 )
 
 type RuntimeExecutor struct {
-	DB     *sql.DB
-	Root   string
-	Runner CommandRunner
+	DB      *sql.DB
+	Root    string
+	Runner  CommandRunner
+	Docker  *DockerResources
+	Derived *DerivedManager
 }
 
 func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
@@ -51,9 +53,15 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) error {
 		if err := e.GenerateOverride(op.ApplicationID, manifest.Public.Service, filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
-		return e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d")
+		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+			return err
+		}
+		return e.syncDerived(ctx)
 	case "START", "REBUILD":
-		return e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d")
+		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+			return err
+		}
+		return e.syncDerived(ctx)
 	case "STOP":
 		return e.reconcile(ctx, op.ApplicationID, source, runtime, "stop")
 	case "UNREGISTER":
@@ -63,7 +71,10 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) error {
 		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='UNREGISTERED',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
 			return err
 		}
-		return os.RemoveAll(root)
+		if err := os.RemoveAll(root); err != nil {
+			return err
+		}
+		return e.syncDerived(ctx)
 	case "PURGE":
 		if state != "UNREGISTERED" {
 			return fmt.Errorf("登録解除済みアプリだけ完全削除できます")
@@ -73,6 +84,15 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) error {
 	default:
 		return fmt.Errorf("未対応のOperationです: %s", op.Kind)
 	}
+}
+func (e *RuntimeExecutor) syncDerived(ctx context.Context) error {
+	if e.Derived == nil {
+		return nil
+	}
+	if err := e.Derived.Validate(); err != nil {
+		return err
+	}
+	return e.Derived.Sync(ctx)
 }
 func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime string, action ...string) error {
 	compose := filepath.Join(source, "compose.yaml")
@@ -91,6 +111,11 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 			return err
 		}
 	}
+	if len(action) > 0 && action[0] == "up" && e.Docker != nil {
+		if err := e.Docker.EnsureNetwork(ctx, id); err != nil {
+			return err
+		}
+	}
 	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override}
 	args = append(args, action...)
 	if _, err := e.Runner.Run(ctx, "docker", args...); err != nil {
@@ -99,7 +124,10 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 	return nil
 }
 func (e *RuntimeExecutor) GenerateOverride(id, service, path string) error {
-	model := map[string]any{"services": map[string]any{service: map[string]any{"networks": map[string]any{"lws-edge": map[string]any{"aliases": []string{"lws-" + id}}}}}}
+	model := map[string]any{
+		"services": map[string]any{service: map[string]any{"networks": map[string]any{"lws-edge": map[string]any{"aliases": []string{"lws-" + id}}}}},
+		"networks": map[string]any{"lws-edge": map[string]any{"external": true, "name": EdgeNetworkName(id)}},
+	}
 	data, err := json.Marshal(model)
 	if err != nil {
 		return err

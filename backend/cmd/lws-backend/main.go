@@ -41,7 +41,12 @@ func main() {
 		slog.Error("アプリ領域を作成できません", "error", err)
 		os.Exit(1)
 	}
-	if err := http.ListenAndServe(addr, backend.NewServer(db, backend.NewRuntimeExecutor(db, appsRoot).Run).Handler()); err != nil {
+	runtime := backend.NewRuntimeExecutor(db, appsRoot)
+	runtime.Docker = backend.NewDockerResources(runtime.Runner, os.Getenv("LWS_INSTALLATION_ID"))
+	if domain, address := os.Getenv("LWS_BASE_DOMAIN"), os.Getenv("LWS_PUBLIC_ADDRESS"); address != "" {
+		runtime.Derived = &backend.DerivedManager{DB: db, GeneratedDir: "/var/lib/lws/generated", BaseDomain: domain, PublicAddress: address}
+	}
+	if err := http.ListenAndServe(addr, backend.NewServer(db, runtime.Run).Handler()); err != nil {
 		slog.Error("Backend停止", "error", err)
 		os.Exit(1)
 	}

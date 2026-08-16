@@ -122,14 +122,15 @@ func TestDerivedConfigIsAtomic(t *testing.T) {
 }
 
 type recordingRunner struct {
-	name string
-	args []string
+	name   string
+	args   []string
+	output []byte
 }
 
 func (r *recordingRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	r.name = name
 	r.args = args
-	return nil, nil
+	return r.output, nil
 }
 func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 	dir := t.TempDir()
@@ -152,5 +153,16 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 	got := strings.Join(r.args, " ")
 	if !strings.Contains(got, "--project-name lws-app-app-id") || !strings.Contains(got, "-f "+filepath.Join(source, "compose.yaml")) || strings.Contains(got, "--volumes") {
 		t.Fatal(got)
+	}
+}
+
+func TestDockerResourceNeverRemovesForeignNetwork(t *testing.T) {
+	r := &recordingRunner{output: []byte(`[{"Id":"n1","Name":"foreign","Labels":{"com.labwebsystem.owner":"other"}}]`)}
+	d := NewDockerResources(r, "installation")
+	if err := d.RemoveNetwork(context.Background(), "app", "foreign"); err == nil {
+		t.Fatal("外部networkを削除できました")
+	}
+	if strings.Contains(strings.Join(r.args, " "), "network rm") {
+		t.Fatal("外部networkへの削除が発行されました")
 	}
 }

@@ -11,6 +11,8 @@ services:
       LWS_DATABASE_PATH: /var/lib/lws/database.sqlite
     volumes:
       - lws-backend-data:/var/lib/lws
+      - lws-generated:/var/lib/lws/generated
+      - /var/run/docker.sock:/var/run/docker.sock
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
@@ -28,6 +30,7 @@ services:
       - "80:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - lws-generated:/var/lib/lws/generated
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
@@ -40,12 +43,16 @@ services:
       - "53:53/udp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
+      - lws-generated:/var/lib/lws/generated
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
 
 volumes:
   lws-backend-data:
+    labels:
+      com.labwebsystem.owner: lws
+  lws-generated:
     labels:
       com.labwebsystem.owner: lws
 
