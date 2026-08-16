@@ -63,3 +63,4 @@
 - CHG-036 | SHIPPED | - | フェーズ0〜5の未達項目をテスト先行で補完する
 - CHG-037 | SHIPPED | - | Backendの未検証境界を自動テストで補完する
 - CHG-038 | SHIPPED | - | リリース時のBackend・Dashboard digestをパッケージへ反映する
+- CHG-039 | SHIPPED | - | CIのCLIテストで実ホストport競合を分離する

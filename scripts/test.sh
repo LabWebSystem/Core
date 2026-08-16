@@ -43,6 +43,14 @@ EOF
 
   chmod +x "$TMP/bin/docker"
 
+  # CI runner上のDNS resolverなどに53番ポートを占有されていても、
+  # CLIのライフサイクルテストは「空いているホスト」を決定的に再現する。
+  cat >"$TMP/bin/ss" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+  chmod +x "$TMP/bin/ss"
+
   printf '0.1.2\n' >"$TMP/version"
 
   cat >"$TMP/update-installer" <<'EOF'
