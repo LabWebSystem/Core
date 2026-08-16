@@ -144,7 +144,7 @@ test_down() {
     "$TMP/down"
 
   grep -qF \
-    'down --remove-orphans' \
+    'down --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
   test -f "$TMP/etc/config.env"

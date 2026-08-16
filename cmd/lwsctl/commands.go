@@ -218,6 +218,12 @@ func (a *application) down(options []string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.loadConfig(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errors.New("設定を作成するため、先にstartを実行してください")
+		}
+		return err
+	}
 	if purge && !force {
 		confirmed, err := confirm("LWSの設定と永続データを削除します。続行しますか?")
 		if err != nil {

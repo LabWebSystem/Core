@@ -13,3 +13,4 @@
 - BUG-004 | VERIFIED | cli | 設定済みのLWSバージョンをComposeへ渡さない
 - BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない
 - BUG-006 | VERIFIED | installer | アーキテクチャ名なしのRPMをインストーラーが見つけられない
+- BUG-007 | VERIFIED | cli | downが保存済みのベースドメインをComposeへ渡さない
