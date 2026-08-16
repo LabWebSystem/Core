@@ -120,3 +120,37 @@ func TestDerivedConfigIsAtomic(t *testing.T) {
 		t.Fatal(string(data))
 	}
 }
+
+type recordingRunner struct {
+	name string
+	args []string
+}
+
+func (r *recordingRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	r.name = name
+	r.args = args
+	return nil, nil
+}
+func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source")
+	runtime := filepath.Join(dir, "runtime")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtime, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services: {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r := &recordingRunner{}
+	e := &RuntimeExecutor{Root: dir, Runner: r}
+	if err := e.reconcile(context.Background(), "app-id", source, runtime, "up", "-d"); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(r.args, " ")
+	if !strings.Contains(got, "--project-name lws-app-app-id") || !strings.Contains(got, "-f "+filepath.Join(source, "compose.yaml")) || strings.Contains(got, "--volumes") {
+		t.Fatal(got)
+	}
+}

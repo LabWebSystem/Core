@@ -24,12 +24,22 @@ services:
 
   caddy:
     image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws
 
   coredns:
     image: coredns/coredns:1.12.4
+    command: -conf /etc/coredns/Corefile
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+    volumes:
+      - ./Corefile:/etc/coredns/Corefile:ro
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws

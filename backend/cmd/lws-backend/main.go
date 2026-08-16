@@ -33,7 +33,15 @@ func main() {
 		addr = ":8080"
 	}
 	slog.Info("Backendを起動しました", "address", addr)
-	if err := http.ListenAndServe(addr, backend.NewServer(db, nil).Handler()); err != nil {
+	appsRoot := os.Getenv("LWS_APPS_ROOT")
+	if appsRoot == "" {
+		appsRoot = "/var/lib/lws/apps"
+	}
+	if err := os.MkdirAll(appsRoot, 0700); err != nil {
+		slog.Error("アプリ領域を作成できません", "error", err)
+		os.Exit(1)
+	}
+	if err := http.ListenAndServe(addr, backend.NewServer(db, backend.NewRuntimeExecutor(db, appsRoot).Run).Handler()); err != nil {
 		slog.Error("Backend停止", "error", err)
 		os.Exit(1)
 	}

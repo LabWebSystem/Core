@@ -44,3 +44,4 @@
 - CHG-019 | SHIPPED | - | Backend基盤とテストtargetを追加する
 - CHG-020 | SHIPPED | - | Backend操作APIとworker境界を追加する
 - CHG-021 | SHIPPED | - | Composeの必須環境変数展開をBackend検証へ移す
+- CHG-022 | SHIPPED | - | Backend workerからCompose実行器へ接続する

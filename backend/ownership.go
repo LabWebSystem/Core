@@ -13,4 +13,4 @@ func VerifyOwnership(labels ResourceLabels, installation, app string) error {
 	}
 	return nil
 }
-func ProjectName(app string) string { app = strings.ReplaceAll(app, "-", ""); return "lws-app-" + app }
+func ProjectName(app string) string { return "lws-app-" + strings.ToLower(app) }
