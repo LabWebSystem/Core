@@ -888,7 +888,7 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 
 func TestOSRunnerUsesArgvAndTimeout(t *testing.T) {
 	started := time.Now()
-	_, err := (OSRunner{Timeout: 25 * time.Millisecond}).Run(context.Background(), "sh", "-c", "sleep 1")
+	_, err := (OSRunner{Timeout: 25 * time.Millisecond}).Run(context.Background(), "sleep", "1")
 	if err == nil {
 		t.Fatal("timeoutなしでコマンドが完了しました")
 	}
