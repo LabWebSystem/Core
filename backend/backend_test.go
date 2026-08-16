@@ -180,6 +180,25 @@ func TestHTTPRejectsUnexpectedHost(t *testing.T) {
 	}
 }
 
+func TestHTTPUsesOpenAPISchemaValidationBeforeHandler(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	(&Server{DB: db}).Handler().ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("OpenAPI schema違反を受理しました: status=%d body=%s", w.Code, w.Body.String())
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM applications`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("schema違反でDB副作用が発生しました: count=%d err=%v", count, err)
+	}
+}
+
 func TestHTTPReadyRejectsClosedDatabase(t *testing.T) {
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
@@ -776,6 +795,9 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 	if err := os.MkdirAll(source, 0700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(runtime, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -1004,6 +1026,85 @@ func TestDockerPurgeRemovesOnlyOwnedVolumes(t *testing.T) {
 	}
 }
 
+func TestRuntimeReconcileActiveReconnectsRunningApplications(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,desired_state,observed_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','RUNNING','RUNNING',datetime('now'),datetime('now'))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &sequenceRunner{outputs: [][]byte{
+		[]byte(`[{"Name":"lws-app-app-id-edge","Labels":{"com.labwebsystem.owner":"lws","com.labwebsystem.installation-id":"installation","com.labwebsystem.app-id":"app-id"}}]`),
+		nil,
+	}}
+	e := &RuntimeExecutor{DB: db, Docker: NewDockerResources(r, "installation")}
+	if err := e.ReconcileActive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	joined := make([]string, 0, len(r.calls))
+	for _, call := range r.calls {
+		joined = append(joined, strings.Join(call, " "))
+	}
+	all := strings.Join(joined, "\n")
+	if !strings.Contains(all, "network inspect lws-app-app-id-edge") || !strings.Contains(all, "network connect --alias lws-app-id lws-app-app-id-edge lws-caddy-1") {
+		t.Fatalf("起動時のedge network再接続がありません: %s", all)
+	}
+}
+
+func TestRuntimeReconcileActiveDoesNotConnectStoppedApplications(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,desired_state,observed_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','STOPPED','STOPPED',datetime('now'),datetime('now'))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &recordingRunner{}
+	e := &RuntimeExecutor{DB: db, Docker: NewDockerResources(r, "installation")}
+	if err := e.ReconcileActive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 0 {
+		t.Fatalf("停止中アプリを再接続しました: %v", r.calls)
+	}
+}
+
+func TestPurgeRequiresConfirmationAndRejectsActiveApplication(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, state := range []string{"ACTIVE", "UNREGISTERED"} {
+		_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := (&Server{DB: db}).Handler()
+	for _, tc := range []struct {
+		path string
+		body string
+		want int
+	}{
+		{path: "/api/v1/applications/app-UNREGISTERED:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440000"}`, want: 400},
+		{path: "/api/v1/applications/app-ACTIVE:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440001","confirm":true}`, want: 400},
+	} {
+		r := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Fatalf("path=%s status=%d body=%s", tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestRuntimeCleansCaddyConnectionAfterComposeFailure(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "source")
@@ -1041,6 +1142,85 @@ func TestRuntimeCleansCaddyConnectionAfterComposeFailure(t *testing.T) {
 	}
 }
 
+func TestRuntimeUnregisterKeepsCaddyConnectedWhenComposeDownFails(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "app-id")
+	source := filepath.Join(root, "source")
+	runtime := filepath.Join(root, "runtime")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtime, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services:\n  web:\n    image: example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "lws.manifest.yaml"), []byte("apiVersion: lws/v1\nmetadata:\n  name: App\n  description: test\npublic:\n  service: web\n  port: 3000\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,desired_state,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','RUNNING','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	docker := &dockerBoundaryRunner{}
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: &composeFailureRunner{}, Docker: NewDockerResources(docker, "installation")}
+	err = e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "UNREGISTER"})
+	if err == nil {
+		t.Fatal("Compose停止失敗を成功扱いしました")
+	}
+	for _, call := range docker.calls {
+		if strings.Contains(call, "network disconnect") {
+			t.Fatalf("Compose停止前にCaddyを切断しました: %s", call)
+		}
+	}
+}
+
+func TestRuntimeUnregisterPreservesSourceAndRegisterRestoresIt(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "app-id")
+	source := filepath.Join(root, "source")
+	runtime := filepath.Join(root, "runtime")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtime, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services:\n  web:\n    image: example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: &composeSuccessRunner{}}
+	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "UNREGISTER"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(source, "compose.yaml")); err != nil {
+		t.Fatalf("登録解除でsourceを削除しました: %v", err)
+	}
+	var state string
+	if err := db.QueryRow(`SELECT registration_state FROM applications WHERE id='app-id'`).Scan(&state); err != nil || state != "UNREGISTERED" {
+		t.Fatalf("登録解除状態=%q err=%v", state, err)
+	}
+	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "REGISTER"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT registration_state FROM applications WHERE id='app-id'`).Scan(&state); err != nil || state != "ACTIVE" {
+		t.Fatalf("再登録状態=%q err=%v", state, err)
+	}
+}
+
 type errorRunner struct {
 	output []byte
 	calls  [][]string
@@ -1067,6 +1247,12 @@ type sequenceRunner struct {
 }
 
 type composeFailureRunner struct{}
+
+type composeSuccessRunner struct{}
+
+func (r *composeSuccessRunner) Run(_ context.Context, _ string, _ ...string) ([]byte, error) {
+	return nil, nil
+}
 
 func (r *composeFailureRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	if name == "docker" && len(args) > 0 && args[0] == "compose" {

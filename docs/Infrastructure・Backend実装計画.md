@@ -64,7 +64,7 @@
 
 **変更:**
 
-- `backend/openapi.yaml`をAPI契約の正本として追加し、固定versionの生成器からserver interface、型、管理clientを生成する。
+- `backend/openapi.yaml`をAPI契約の正本として追加し、固定versionの生成器からserver interfaceと型を生成する。request schemaは既存の`kin-openapi`で入口検証する。管理clientはDashboard以降の責務とする。
 - Go Backendの起動処理、設定読込、SQLite接続、migration、`/health/live`、`/health/ready`を実装する。
 - DBでWAL modeとforeign key制約を有効にし、起動時にmigrationを一度だけ適用する。
 - `mise run test backend`と`mise run test backend-http`の土台を追加する。
@@ -125,17 +125,19 @@
 - LWS本体ComposeへBackend、Caddy、CoreDNS、internal network、必要な永続領域を追加する。
 - SQLiteからhosts、Caddyfile、LWS用overrideを一時ファイルへ生成し、atomic renameで反映する。
 - Caddyfile検証後の無停止reloadとCoreDNS hosts再読込を実装する。
-- 登録解除、purge、保持volume識別情報、通常`down`と`down --purge`の差を実装する。
+- 登録解除、再登録、purge、Docker labelによる所有確認、通常`down`と`down --purge`の差を実装する。
+- Backend起動時にSQLiteを正本としてACTIVEアプリのedge networkとCaddy接続を再調整し、Caddy起動待ちを再試行する。
+- `down --purge`はLWS所有・installation ID一致の全アプリresourceを停止後に削除し、外部Docker resourceを対象にしない。purge APIは`confirm:true`を要求する。
 - `mise run test infrastructure`で実Dockerの代表シナリオを実行する。
 
 `infrastructure` targetは、Caddy・CoreDNS・複数のapp edge networkを実Dockerで起動し、公開経路、名前解決、network分離、reload、反映失敗時の旧設定維持、volume所有範囲を検証する。
 
-**先行テスト:** `U-08`、`D-05`〜`D-07`、`I-01`〜`I-07`、`N-07`〜`N-08`、`E-20`〜`E-22`。
+**先行テスト:** `U-08`、`D-05`〜`D-07`、`I-01`〜`I-07`、`N-07`〜`N-08`、`N-11`、`E-20`〜`E-22`。
 
 **完了条件:**
 
 - CaddyまたはCoreDNSの反映失敗時に、旧hosts・旧Caddyfile・旧公開経路を維持する。
-- 登録解除ではnamed volumeを保持し、purgeでは所有確認済みvolumeだけを削除する。
+- 登録解除ではcontainer・edge networkだけを削除してsource・runtime・設定・named volume・UNREGISTERED記録を保持し、再登録で復帰できる。purgeでは所有確認済みresourceだけを削除する。
 - 実Compose統合テストで、DNS、Caddy経由の公開、app間通信拒否を確認する。
 
 ### フェーズ5: リアルタイム通知と耐障害性

@@ -38,6 +38,9 @@ func (a generatedAPI) RebuildApplication(w http.ResponseWriter, r *http.Request,
 func (a generatedAPI) StartApplication(w http.ResponseWriter, r *http.Request, application string) {
 	a.server.appOperation(w, withApplicationPath(r, application))
 }
+func (a generatedAPI) RegisterApplication(w http.ResponseWriter, r *http.Request, application string) {
+	a.server.appOperation(w, withApplicationPath(r, application))
+}
 func (a generatedAPI) StopApplication(w http.ResponseWriter, r *http.Request, application string) {
 	a.server.appOperation(w, withApplicationPath(r, application))
 }

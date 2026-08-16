@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/getkin/kin-openapi/routers/legacy"
+
 	"github.com/google/uuid"
 )
 
@@ -57,7 +60,33 @@ func (s *Server) Handler() http.Handler {
 		http.NotFound(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
-	return requestBoundary(mux, s.AllowedHost)
+	return requestBoundary(openAPIValidation(mux), s.AllowedHost)
+}
+
+func openAPIValidation(next http.Handler) http.Handler {
+	doc, err := GetSwagger()
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeAPIError(w, http.StatusInternalServerError, "OPENAPI_INVALID", "OpenAPI契約を読み込めません", "")
+		})
+	}
+	router, err := legacy.NewRouter(doc)
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeAPIError(w, http.StatusInternalServerError, "OPENAPI_INVALID", "OpenAPI契約を検証できません", "")
+		})
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		route, params, err := router.FindRoute(r)
+		if err == nil {
+			input := &openapi3filter.RequestValidationInput{Request: r, PathParams: params, Route: route}
+			if err := openapi3filter.ValidateRequest(r.Context(), input); err != nil {
+				writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "API要求がOpenAPI契約に適合しません", "body")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {

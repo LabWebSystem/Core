@@ -16,6 +16,18 @@ setup_cli_environment() {
   cat >"$TMP/bin/docker" <<'EOF'
 #!/bin/sh
 case "$*" in
+  *'ps -q --filter label=com.labwebsystem.owner=lws --filter label=com.labwebsystem.installation-id='*)
+    printf 'owned-system-container\n'
+    ;;
+  *'ps -aq --filter label=com.labwebsystem.owner=lws --filter label=com.labwebsystem.installation-id='*'--filter label=com.labwebsystem.app-id'*)
+    printf 'owned-app-container\n'
+    ;;
+  *'network ls -q --filter label=com.labwebsystem.owner=lws --filter label=com.labwebsystem.installation-id='*'--filter label=com.labwebsystem.app-id'*)
+    printf 'owned-app-network\n'
+    ;;
+  *'volume ls -q --filter label=com.labwebsystem.owner=lws --filter label=com.labwebsystem.installation-id='*'--filter label=com.labwebsystem.app-id'*)
+    printf 'owned-app-volume\n'
+    ;;
   *'ps --status running --services'*)
     if [ -n "${LWS_TEST_RUNNING_SERVICES:-}" ]; then
       printf '%s\n' "$LWS_TEST_RUNNING_SERVICES"
@@ -138,6 +150,13 @@ test_domain_change() {
     "$TMP/etc/config.env"
 }
 
+test_config_migration() {
+  printf 'LWS_BASE_DOMAIN=changed.internal\nLWS_VERSION=0.1.2\n' >"$TMP/etc/config.env"
+  LWS_PUBLIC_ADDRESS=192.0.2.10 "$LWSCTL" status >"$TMP/status-migrated"
+  grep -Eq '^LWS_INSTALLATION_ID=[0-9a-f-]{36}$' "$TMP/etc/config.env"
+  grep -qx 'LWS_PUBLIC_ADDRESS=192.0.2.10' "$TMP/etc/config.env"
+}
+
 test_update() {
 	: >"$TMP/docker.log"
 
@@ -193,6 +212,16 @@ test_down() {
   grep -qF \
     'down --remove-orphans --volumes | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
+
+  stop_line="$(grep -nF 'stop owned-system-container' "$TMP/docker.log" | cut -d: -f1)"
+  down_line="$(grep -nF 'compose --project-name lws --file' "$TMP/docker.log" | tail -1 | cut -d: -f1)"
+  app_remove_line="$(grep -nF 'rm -f owned-app-container' "$TMP/docker.log" | cut -d: -f1)"
+  network_remove_line="$(grep -nF 'network rm owned-app-network' "$TMP/docker.log" | cut -d: -f1)"
+  volume_remove_line="$(grep -nF 'volume rm owned-app-volume' "$TMP/docker.log" | cut -d: -f1)"
+  test "$stop_line" -lt "$down_line"
+  test "$down_line" -lt "$app_remove_line"
+  test "$app_remove_line" -lt "$network_remove_line"
+  test "$network_remove_line" -lt "$volume_remove_line"
 
   test ! -e "$TMP/etc"
   test ! -e "$TMP/state"
@@ -394,6 +423,7 @@ main() {
     test_help
     test_lifecycle
     test_domain_change
+    test_config_migration
     test_update
     test_update_running
     test_down

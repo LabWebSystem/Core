@@ -254,6 +254,11 @@ func (a *application) down(options []string) error {
 			return errors.New("完全削除をキャンセルしました")
 		}
 	}
+	if purge {
+		if err := a.stopOwnedContainers(); err != nil {
+			return err
+		}
+	}
 	downArgs := []string{"down", "--remove-orphans"}
 	if purge {
 		downArgs = append(downArgs, "--volumes")
@@ -262,6 +267,9 @@ func (a *application) down(options []string) error {
 		return err
 	}
 	if purge {
+		if err := a.purgeOwnedAppResources(); err != nil {
+			return err
+		}
 		if err := os.RemoveAll(a.paths.configDir); err != nil {
 			return err
 		}
@@ -274,6 +282,20 @@ func (a *application) down(options []string) error {
 		return nil
 	}
 	fmt.Println("LWSの実行環境を削除しました")
+	return nil
+}
+
+func (a *application) stopOwnedContainers() error {
+	containers, err := a.dockerOutput("ps", "-q", "--filter", "label=com.labwebsystem.owner=lws", "--filter", "label=com.labwebsystem.installation-id="+a.installationID)
+	if err != nil {
+		return errors.New("LWS管理container一覧を取得できません")
+	}
+	if ids := strings.Fields(string(containers)); len(ids) > 0 {
+		args := append([]string{"stop"}, ids...)
+		if err := a.docker(args...); err != nil {
+			return errors.New("LWS管理containerを停止できません")
+		}
+	}
 	return nil
 }
 

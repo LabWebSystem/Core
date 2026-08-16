@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/LabWebSystem/Core/backend"
 )
@@ -71,6 +72,17 @@ func main() {
 		derived.CaddyContainer = runtime.Docker.CaddyContainer
 		derived.CoreDNSContainer = os.Getenv("LWS_COREDNS_CONTAINER")
 		runtime.Derived = derived
+		go func() {
+			for attempt := 0; attempt < 60; attempt++ {
+				if err := runtime.ReconcileStartup(context.Background()); err == nil {
+					slog.Info("起動時のDocker・派生設定再調整が完了しました")
+					return
+				} else if attempt == 59 {
+					slog.Error("起動時のDocker・派生設定再調整に失敗しました", "error", err)
+				}
+				<-time.After(time.Second)
+			}
+		}()
 	}
 	server := backend.NewServer(db, runtime.Run)
 	server.SecretKey = secretKey

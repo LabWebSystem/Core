@@ -67,6 +67,7 @@ func (a *application) loadConfig() error {
 	a.domain = values["LWS_BASE_DOMAIN"]
 	a.installationID = values["LWS_INSTALLATION_ID"]
 	a.publicAddress = values["LWS_PUBLIC_ADDRESS"]
+	needsMigration := a.installationID == "" || a.publicAddress == ""
 	if a.installationID == "" {
 		a.installationID = uuid.NewString()
 	}
@@ -76,6 +77,11 @@ func (a *application) loadConfig() error {
 			return err
 		}
 		a.publicAddress = address
+	}
+	if needsMigration {
+		if err := a.writeConfig(a.domain); err != nil {
+			return fmt.Errorf("LWS設定を移行できません: %w", err)
+		}
 	}
 	return nil
 }
@@ -98,7 +104,28 @@ func (a *application) writeConfig(domain string) error {
 		a.publicAddress = address
 	}
 	contents := fmt.Sprintf("LWS_BASE_DOMAIN=%s\nLWS_VERSION=%s\nLWS_INSTALLATION_ID=%s\nLWS_PUBLIC_ADDRESS=%s\n", domain, a.version, a.installationID, a.publicAddress)
-	if err := os.WriteFile(a.configFile(), []byte(contents), 0o644); err != nil {
+	temporary, err := os.CreateTemp(a.paths.configDir, ".config.env-*")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.WriteString(contents); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryName, a.configFile()); err != nil {
 		return err
 	}
 	a.domain = domain

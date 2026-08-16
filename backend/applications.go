@@ -271,7 +271,7 @@ func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind := "OPERATION"
-	for _, name := range []string{"start", "stop", "sync", "rebuild", "purge"} {
+	for _, name := range []string{"register", "start", "stop", "sync", "rebuild", "purge"} {
 		if strings.HasSuffix(r.URL.Path, ":"+name) {
 			kind = strings.ToUpper(name)
 		}
@@ -298,20 +298,24 @@ func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	id := appID(r)
 	var exists string
 	clause := " AND registration_state='ACTIVE'"
-	if strings.HasSuffix(r.URL.Path, ":purge") {
-		clause = ""
+	if strings.HasSuffix(r.URL.Path, ":purge") || strings.HasSuffix(r.URL.Path, ":register") {
+		clause = " AND registration_state='UNREGISTERED'"
 	}
 	if err := s.DB.QueryRowContext(context.Background(), `SELECT id FROM applications WHERE id=?`+clause, id).Scan(&exists); err != nil {
 		return Operation{}, err
 	}
 	var request struct {
 		RequestID string `json:"requestId"`
+		Confirm   *bool  `json:"confirm"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		return Operation{}, errors.New("requestIdはJSON bodyで指定してください")
 	}
 	if err := ValidateRequestID(request.RequestID); err != nil {
 		return Operation{}, errors.New("requestIdはUUIDで指定してください")
+	}
+	if kind == "PURGE" && (request.Confirm == nil || !*request.Confirm) {
+		return Operation{}, errors.New("purgeにはconfirm:trueが必要です")
 	}
 	return CreateOperation(r.Context(), s.DB, id, request.RequestID, kind)
 }

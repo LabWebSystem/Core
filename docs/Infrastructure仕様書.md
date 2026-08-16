@@ -35,7 +35,7 @@
 | 生成物 | `/var/lib/lws/generated/Caddyfile`、`hosts` | SQLiteから生成する派生物 |
 
 - アプリ永続データはhost bind mountではなくDocker named volumeだけに置く。
-- 通常の`lwsctl down`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl down --purge`だけが確認後に削除する。パッケージの削除はAPT / DNFへ委譲する。
+- 通常の`lwsctl down`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl down --purge`は確認後、LWSの全アプリと本体を停止し、現在のinstallation IDとLWS所有labelで識別できるcontainer、network、named volume、設定、状態を完全削除する。別のDockerシステムの資源は削除しない。パッケージの削除はAPT / DNFへ委譲する。
 
 ## 4. ネットワーク、DNS、Reverse Proxy
 
@@ -52,6 +52,7 @@
 - `config.env`には`LWS_BASE_DOMAIN`、`LWS_VERSION`、`LWS_INSTALLATION_ID`、`LWS_PUBLIC_ADDRESS`を保存する。初回`lwsctl start --domain`はデフォルト経路のIPv4を保存し、`LWS_PUBLIC_ADDRESS`があれば優先する。IPを一意に決められなければ失敗する。
 - Backendは起動時および状態変更後に、SQLiteの有効アプリ一覧からhostsとCaddyfileを一時ファイルへ生成しatomic renameする。hostsは`api.<base-domain>`と各アプリURLを`LWS_PUBLIC_ADDRESS`へ対応付ける。CaddyfileにはAPIのReverse Proxyとmanifestの公開service・portを反映する。
 - CoreDNSはhosts再読込で反映する。Caddyは生成volume上のCaddyfileを検証後、所有確認済みコンテナのadmin APIへ`caddy reload`を実行して無停止再読込する。いずれかの反映に失敗した場合は既存設定を維持する。
+- Backend起動時は、SQLiteで`ACTIVE`かつ`desired_state=RUNNING`のアプリについて、edge networkの存在とCaddy接続をDocker実状態と照合し、不足部分だけを再作成・再接続する。Caddy起動待ちの間は再試行し、DBの状態を先に変更しない。
 - LWSをDNSとして配布するDHCP設定は運用者の責務とする。LWSサーバーIPは固定またはDHCP予約を推奨する。`lwsctl start`は53/tcp・53/udp競合時に起動しない。
 
 ## 5. 登録アプリ契約

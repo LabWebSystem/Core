@@ -14,10 +14,10 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | --- | --- |
 | HTTP | Go 1.26と標準`net/http`。Web frameworkは導入しない |
 | API | OpenAPI 3.1を正本とし、固定versionの`oapi-codegen`で`std-http-server`、strict server interface、Go型を生成する。`kin-openapi` middlewareでrequestを検証する |
-| 管理API client | OpenAPIから型安全なTypeScript clientを生成する。外部アプリ向けSDKとは別パッケージとする |
+| 管理API client | Dashboardなどの管理クライアントの責務。BackendフェーズではOpenAPI契約を提供し、clientの言語・生成方式は後続フェーズで決める |
 | DB | SQLite、`database/sql`、CGO不要の`modernc.org/sqlite`。ORMを使わずSQLを明示する |
 | migration | SQL migrationを`go:embed`で同梱し、起動時に一度だけ適用する |
-| Docker | `github.com/moby/moby/client`でnetwork・container・volumeを操作し、`docker compose`と`git`はargv形式・timeout付きで実行する |
+| Docker | Docker CLIをargv形式・timeout付きで実行する。network・container・volume操作と`docker compose`をCLIへ委譲する |
 | YAML | `gopkg.in/yaml.v3`のNode ASTでmanifestとComposeを事前検査する |
 | 非同期・ログ | SQLiteのOperationとBackend内worker pool。`log/slog`でJSON構造化ログを出し、secretを記録しない |
 | テスト | 標準`testing`、`httptest`、fake Docker/CLI。HTTP、DB、検証、Docker境界を分けて検証する |
@@ -31,20 +31,20 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 
 | エンティティ | 主な内容 |
 | --- | --- |
-| `applications` | app-id、subdomain、repository URL、ref、manifest表示情報・公開service・公開port、desired state、revision、最終エラー、登録状態、保持volume識別情報、時刻 |
+| `applications` | app-id、subdomain、repository URL、ref、manifest表示情報・公開service・公開port、desired state、revision、最終エラー、登録状態、時刻 |
 | `application_variables` | app-id、変数名、secretフラグ、暗号化済み値または通常値、更新時刻 |
 | `operations` | operation ID、app-id、種別、状態、時刻、エラー概要 |
 
 - app-idはBackend発行UUID、subdomainは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開URLは`<subdomain>.<base-domain>`である。
 - `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
 - コンテナ、network、volumeの実在と状態はDockerから都度照会し、DBへ複製しない。
-- 登録状態は`ACTIVE`と`UNREGISTERED`。登録解除後はapp-id、installation ID、保持volume識別情報だけを削除済み記録として保持する。`UNREGISTERED`は通常の一覧から除外し、開始・停止・同期・再構成を受け付けない。
+- 登録状態は`ACTIVE`と`UNREGISTERED`。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。通常の一覧から除外し、開始・停止・同期・再構成を受け付けない。Docker resourceの実体と所有識別情報はlabelから照会し、DBへ複製しない。
 
 ## 3. API契約
 
 - Google AIP（AIP-121、AIP-131〜135、AIP-136、AIP-193）に従う。resource-oriented design、標準メソッド、custom method、HTTP statusとerror modelを適用する。
 - resource nameは`applications/{application}`と`operations/{operation}`。JSON fieldはlowerCamelCase、列挙値はUPPER_SNAKE_CASEとする。
-- API契約の唯一の正本は`backend/openapi.yaml`のOpenAPI 3.1文書である。HTTP route、型、入力検証、TypeScript clientはここから生成する。業務ロジックは生成済みserver interfaceを実装し、契約を重複定義しない。
+- API契約の唯一の正本は`backend/openapi.yaml`のOpenAPI 3.1文書である。HTTP route、型、schema validationはここから生成・検証する。管理clientの生成はDashboard以降の責務とし、業務ロジックは生成済みserver interfaceへ委譲する。
 - OpenAPI文書と生成物が不一致ならCIを失敗させる。生成物の更新は`mise`の生成taskだけが行う。
 - Protobuf、gRPC、HTTP transcodingは、双方向streamingの実要件が出るまで導入しない。
 
@@ -61,13 +61,13 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | `GET` / `PATCH` / `DELETE` | `/applications/{application}` | 取得、更新、登録解除（Operationを返す） |
 | `POST` | `/applications/{application}:purge` | 完全削除（Operationを返す） |
 | `GET` / `PATCH` | `/applications/{application}/configuration` | 変数定義・設定状況、値の更新。secret値は返さない |
-| `POST` | `/applications/{application}:start`、`:stop`、`:sync`、`:rebuild` | アプリ操作（Operationを返す） |
+| `POST` | `/applications/{application}:register`、`:start`、`:stop`、`:sync`、`:rebuild` | アプリ操作（Operationを返す） |
 | `GET` | `/operations/{operation}`、`/operations/{operation}:watch` | Operation取得、SSEによる状態配信 |
 | `GET` | `/applications/{application}:tailLogs` | SSEによるコンテナログ配信 |
 
 - 登録要求は`repositoryUrl`、`ref`、`subdomain`を含む。表示名と説明はmanifestから読む。
 - 長時間操作はOperationを返す。未完了Operationがあるapp-idへの新規変更は409で拒否する。
-- 登録解除はコンテナ、app用edge network、source、runtimeを削除し、named volumeと削除済み記録を保持する。完全削除は確認済み要求だけが実行でき、所有確認済みvolumeを全て削除した後に記録を消す。途中失敗時は記録を保持する。
+- 登録解除はアプリcontainerとapp用edge networkだけを削除し、source、runtime、named volume、アプリ設定、UNREGISTEREDのDB記録を保持する。再登録は保持したsource・設定を使って復帰する。完全削除は`UNREGISTERED`かつ`confirm:true`の要求だけが実行でき、アプリデータ、source、runtime、所有確認済みvolumeを削除してからDB記録を物理削除する。途中失敗時は記録を保持する。
 
 ### 3.2 エラー
 
@@ -128,7 +128,7 @@ UIのINPは75パーセンタイル200ms以下とする。clone、build、起動�
 
 - Operation状態は`queued`、`running`、`succeeded`、`failed`、`cancelled`。Backend再起動時の未完了Operationは`failed`へ整理する。
 - project名は`lws-app-<app-id>`で固定する。操作前にCompose project label、LWS所有label、installation ID、app-idを確認する。
-- 登録解除はCaddyをedge networkから切断した後、source、runtime、所有確認済みedge networkを削除する。完全削除は`UNREGISTERED`なアプリだけが対象である。
+- 登録解除はアプリを停止してからCaddyをedge networkから切断し、所有確認済みedge networkを削除した後にDBを`UNREGISTERED`へ確定する。source、runtime、named volume、アプリ設定は削除しない。DB確定前の失敗ではACTIVE状態と公開経路を補償復元する。完全削除は`UNREGISTERED`なアプリだけが対象で、APIは`confirm:true`を必須とする。
 - Docker呼出しにはtimeoutを設定し、出力からsecretを除去して短い日本語のOperation結果へ残す。未検証値をshell文字列、Docker引数、path、label、override YAMLへ直接展開しない。
 - `docker compose down --volumes`、`docker system prune`、`docker volume prune`を通常操作で使わない。
 

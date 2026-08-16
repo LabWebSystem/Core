@@ -19,8 +19,9 @@
 | N-04 | 同じCompose service名を持つ二つのアプリを登録する | appごとのedge networkと`lws-<app-id>` aliasにより、公開先が衝突せず、アプリ間通信もできない。 | P0 |
 | N-05 | 管理者がアプリのrefを更新し`:sync`を実行する | 新sourceを一時領域で検証し、成功時だけsourceと派生物を原子的に切り替える。 | P0 |
 | N-06 | 管理者がアプリを停止、開始、再構成する | 対象アプリだけを操作し、named volumeを保持する。状態はOperationとApplicationで観測できる。 | P1 |
-| N-07 | 管理者がアプリを登録解除する | Caddyから切断後、コンテナ、edge network、source、runtimeを削除する。所有確認済みnamed volumeと削除済み記録は保持する。 | P0 |
-| N-08 | 管理者が登録解除済みアプリを完全削除する | 確認済み要求で、所有情報が一致するnamed volumeだけを削除して削除済み記録を消す。 | P0 |
+| N-07 | 管理者がアプリを登録解除する | Caddyから切断後、コンテナとedge networkを削除する。source、runtime、設定、所有確認済みnamed volume、UNREGISTERED記録は保持する。 | P0 |
+| N-08 | 管理者が登録解除済みアプリを完全削除する | 確認済み要求で、source、runtime、アプリデータ、所有情報が一致するnamed volume、DB記録を削除する。 | P0 |
+| N-11 | 管理者が登録解除済みアプリを再登録する | 保持されたsource、runtime、設定を再利用し、初回登録と同じ入力なしでACTIVEへ復帰する。 | P1 |
 | N-09 | Backendを再起動する | SQLiteの正本からCaddyのedge network接続と派生設定を再調整する。 | P1 |
 | N-10 | 管理者がOperationまたはコンテナログを購読する | SSEで更新を受け取る。切断後はHTTP再取得および再接続で状態を回復できる。 | P1 |
 
@@ -91,7 +92,7 @@ Docker Engine API、Compose CLI、Git CLIをfakeに置き換え、引数、実�
 | D-02 | `compose.yaml`と生成overrideだけを`-f`指定し、`.env`と`compose.override.yaml`を暗黙に使わない。 | N-02, E-08, E-12 |
 | D-03 | appごとのedge network、alias、Caddy接続、アプリ間接続拒否を確認する。 | N-04 |
 | D-04 | 操作前にCompose project label、owner label、installation ID、app-idを検証する。 | E-19 |
-| D-05 | 登録解除ではvolumeを残し、purgeでは所有確認済みvolumeだけを削除する。 | N-07〜08, E-21〜22 |
+| D-05 | 登録解除ではsource、runtime、volume、DB記録を残し、purgeでは所有確認済みresourceだけを削除する。 | N-07〜08, N-11, E-21〜22 |
 | D-06 | `docker compose down --volumes`、`docker system prune`、`docker volume prune`を通常操作で呼ばない。 | N-06〜08, E-19 |
 | D-07 | Docker失敗・network枯渇時に既存稼働構成への変更を行わない。 | E-18 |
 

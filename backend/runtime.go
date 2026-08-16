@@ -24,10 +24,46 @@ type RuntimeExecutor struct {
 func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
 	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}}
 }
+
+// ReconcileActiveは、SQLiteの正本とDockerの動的なedge network接続を再調整します。
+func (e *RuntimeExecutor) ReconcileActive(ctx context.Context) error {
+	if e.Docker == nil {
+		return nil
+	}
+	rows, err := e.DB.QueryContext(ctx, `SELECT id FROM applications WHERE registration_state='ACTIVE' AND desired_state='RUNNING' ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		if err := e.Docker.EnsureNetwork(ctx, id); err != nil {
+			return fmt.Errorf("アプリ%sのedge networkを再調整できません: %w", id, err)
+		}
+		if err := e.Docker.EnsureCaddyConnected(ctx, id); err != nil {
+			return fmt.Errorf("アプリ%sのCaddy接続を再調整できません: %w", id, err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (e *RuntimeExecutor) ReconcileStartup(ctx context.Context) error {
+	if err := e.ReconcileActive(ctx); err != nil {
+		return err
+	}
+	return e.syncDerived(ctx)
+}
+
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
-	var repo, ref, state, previousName, previousDescription, previousRevision, previousService string
+	var repo, ref, state, desired, previousName, previousDescription, previousRevision, previousService string
 	var previousPort int
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,manifest_name,manifest_description,revision,manifest_service,manifest_port FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &previousName, &previousDescription, &previousRevision, &previousService, &previousPort); err != nil {
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &desired, &previousName, &previousDescription, &previousRevision, &previousService, &previousPort); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
 	}
 	root := filepath.Join(e.Root, op.ApplicationID)
@@ -151,26 +187,46 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return e.markApplicationState(ctx, op.ApplicationID, "STOPPED", "STOPPED", "")
 	case "UNREGISTER":
-		if e.Docker != nil {
-			if err := e.Docker.DisconnectCaddy(ctx, op.ApplicationID); err != nil {
-				return err
-			}
-		}
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "down", "--remove-orphans"); err != nil {
 			return err
 		}
 		if e.Docker != nil {
+			if err := e.Docker.DisconnectCaddy(ctx, op.ApplicationID); err != nil {
+				return err
+			}
 			if err := e.Docker.RemoveNetwork(ctx, op.ApplicationID, EdgeNetworkName(op.ApplicationID)); err != nil {
+				e.restoreActive(ctx, op.ApplicationID, source, runtime, desired)
 				return err
 			}
 		}
 		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='UNREGISTERED',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
+			e.restoreActive(ctx, op.ApplicationID, source, runtime, desired)
 			return err
 		}
-		if err := os.RemoveAll(root); err != nil {
+		if err := e.syncDerived(ctx); err != nil {
+			_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE',updated_at=datetime('now') WHERE id=?`, op.ApplicationID)
+			e.restoreActive(ctx, op.ApplicationID, source, runtime, desired)
 			return err
 		}
-		return e.syncDerived(ctx)
+		return nil
+	case "REGISTER":
+		if state != "UNREGISTERED" {
+			return fmt.Errorf("登録解除済みアプリだけ再登録できます")
+		}
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
+			return err
+		}
+		if desired == "RUNNING" {
+			if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+				_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='UNREGISTERED',updated_at=datetime('now') WHERE id=?`, op.ApplicationID)
+				return err
+			}
+		}
+		if err := e.syncDerived(ctx); err != nil {
+			_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='UNREGISTERED',updated_at=datetime('now') WHERE id=?`, op.ApplicationID)
+			return err
+		}
+		return nil
 	case "PURGE":
 		if state != "UNREGISTERED" {
 			return fmt.Errorf("登録解除済みアプリだけ完全削除できます")
@@ -180,11 +236,24 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 				return err
 			}
 		}
+		if err := os.RemoveAll(root); err != nil {
+			return err
+		}
 		_, err := e.DB.ExecContext(ctx, `DELETE FROM applications WHERE id=?`, op.ApplicationID)
 		return err
 	default:
 		return fmt.Errorf("未対応のOperationです: %s", op.Kind)
 	}
+}
+
+func (e *RuntimeExecutor) restoreActive(ctx context.Context, id, source, runtime, desired string) {
+	if e.Docker != nil {
+		if e.Docker.EnsureNetwork(ctx, id) == nil && desired == "RUNNING" {
+			_ = e.Docker.EnsureCaddyConnected(ctx, id)
+			_ = e.reconcile(ctx, id, source, runtime, "up", "-d")
+		}
+	}
+	_ = e.syncDerived(ctx)
 }
 func (e *RuntimeExecutor) syncDerived(ctx context.Context) error {
 	if e.Derived == nil {

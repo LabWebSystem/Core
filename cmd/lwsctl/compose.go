@@ -25,6 +25,62 @@ func (a *application) composeOutput(arguments ...string) ([]byte, error) {
 	return command.Output()
 }
 
+func (a *application) dockerOutput(arguments ...string) ([]byte, error) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return nil, errors.New("必要なコマンドが見つかりません: docker")
+	}
+	return exec.Command("docker", arguments...).Output()
+}
+
+func (a *application) docker(arguments ...string) error {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return errors.New("必要なコマンドが見つかりません: docker")
+	}
+	command := exec.Command("docker", arguments...)
+	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return command.Run()
+}
+
+func (a *application) purgeOwnedAppResources() error {
+	owner := "label=com.labwebsystem.owner=lws"
+	installation := "label=com.labwebsystem.installation-id=" + a.installationID
+	app := "label=com.labwebsystem.app-id"
+
+	containers, err := a.dockerOutput("ps", "-aq", "--filter", owner, "--filter", installation, "--filter", app)
+	if err != nil {
+		return errors.New("LWSアプリcontainer一覧を取得できません")
+	}
+	if ids := strings.Fields(string(containers)); len(ids) > 0 {
+		args := append([]string{"rm", "-f"}, ids...)
+		if err := a.docker(args...); err != nil {
+			return errors.New("LWSアプリcontainerを削除できません")
+		}
+	}
+
+	networks, err := a.dockerOutput("network", "ls", "-q", "--filter", owner, "--filter", installation, "--filter", app)
+	if err != nil {
+		return errors.New("LWSアプリnetwork一覧を取得できません")
+	}
+	if ids := strings.Fields(string(networks)); len(ids) > 0 {
+		args := append([]string{"network", "rm"}, ids...)
+		if err := a.docker(args...); err != nil {
+			return errors.New("LWSアプリnetworkを削除できません")
+		}
+	}
+
+	volumes, err := a.dockerOutput("volume", "ls", "-q", "--filter", owner, "--filter", installation, "--filter", app)
+	if err != nil {
+		return errors.New("LWSアプリvolume一覧を取得できません")
+	}
+	if ids := strings.Fields(string(volumes)); len(ids) > 0 {
+		args := append([]string{"volume", "rm"}, ids...)
+		if err := a.docker(args...); err != nil {
+			return errors.New("LWSアプリvolumeを削除できません")
+		}
+	}
+	return nil
+}
+
 func (a *application) composeCommand(arguments ...string) (*exec.Cmd, error) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil, errors.New("必要なコマンドが見つかりません: docker")
@@ -47,6 +103,8 @@ func (a *application) composeCommand(arguments ...string) (*exec.Cmd, error) {
 	if a.publicAddress != "" {
 		command.Env = setEnvironment(command.Env, "LWS_PUBLIC_ADDRESS", a.publicAddress)
 	}
+	command.Env = setEnvironment(command.Env, "LWS_CADDY_CONTAINER", a.paths.project+"-caddy-1")
+	command.Env = setEnvironment(command.Env, "LWS_COREDNS_CONTAINER", a.paths.project+"-coredns-1")
 	return command, nil
 }
 

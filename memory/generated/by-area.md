@@ -9,6 +9,7 @@
 - ADR-004 | ACCEPTED | - | Backendの応答性、SSE、およびOperation実行
 - ADR-005 | ACCEPTED | - | アプリ単位のedge networkとCompose事前検査
 - ADR-006 | ACCEPTED | - | Backend実装技術スタック
+- ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -42,6 +43,7 @@
 - CHG-031 | SHIPPED | - | フェーズ3のDocker境界テストを補強する
 - CHG-032 | SHIPPED | - | フェーズ3の更新Operationと失敗時復元を完成させる
 - CHG-033 | SHIPPED | - | フェーズ3の未達受け入れ条件をテストで固定する
+- CHG-034 | SHIPPED | - | フェーズ4未達項目のテスト先行実装
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

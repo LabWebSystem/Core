@@ -58,6 +58,12 @@ paths:
       operationId: startApplication
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
       responses: { '202': { description: Operationを作成 } }
+  /applications/{application}:register:
+    parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: registerApplication
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      responses: { '202': { description: Operationを作成 } }
   /applications/{application}:stop:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     post:
@@ -80,7 +86,7 @@ paths:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     post:
       operationId: purgeApplication
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActionRequest' } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PurgeRequest' } } } }
       responses: { '202': { description: Operationを作成 } }
   /applications/{application}/configuration:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
@@ -131,6 +137,12 @@ components:
       required: [requestId]
       properties:
         requestId: { type: string, format: uuid }
+    PurgeRequest:
+      type: object
+      required: [requestId, confirm]
+      properties:
+        requestId: { type: string, format: uuid }
+        confirm: { type: boolean, const: true }
     Variable:
       type: object
       required: [value, secret]

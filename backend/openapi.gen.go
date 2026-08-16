@@ -23,6 +23,21 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for PurgeRequestConfirm.
+const (
+	True PurgeRequestConfirm = true
+)
+
+// Valid indicates whether the value is a known member of the PurgeRequestConfirm enum.
+func (e PurgeRequestConfirm) Valid() bool {
+	switch e {
+	case True:
+		return true
+	default:
+		return false
+	}
+}
+
 // ActionRequest defines model for ActionRequest.
 type ActionRequest struct {
 	RequestId openapi_types.UUID `json:"requestId"`
@@ -46,6 +61,15 @@ type CreateApplicationRequest struct {
 type Error struct {
 	Error map[string]interface{} `json:"error"`
 }
+
+// PurgeRequest defines model for PurgeRequest.
+type PurgeRequest struct {
+	Confirm   PurgeRequestConfirm `json:"confirm"`
+	RequestId openapi_types.UUID  `json:"requestId"`
+}
+
+// PurgeRequestConfirm defines model for PurgeRequest.Confirm.
+type PurgeRequestConfirm bool
 
 // UpdateApplicationRequest defines model for UpdateApplicationRequest.
 type UpdateApplicationRequest struct {
@@ -73,10 +97,13 @@ type UpdateApplicationJSONRequestBody = UpdateApplicationRequest
 type UpdateConfigurationJSONRequestBody = ConfigurationRequest
 
 // PurgeApplicationJSONRequestBody defines body for PurgeApplication for application/json ContentType.
-type PurgeApplicationJSONRequestBody = ActionRequest
+type PurgeApplicationJSONRequestBody = PurgeRequest
 
 // RebuildApplicationJSONRequestBody defines body for RebuildApplication for application/json ContentType.
 type RebuildApplicationJSONRequestBody = ActionRequest
+
+// RegisterApplicationJSONRequestBody defines body for RegisterApplication for application/json ContentType.
+type RegisterApplicationJSONRequestBody = ActionRequest
 
 // StartApplicationJSONRequestBody defines body for StartApplication for application/json ContentType.
 type StartApplicationJSONRequestBody = ActionRequest
@@ -217,6 +244,14 @@ type ClientInterface interface {
 	// RebuildApplication performs a POST /applications/{application}:rebuild (the `RebuildApplication` operationId) request.
 	// Takes a body of the `application/json` content type.
 	RebuildApplication(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RegisterApplicationWithBody performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request,
+	// with any type of body and a specified content type.
+	RegisterApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RegisterApplication performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request.
+	// Takes a body of the `application/json` content type.
+	RegisterApplication(ctx context.Context, application string, body RegisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// StartApplicationWithBody performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
 	// with any type of body and a specified content type.
@@ -455,6 +490,34 @@ func (c *Client) RebuildApplicationWithBody(ctx context.Context, application str
 // Takes a body of the `application/json` content type.
 func (c *Client) RebuildApplication(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRebuildApplicationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RegisterApplicationWithBody performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) RegisterApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegisterApplicationRequestWithBody(c.Server, application, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RegisterApplication performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) RegisterApplication(ctx context.Context, application string, body RegisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegisterApplicationRequest(c.Server, application, body)
 	if err != nil {
 		return nil, err
 	}
@@ -984,6 +1047,53 @@ func NewRebuildApplicationRequestWithBody(server string, application string, con
 	return req, nil
 }
 
+// NewRegisterApplicationRequest calls the generic RegisterApplication builder with application/json body
+func NewRegisterApplicationRequest(server string, application string, body RegisterApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRegisterApplicationRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewRegisterApplicationRequestWithBody constructs an http.Request for the RegisterApplication method, with any body, and a specified content type
+func NewRegisterApplicationRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "application", application, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/applications/%s:register", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewStartApplicationRequest calls the generic StartApplication builder with application/json body
 func NewStartApplicationRequest(server string, application string, body StartApplicationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1400,6 +1510,16 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	RebuildApplicationWithResponse(ctx context.Context, application string, body RebuildApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*RebuildApplicationResponse, error)
 
+	// RegisterApplicationWithBodyWithResponse performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	RegisterApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegisterApplicationResponse, error)
+
+	// RegisterApplicationWithResponse performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	RegisterApplicationWithResponse(ctx context.Context, application string, body RegisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*RegisterApplicationResponse, error)
+
 	// StartApplicationWithBodyWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
 	// with any type of body and a specified content type.
 	//
@@ -1756,6 +1876,40 @@ func (r RebuildApplicationResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RebuildApplicationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RegisterApplicationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r RegisterApplicationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RegisterApplicationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RegisterApplicationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RegisterApplicationResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2199,6 +2353,28 @@ func (c *ClientWithResponses) RebuildApplicationWithResponse(ctx context.Context
 	return ParseRebuildApplicationResponse(rsp)
 }
 
+// RegisterApplicationWithBodyWithResponse performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) RegisterApplicationWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegisterApplicationResponse, error) {
+	rsp, err := c.RegisterApplicationWithBody(ctx, application, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegisterApplicationResponse(rsp)
+}
+
+// RegisterApplicationWithResponse performs a POST /applications/{application}:register (the `RegisterApplication` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) RegisterApplicationWithResponse(ctx context.Context, application string, body RegisterApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*RegisterApplicationResponse, error) {
+	rsp, err := c.RegisterApplication(ctx, application, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegisterApplicationResponse(rsp)
+}
+
 // StartApplicationWithBodyWithResponse performs a POST /applications/{application}:start (the `StartApplication` operationId) request,
 // with any type of body and a specified content type.
 //
@@ -2464,6 +2640,22 @@ func ParseRebuildApplicationResponse(rsp *http.Response) (*RebuildApplicationRes
 	return response, nil
 }
 
+// ParseRegisterApplicationResponse parses an HTTP response from a RegisterApplicationWithResponse call
+func ParseRegisterApplicationResponse(rsp *http.Response) (*RegisterApplicationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RegisterApplicationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseStartApplicationResponse parses an HTTP response from a StartApplicationWithResponse call
 func ParseStartApplicationResponse(rsp *http.Response) (*StartApplicationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -2621,6 +2813,9 @@ type ServerInterface interface {
 
 	// (POST /applications/{application}:rebuild)
 	RebuildApplication(w http.ResponseWriter, r *http.Request, application string)
+
+	// (POST /applications/{application}:register)
+	RegisterApplication(w http.ResponseWriter, r *http.Request, application string)
 
 	// (POST /applications/{application}:start)
 	StartApplication(w http.ResponseWriter, r *http.Request, application string)
@@ -2857,6 +3052,32 @@ func (siw *ServerInterfaceWrapper) RebuildApplication(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RebuildApplication(w, r, application)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterApplication operation middleware
+func (siw *ServerInterfaceWrapper) RegisterApplication(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "application" -------------
+	var application string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "application", r.PathValue("application"), &application, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "application", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterApplication(w, r, application)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3178,6 +3399,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications/{application}", wrapper.GetApplication)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/applications/{application}", wrapper.UpdateApplication)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}:start", wrapper.StartApplication)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}:register", wrapper.RegisterApplication)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}:stop", wrapper.StopApplication)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}:sync", wrapper.SyncApplication)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}:rebuild", wrapper.RebuildApplication)
@@ -3343,6 +3565,23 @@ type RebuildApplication202Response struct {
 }
 
 func (response RebuildApplication202Response) VisitRebuildApplicationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type RegisterApplicationRequestObject struct {
+	Application string `json:"application"`
+	Body        *RegisterApplicationJSONRequestBody
+}
+
+type RegisterApplicationResponseObject interface {
+	VisitRegisterApplicationResponse(w http.ResponseWriter) error
+}
+
+type RegisterApplication202Response struct {
+}
+
+func (response RegisterApplication202Response) VisitRegisterApplicationResponse(w http.ResponseWriter) error {
 	w.WriteHeader(202)
 	return nil
 }
@@ -3513,6 +3752,9 @@ type StrictServerInterface interface {
 
 	// (POST /applications/{application}:rebuild)
 	RebuildApplication(ctx context.Context, request RebuildApplicationRequestObject) (RebuildApplicationResponseObject, error)
+
+	// (POST /applications/{application}:register)
+	RegisterApplication(ctx context.Context, request RegisterApplicationRequestObject) (RegisterApplicationResponseObject, error)
 
 	// (POST /applications/{application}:start)
 	StartApplication(ctx context.Context, request StartApplicationRequestObject) (StartApplicationResponseObject, error)
@@ -3850,6 +4092,39 @@ func (sh *strictHandler) RebuildApplication(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// RegisterApplication operation middleware
+func (sh *strictHandler) RegisterApplication(w http.ResponseWriter, r *http.Request, application string) {
+	var request RegisterApplicationRequestObject
+
+	request.Application = application
+
+	var body RegisterApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterApplication(ctx, request.(RegisterApplicationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterApplication")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterApplicationResponseObject); ok {
+		if err := validResponse.VisitRegisterApplicationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // StartApplication operation middleware
 func (sh *strictHandler) StartApplication(w http.ResponseWriter, r *http.Request, application string) {
 	var request StartApplicationRequestObject
@@ -4080,22 +4355,23 @@ func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"OqnmUHhg66qjZqcCUT36NwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
