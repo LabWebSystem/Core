@@ -720,6 +720,20 @@ func TestDerivedManagerUsesManifestPublication(t *testing.T) {
 	if err := manager.Sync(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	if info, err := os.Stat(manager.GeneratedDir); err != nil {
+		t.Fatal(err)
+	} else if got := info.Mode().Perm(); got != generatedDirMode {
+		t.Fatalf("生成ディレクトリの権限が不正です: %o", got)
+	}
+	for _, name := range []string{"hosts", "Caddyfile"} {
+		info, err := os.Stat(filepath.Join(manager.GeneratedDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != derivedFileMode {
+			t.Fatalf("派生ファイルの権限が不正です: %s=%o", name, got)
+		}
+	}
 	caddy, err := os.ReadFile(filepath.Join(manager.GeneratedDir, "Caddyfile"))
 	if err != nil {
 		t.Fatal(err)

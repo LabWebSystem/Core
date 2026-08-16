@@ -64,6 +64,9 @@
 - BUG-008 | VERIFIED | cli | updateが停止中のLWSを起動する
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
 
+## infrastructure
+- BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
+
 ## installer
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-006 | VERIFIED | installer | アーキテクチャ名なしのRPMをインストーラーが見つけられない

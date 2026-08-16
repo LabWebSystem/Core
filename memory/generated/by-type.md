@@ -23,6 +23,7 @@
 - BUG-008 | VERIFIED | cli | updateが停止中のLWSを起動する
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
 - BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する
+- BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐

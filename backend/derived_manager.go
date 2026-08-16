@@ -18,6 +18,11 @@ type DerivedManager struct {
 	CoreDNSContainer string
 }
 
+const (
+	generatedDirMode = 0o755
+	derivedFileMode  = 0o644
+)
+
 func (m *DerivedManager) Sync(ctx context.Context) error {
 	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,manifest_service,manifest_port FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
 	if err != nil {
@@ -36,7 +41,10 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(m.GeneratedDir, 0700); err != nil {
+	if err := os.MkdirAll(m.GeneratedDir, generatedDirMode); err != nil {
+		return err
+	}
+	if err := os.Chmod(m.GeneratedDir, generatedDirMode); err != nil {
 		return err
 	}
 	hostsPath := filepath.Join(m.GeneratedDir, "hosts")
@@ -53,7 +61,7 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 		_ = restoreDerivedFile(hostsPath, oldHosts, hostsExisted)
 		_ = restoreDerivedFile(caddyPath, oldCaddy, caddyExisted)
 	}
-	if err := WriteAtomic(caddyPath, []byte(GenerateCaddyfile(m.BaseDomain, apps)), 0600); err != nil {
+	if err := WriteAtomic(caddyPath, []byte(GenerateCaddyfile(m.BaseDomain, apps)), derivedFileMode); err != nil {
 		return err
 	}
 	if m.Docker != nil {
@@ -73,7 +81,7 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 			return err
 		}
 	}
-	if err := WriteAtomic(hostsPath, []byte(GenerateHosts(m.BaseDomain, m.PublicAddress, apps)), 0600); err != nil {
+	if err := WriteAtomic(hostsPath, []byte(GenerateHosts(m.BaseDomain, m.PublicAddress, apps)), derivedFileMode); err != nil {
 		restore()
 		return err
 	}
@@ -103,7 +111,7 @@ func restoreDerivedFile(path string, data []byte, existed bool) error {
 	if !existed {
 		return os.Remove(path)
 	}
-	return WriteAtomic(path, data, 0600)
+	return WriteAtomic(path, data, derivedFileMode)
 }
 func (m *DerivedManager) Validate() error {
 	if err := ValidateBaseDomain(m.BaseDomain); err != nil {
