@@ -9,25 +9,29 @@ import (
 )
 
 type DerivedManager struct {
-	DB            *sql.DB
-	GeneratedDir  string
-	BaseDomain    string
-	PublicAddress string
+	DB               *sql.DB
+	GeneratedDir     string
+	BaseDomain       string
+	PublicAddress    string
+	Docker           *DockerResources
+	CaddyContainer   string
+	CoreDNSContainer string
 }
 
 func (m *DerivedManager) Sync(ctx context.Context) error {
-	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
+	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,manifest_service,manifest_port FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	apps := []PublishedApplication{}
 	for rows.Next() {
-		var id, sub string
-		if err := rows.Scan(&id, &sub); err != nil {
+		var id, sub, service string
+		var port int
+		if err := rows.Scan(&id, &sub, &service, &port); err != nil {
 			return err
 		}
-		apps = append(apps, PublishedApplication{AppID: id, Subdomain: sub, Service: "web", Port: 80})
+		apps = append(apps, PublishedApplication{AppID: id, Subdomain: sub, Service: service, Port: port})
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -35,13 +39,62 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 	if err := os.MkdirAll(m.GeneratedDir, 0700); err != nil {
 		return err
 	}
-	if err := WriteAtomic(filepath.Join(m.GeneratedDir, "hosts"), []byte(GenerateHosts(m.BaseDomain, m.PublicAddress, apps)), 0600); err != nil {
+	hostsPath := filepath.Join(m.GeneratedDir, "hosts")
+	caddyPath := filepath.Join(m.GeneratedDir, "Caddyfile")
+	oldHosts, hostsExisted, err := readDerivedFile(hostsPath)
+	if err != nil {
 		return err
 	}
-	if err := WriteAtomic(filepath.Join(m.GeneratedDir, "Caddyfile"), []byte(GenerateCaddyfile(m.BaseDomain, apps)), 0600); err != nil {
+	oldCaddy, caddyExisted, err := readDerivedFile(caddyPath)
+	if err != nil {
 		return err
+	}
+	restore := func() {
+		_ = restoreDerivedFile(hostsPath, oldHosts, hostsExisted)
+		_ = restoreDerivedFile(caddyPath, oldCaddy, caddyExisted)
+	}
+	if err := WriteAtomic(caddyPath, []byte(GenerateCaddyfile(m.BaseDomain, apps)), 0600); err != nil {
+		return err
+	}
+	if m.Docker != nil {
+		if m.CaddyContainer != "" {
+			m.Docker.CaddyContainer = m.CaddyContainer
+		}
+		if err := m.Docker.ValidateCaddyfile(ctx); err != nil {
+			restore()
+			return err
+		}
+	}
+	if err := WriteAtomic(hostsPath, []byte(GenerateHosts(m.BaseDomain, m.PublicAddress, apps)), 0600); err != nil {
+		restore()
+		return err
+	}
+	if m.Docker != nil {
+		if err := m.Docker.ReloadCaddy(ctx); err != nil {
+			restore()
+			return err
+		}
+		if err := m.Docker.ReloadCoreDNS(ctx, m.CoreDNSContainer); err != nil {
+			restore()
+			return err
+		}
 	}
 	return nil
+}
+
+func readDerivedFile(path string) ([]byte, bool, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	return data, err == nil, err
+}
+
+func restoreDerivedFile(path string, data []byte, existed bool) error {
+	if !existed {
+		return os.Remove(path)
+	}
+	return WriteAtomic(path, data, 0600)
 }
 func (m *DerivedManager) Validate() error {
 	if err := ValidateBaseDomain(m.BaseDomain); err != nil {

@@ -25,7 +25,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v err=%v", fk, wal, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 3 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 4 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -34,7 +34,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 3 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 4 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -625,11 +625,142 @@ func TestDerivedConfigIsAtomic(t *testing.T) {
 	}
 }
 
+func TestDerivedManagerUsesManifestPublication(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	manager := &DerivedManager{DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.internal", PublicAddress: "192.0.2.10"}
+	if err := manager.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	caddy, err := os.ReadFile(filepath.Join(manager.GeneratedDir, "Caddyfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(caddy); !strings.Contains(got, "reverse_proxy lws-app-id:4321") || strings.Contains(got, "lws-app-id:80") {
+		t.Fatalf("manifest publication was not used: %s", got)
+	}
+}
+
+func TestInfrastructureComposeUsesGeneratedCaddyfile(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "infrastructure", "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "lws-generated:/etc/caddy:ro") || strings.Contains(text, "./Caddyfile:/etc/caddy/Caddyfile:ro") {
+		t.Fatal("Caddy is not configured to use the generated Caddyfile")
+	}
+}
+
+func TestDerivedManagerValidatesAndReloadsInfrastructure(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingRunner{}
+	manager := &DerivedManager{
+		DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.internal", PublicAddress: "192.0.2.10",
+		Docker:         NewDockerResources(runner, "installation"),
+		CaddyContainer: "caddy-container", CoreDNSContainer: "coredns-container",
+	}
+	if err := manager.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, call := range runner.calls {
+		joined += strings.Join(call, " ") + "\n"
+	}
+	if !strings.Contains(joined, "exec caddy-container caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile") ||
+		!strings.Contains(joined, "kill --signal USR1 caddy-container") ||
+		!strings.Contains(joined, "kill --signal HUP coredns-container") {
+		t.Fatalf("infrastructure reload was not performed: %s", joined)
+	}
+}
+
+func TestDerivedManagerKeepsPreviousFilesWhenCaddyValidationFails(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hosts"), []byte("old hosts\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Caddyfile"), []byte("old caddy\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runner := &failingInfrastructureRunner{failOn: "caddy validate"}
+	manager := &DerivedManager{DB: db, GeneratedDir: dir, BaseDomain: "example.internal", PublicAddress: "192.0.2.10", Docker: NewDockerResources(runner, "installation"), CaddyContainer: "caddy", CoreDNSContainer: "coredns"}
+	if err := manager.Sync(context.Background()); err == nil {
+		t.Fatal("Caddyfile検証失敗を成功扱いしました")
+	}
+	for name, want := range map[string]string{"hosts": "old hosts\n", "Caddyfile": "old caddy\n"} {
+		got, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil || string(got) != want {
+			t.Fatalf("%sが維持されていません: %q, %v", name, got, readErr)
+		}
+	}
+}
+
+func TestDerivedManagerKeepsPreviousFilesWhenCoreDNSReloadFails(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hosts"), []byte("old hosts\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Caddyfile"), []byte("old caddy\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runner := &failingInfrastructureRunner{failOn: "kill --signal HUP"}
+	manager := &DerivedManager{DB: db, GeneratedDir: dir, BaseDomain: "example.internal", PublicAddress: "192.0.2.10", Docker: NewDockerResources(runner, "installation"), CaddyContainer: "caddy", CoreDNSContainer: "coredns"}
+	if err := manager.Sync(context.Background()); err == nil {
+		t.Fatal("CoreDNS再読込失敗を成功扱いしました")
+	}
+	for name, want := range map[string]string{"hosts": "old hosts\n", "Caddyfile": "old caddy\n"} {
+		got, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil || string(got) != want {
+			t.Fatalf("%sが維持されていません: %q, %v", name, got, readErr)
+		}
+	}
+}
+
 type recordingRunner struct {
 	name   string
 	args   []string
 	output []byte
 	calls  [][]string
+}
+
+type failingInfrastructureRunner struct {
+	failOn string
+}
+
+func (r *failingInfrastructureRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	if strings.Contains(strings.Join(append([]string{name}, args...), " "), r.failOn) {
+		return nil, fmt.Errorf("テスト用コマンド失敗")
+	}
+	return nil, nil
 }
 
 func (r *recordingRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {

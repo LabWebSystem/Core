@@ -25,8 +25,9 @@ func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
 	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}}
 }
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
-	var repo, ref, state, previousName, previousDescription, previousRevision string
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,manifest_name,manifest_description,revision FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &previousName, &previousDescription, &previousRevision); err != nil {
+	var repo, ref, state, previousName, previousDescription, previousRevision, previousService string
+	var previousPort int
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,manifest_name,manifest_description,revision,manifest_service,manifest_port FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &previousName, &previousDescription, &previousRevision, &previousService, &previousPort); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
 	}
 	root := filepath.Join(e.Root, op.ApplicationID)
@@ -96,7 +97,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			}
 			if runErr != nil {
 				if metadataUpdated {
-					_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, op.ApplicationID)
+					_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, previousService, previousPort, op.ApplicationID)
 				}
 				if err := RestoreSourceSwap(source); err != nil {
 					runErr = fmt.Errorf("sourceを復元できません: %w（元のエラー: %v）", err, runErr)
@@ -121,7 +122,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := e.GenerateOverrideFromCompose(op.ApplicationID, manifest.Public.Service, filepath.Join(source, "compose.yaml"), filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
-		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, op.ApplicationID); err != nil {
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, manifest.Public.Service, manifest.Public.Port, op.ApplicationID); err != nil {
 			return err
 		}
 		metadataUpdated = true

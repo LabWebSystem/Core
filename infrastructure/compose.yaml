@@ -9,6 +9,8 @@ services:
     environment:
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
       LWS_DATABASE_PATH: /var/lib/lws/database.sqlite
+      LWS_CADDY_CONTAINER: ${LWS_CADDY_CONTAINER:-lws-caddy-1}
+      LWS_COREDNS_CONTAINER: ${LWS_COREDNS_CONTAINER:-lws-coredns-1}
     volumes:
       - lws-backend-data:/var/lib/lws
       - lws-generated:/var/lib/lws/generated
@@ -29,8 +31,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - lws-generated:/var/lib/lws/generated
+      - lws-generated:/etc/caddy:ro
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws

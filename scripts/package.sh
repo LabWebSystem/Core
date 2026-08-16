@@ -40,6 +40,10 @@ prepare_deb_tree() {
     "$ROOT/infrastructure/compose.yaml" \
     "$WORK/deb/usr/share/lws/compose.yaml"
 
+  install -m 0644 \
+    "$ROOT/infrastructure/Corefile" \
+    "$WORK/deb/usr/share/lws/Corefile"
+
   install -m 0755 \
     "$ROOT/scripts/install.sh" \
     "$WORK/deb/usr/share/lws/install.sh"
@@ -107,6 +111,7 @@ build_rpm() {
 
   install -m 0755 "$WORK/lwsctl" "$rpm_root/SOURCES/lwsctl"
   install -m 0644 "$ROOT/infrastructure/compose.yaml" "$rpm_root/SOURCES/compose.yaml"
+  install -m 0644 "$ROOT/infrastructure/Corefile" "$rpm_root/SOURCES/Corefile"
   install -m 0755 "$ROOT/scripts/install.sh" "$rpm_root/SOURCES/install.sh"
 
   printf '%s\n' "$VERSION" >"$rpm_root/SOURCES/version"

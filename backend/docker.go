@@ -57,6 +57,36 @@ func (d *DockerResources) DisconnectCaddy(ctx context.Context, app string) error
 	return nil
 }
 
+func (d *DockerResources) ValidateCaddyfile(ctx context.Context) error {
+	if d.CaddyContainer == "" {
+		return fmt.Errorf("Caddy containerが設定されていません")
+	}
+	if _, err := d.Runner.Run(ctx, "docker", "exec", d.CaddyContainer, "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"); err != nil {
+		return fmt.Errorf("Caddyfileの検証に失敗しました")
+	}
+	return nil
+}
+
+func (d *DockerResources) ReloadCaddy(ctx context.Context) error {
+	if d.CaddyContainer == "" {
+		return fmt.Errorf("Caddy containerが設定されていません")
+	}
+	if _, err := d.Runner.Run(ctx, "docker", "kill", "--signal", "USR1", d.CaddyContainer); err != nil {
+		return fmt.Errorf("Caddyを再読込できません")
+	}
+	return nil
+}
+
+func (d *DockerResources) ReloadCoreDNS(ctx context.Context, container string) error {
+	if container == "" {
+		return fmt.Errorf("CoreDNS containerが設定されていません")
+	}
+	if _, err := d.Runner.Run(ctx, "docker", "kill", "--signal", "HUP", container); err != nil {
+		return fmt.Errorf("CoreDNSを再読込できません")
+	}
+	return nil
+}
+
 func (d *DockerResources) RemoveOwnedVolumes(ctx context.Context, app string) error {
 	out, err := d.Runner.Run(ctx, "docker", "volume", "ls", "--filter", "label=com.labwebsystem.owner=lws", "--filter", "label=com.labwebsystem.installation-id="+d.InstallationID, "--filter", "label=com.labwebsystem.app-id="+app, "--format", "{{.Name}}")
 	if err != nil {

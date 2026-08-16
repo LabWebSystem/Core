@@ -12,6 +12,7 @@ LabWebSystemのライフサイクルCLIとDocker Compose定義です。
 mkdir -p %{buildroot}/usr/bin %{buildroot}/usr/share/lws
 install -m 0755 %{_sourcedir}/lwsctl %{buildroot}/usr/bin/lwsctl
 install -m 0644 %{_sourcedir}/compose.yaml %{buildroot}/usr/share/lws/compose.yaml
+install -m 0644 %{_sourcedir}/Corefile %{buildroot}/usr/share/lws/Corefile
 install -m 0644 %{_sourcedir}/version %{buildroot}/usr/share/lws/version
 install -m 0755 %{_sourcedir}/install.sh %{buildroot}/usr/share/lws/install.sh
 %preun
@@ -21,5 +22,6 @@ fi
 %files
 /usr/bin/lwsctl
 /usr/share/lws/compose.yaml
+/usr/share/lws/Corefile
 /usr/share/lws/version
 /usr/share/lws/install.sh
