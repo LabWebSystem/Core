@@ -24,6 +24,19 @@ prepare() {
     "$WORK/deb/usr/share/lws"
 }
 
+render_compose() {
+  local backend_default='sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2'
+  local dashboard_default='sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4'
+  local backend_digest="${LWS_BACKEND_DIGEST:-$backend_default}"
+  local dashboard_digest="${LWS_DASHBOARD_DIGEST:-$dashboard_default}"
+
+  sed \
+    -e "s|\\\${LWS_BACKEND_DIGEST:-$backend_default}|$backend_digest|g" \
+    -e "s|\\\${LWS_DASHBOARD_DIGEST:-$dashboard_default}|$dashboard_digest|g" \
+    "$ROOT/infrastructure/compose.yaml" \
+    >"$WORK/compose.yaml"
+}
+
 build_lwsctl() {
   "$ROOT/scripts/build-lwsctl.sh" \
     --output "$WORK/lwsctl" \
@@ -37,7 +50,7 @@ prepare_deb_tree() {
     "$WORK/deb/usr/bin/lwsctl"
 
   install -m 0644 \
-    "$ROOT/infrastructure/compose.yaml" \
+    "$WORK/compose.yaml" \
     "$WORK/deb/usr/share/lws/compose.yaml"
 
   install -m 0644 \
@@ -110,7 +123,7 @@ build_rpm() {
     "$rpm_root/SRPMS"
 
   install -m 0755 "$WORK/lwsctl" "$rpm_root/SOURCES/lwsctl"
-  install -m 0644 "$ROOT/infrastructure/compose.yaml" "$rpm_root/SOURCES/compose.yaml"
+  install -m 0644 "$WORK/compose.yaml" "$rpm_root/SOURCES/compose.yaml"
   install -m 0644 "$ROOT/infrastructure/Corefile" "$rpm_root/SOURCES/Corefile"
   install -m 0755 "$ROOT/scripts/install.sh" "$rpm_root/SOURCES/install.sh"
 
@@ -146,6 +159,7 @@ main() {
   trap cleanup EXIT
 
   prepare
+  render_compose
   build_lwsctl
   prepare_deb_tree
   build_deb

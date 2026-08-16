@@ -25,17 +25,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
       - run: mise run test
-  package:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
-      - run: mise run package
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lws-release-assets
-          path: dist/*
-          if-no-files-found: error
   backend-image:
     needs: [version, lint, test]
     runs-on: ubuntu-latest
@@ -47,10 +36,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Backendイメージをビルドして公開
+        id: publish
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
-          docker build --tag "ghcr.io/labwebsystem/lws-backend:${VERSION}" backend
-          docker push "ghcr.io/labwebsystem/lws-backend:${VERSION}"
+          IMAGE="ghcr.io/labwebsystem/lws-backend:${VERSION}"
+          docker build --tag "$IMAGE" backend
+          docker push "$IMAGE"
+          DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)"
+          test -n "$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
   dashboard-image:
     needs: [version, lint, test]
     runs-on: ubuntu-latest
@@ -62,10 +58,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Dashboardイメージをビルドして公開
+        id: publish
         run: |
           VERSION="${GITHUB_REF_NAME#lws-v}"
-          docker build --tag "ghcr.io/labwebsystem/lws-dashboard:${VERSION}" dashboard
-          docker push "ghcr.io/labwebsystem/lws-dashboard:${VERSION}"
+          IMAGE="ghcr.io/labwebsystem/lws-dashboard:${VERSION}"
+          docker build --tag "$IMAGE" dashboard
+          docker push "$IMAGE"
+          DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)"
+          test -n "$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+
+  package:
+    needs: [version, lint, test, backend-image, dashboard-image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: リリースdigestを注入してパッケージ化
+        env:
+          LWS_BACKEND_DIGEST: ${{ needs.backend-image.outputs.digest }}
+          LWS_DASHBOARD_DIGEST: ${{ needs.dashboard-image.outputs.digest }}
+        run: mise run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lws-release-assets
+          path: dist/*
+          if-no-files-found: error
   release:
     needs: [version, lint, test, package, backend-image, dashboard-image]
     runs-on: ubuntu-latest

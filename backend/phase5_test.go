@@ -110,6 +110,11 @@ func TestInfrastructureImagesArePinnedAndRequiredPortsAreFixed(t *testing.T) {
 			t.Fatalf("必須公開portが固定されていません: %s", port)
 		}
 	}
+	for _, variable := range []string{"LWS_BACKEND_DIGEST", "LWS_DASHBOARD_DIGEST"} {
+		if !strings.Contains(text, variable+":-") {
+			t.Fatalf("リリースdigestの注入点がありません: %s", variable)
+		}
+	}
 }
 
 func TestOpenAPIDeclaresResponseSchemasAndObservedAt(t *testing.T) {

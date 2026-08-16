@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}@sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}@${LWS_BACKEND_DIGEST:-sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2}
     restart: unless-stopped
     environment:
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
@@ -29,7 +29,7 @@ services:
       timeout: 2s
       retries: 30
   dashboard:
-    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}@sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}@${LWS_DASHBOARD_DIGEST:-sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4}
     restart: unless-stopped
     depends_on: [backend]
     labels:
