@@ -28,6 +28,7 @@
 - BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
 - BUG-012 | VERIFIED | test | 品質ゲート構造検査が未管理のrgへ依存する
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
+- BUG-014 | VERIFIED | cli | 初回起動前にupdateを実行できない
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -89,6 +90,7 @@
 - CHG-057 | SHIPPED | - | 機能テストルールを責務と実行プロファイルに合わせて再構成する
 - CHG-058 | SHIPPED | - | miseの内部taskをライブラリ設定へ分離する
 - CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
+- CHG-060 | SHIPPED | - | 初回起動前のLWS更新を許可する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

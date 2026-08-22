@@ -224,16 +224,22 @@ func (a *application) rebuild() error {
 }
 
 func (a *application) update() error {
+	configured := true
 	if err := a.loadConfig(); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return errors.New("設定を作成するため、先にstartを実行してください")
+			configured = false
+		} else {
+			return err
 		}
-		return err
 	}
 	if os.Getenv("LWS_SKIP_PACKAGE_UPDATE") != "1" {
-		wasRunning, err := a.hasRunningServices()
-		if err != nil {
-			return err
+		wasRunning := false
+		if configured {
+			var err error
+			wasRunning, err = a.hasRunningServices()
+			if err != nil {
+				return err
+			}
 		}
 		if info, err := os.Stat(a.paths.installerPath); err != nil || info.Mode()&0o111 == 0 {
 			return fmt.Errorf("インストーラーが見つかりません: %s", a.paths.installerPath)
@@ -254,16 +260,22 @@ func (a *application) update() error {
 		}
 		return syscall.Exec(executable, []string{executable, "update"}, environment)
 	}
-	if err := a.writeConfig(a.domain); err != nil {
-		return err
+	if configured {
+		if err := a.writeConfig(a.domain); err != nil {
+			return err
+		}
 	}
 	if err := a.compose("pull"); err != nil {
 		return err
 	}
-	if os.Getenv("LWS_RESTART_AFTER_UPDATE") == "1" {
+	if configured && os.Getenv("LWS_RESTART_AFTER_UPDATE") == "1" {
 		if err := a.compose("up", "-d", "--remove-orphans"); err != nil {
 			return err
 		}
+	}
+	if !configured {
+		fmt.Println("LWSを更新しました。初回起動はlwsctl startで行ってください")
+		return nil
 	}
 	fmt.Println("LWSを更新しました")
 	return nil

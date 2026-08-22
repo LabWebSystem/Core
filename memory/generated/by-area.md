@@ -72,6 +72,7 @@
 - CHG-057 | SHIPPED | - | 機能テストルールを責務と実行プロファイルに合わせて再構成する
 - CHG-058 | SHIPPED | - | miseの内部taskをライブラリ設定へ分離する
 - CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
+- CHG-060 | SHIPPED | - | 初回起動前のLWS更新を許可する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 
 ## backend
@@ -84,6 +85,7 @@
 - BUG-007 | VERIFIED | cli | downが保存済みのベースドメインをComposeへ渡さない
 - BUG-008 | VERIFIED | cli | updateが停止中のLWSを起動する
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
+- BUG-014 | VERIFIED | cli | 初回起動前にupdateを実行できない
 
 ## infrastructure
 - BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない

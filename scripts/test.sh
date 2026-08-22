@@ -104,6 +104,29 @@ test_help() {
     "$TMP/start-help"
 }
 
+test_update_before_start() {
+  : >"$TMP/docker.log"
+
+  "$LWSCTL" update
+
+  grep -qx \
+    'package-update' \
+    "$TMP/docker.log"
+
+  grep -qF \
+    'pull | LWS_BASE_DOMAIN= LWS_VERSION=0.2.0' \
+    "$TMP/docker.log"
+
+  ! grep -qF \
+    'up -d --remove-orphans' \
+    "$TMP/docker.log"
+
+  test ! -e "$TMP/etc/config.env"
+
+  printf '0.1.2\n' >"$TMP/version"
+  : >"$TMP/docker.log"
+}
+
 test_lifecycle() {
   "$LWSCTL" status >"$TMP/status-before"
 
@@ -441,6 +464,7 @@ main() {
   if [[ "$target" == all || "$target" == cli ]]; then
     setup_cli_environment
     test_help
+    test_update_before_start
     test_lifecycle
     test_domain_change
     test_config_migration

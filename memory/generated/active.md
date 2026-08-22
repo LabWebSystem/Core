@@ -24,4 +24,5 @@
 - BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
 - BUG-012 | VERIFIED | test | 品質ゲート構造検査が未管理のrgへ依存する
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
+- BUG-014 | VERIFIED | cli | 初回起動前にupdateを実行できない
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
