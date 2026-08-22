@@ -38,10 +38,18 @@ reject_match() {
 
 check_mise_tasks() {
   local mise_file="$ROOT/mise.toml"
+  local mise_lib="$ROOT/scripts/mise.lib.toml"
 
   require_match 'architecture' "$ROOT/scripts/test.sh"
   require_match 'all\|fast\|fixtures' "$ROOT/scripts/test.sh"
+  require_match '^\[task_config\]$' "$mise_file"
+  require_match '^includes = \["scripts/mise[.]lib[.]toml"\]$' "$mise_file"
   require_match '^\[tasks\.verify\]$' "$mise_file"
+  require_match '^\[tasks\.dev\]$' "$mise_file"
+  require_match '^\[tasks\.build\]$' "$mise_file"
+  require_match '^\[tasks\.package\]$' "$mise_file"
+  require_match '^\[tasks\.version\]$' "$mise_file"
+  require_match '^\[tasks\.release\]$' "$mise_file"
   require_match 'scripts/verify\.sh \$\{usage_profile:-fast\}' "$mise_file"
   require_match 'arg "\[profile\]" help="検証プロファイル（fast、qa、release）"' "$mise_file"
   require_match 'case "\$PROFILE" in' "$ROOT/scripts/verify.sh"
@@ -52,8 +60,18 @@ check_mise_tasks() {
   require_match 'color: #2e7d32' "$ROOT/scripts/verify.sh"
   require_match 'color: #c62828' "$ROOT/scripts/verify.sh"
   require_match 'color: #f9a825' "$ROOT/scripts/verify.sh"
-  require_match '^\[tasks\.test-sdk\]$' "$mise_file"
-  require_match '^\[tasks\.test-dashboard\]$' "$mise_file"
+  require_match '^\[lint\]$' "$mise_lib"
+  require_match '^\[test\]$' "$mise_lib"
+  require_match '^\[test-sdk\]$' "$mise_lib"
+  require_match '^\[test-dashboard\]$' "$mise_lib"
+  require_match '^\[qa\]$' "$mise_lib"
+  require_match '^\[qa-current\]$' "$mise_lib"
+  require_match '^\[qa-live\]$' "$mise_lib"
+  require_match '^\[qa-lifecycle\]$' "$mise_lib"
+  require_match '^\[qa-docs\]$' "$mise_lib"
+  require_match '^\[generate-backend\]$' "$mise_lib"
+  require_match '^\[check-openapi\]$' "$mise_lib"
+  reject_match '^\[tasks\.(lint|test|test-sdk|test-dashboard|qa|qa-current|qa-live|qa-lifecycle|qa-docs|generate-backend|check-openapi)\]$' "$mise_file"
 }
 
 check_result_boundary() {

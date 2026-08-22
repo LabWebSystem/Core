@@ -1,40 +1,144 @@
 # LabWebSystem
 
-LabWebSystem（LWS）は、Docker Composeを基盤とするLAN向けWebアプリケーションプラットフォームです。v0.1.7では、CLIとBackendを使ったアプリ登録・公開・管理の基盤を利用できます。利用者向けの操作方法は[LWS v0.1.7 利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)を参照してください。
+LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・管理するための仕組みです。
 
-## 開発
+アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-```sh
-mise run lint
-mise run test
-mise run test architecture
-mise run verify         # fast（開発中の既定）
-mise run verify qa      # fast + 統合テスト + 隔離Robot QA
-mise run verify release # qa + パッケージ生成
-mise run package
-mise run version
-mise run version core 1.2.3
-mise run version sdk 0.4.0
-mise run release core sdk
-mise run release all
-```
+> 現在のLWSは v0.1.7 です。CLIとBackendによるアプリ管理の基盤を使えます。DashboardとTypeScript SDKは、まだ開発中です。
 
-`verify`はプロファイルで範囲を選ぶ品質ゲートです。引数なしの`fast`は開発中に必要な静的検査、Core高速テスト、SDK、Dashboardを実行します。`qa`は実Docker統合テストと隔離Robot QAを追加し、`release`はさらにパッケージを生成します。各実行の統一要約と生ログは`test/result/YYYY-MM-DD-verify-result.md`へ保存されます。GitHub Actionsは`fast`、LWSリリースは`release`を実行します。
+## できること
 
-`version`は引数なしで各コンポーネントの現在バージョンを一覧表示し、対象とバージョンを指定するとその正本を更新します。`release`には認証済みの`gh` CLIが必要で、指定した`core`または`sdk`の現在のバージョンをタグとして公開し、対応するWorkflowの完了まで待機します。`all`はCoreとSDKを並列に公開し、両方のWorkflow完了まで待機します。出力には`[LWS]`または`[SDK]`が付き、関連するステップだけを表示します。既存Coreリリースを置き換える場合は、`--force`を指定します。公開済みSDKバージョンはGitHub Packagesの仕様上、再公開できません。
+- GitHubリポジトリにあるWebアプリを登録する
+- Docker Composeでアプリを起動・停止・更新する
+- `app-name.example.internal`の形でアプリごとのURLを公開する
+- アプリの設定値、secret、ログ、実行状態を管理する
+- LWS本体を起動、停止、再構成、更新する
 
-## インストールとライフサイクル
+## はじめる
 
-GitHub上のインストーラーは[LabWebSystem/Core](https://github.com/LabWebSystem/Core)の`scripts/install.sh`です。フォークを使う場合は`LWS_REPOSITORY=owner/repository`を設定してください。
+### 必要なもの
+
+- Ubuntu系またはAlmaLinux系のLinux
+- Docker EngineとDocker Compose plugin
+- 空いている80/tcp、53/tcp、53/udpポート
+- GitHub Releasesへ接続できるネットワーク
+
+LAN内の端末からアプリ名でアクセスするには、端末がLWSのDNSを使うようにDHCPまたはDNSを設定します。
+
+### インストール
+
+インストーラーはGitHub ReleasesからOSに合うパッケージを取得してインストールします。インストールしただけではLWSは起動しません。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/LabWebSystem/Core/main/scripts/install.sh | sudo bash
-sudo lwsctl start --domain example.internal
-sudo lwsctl stop
-sudo lwsctl down
-sudo lwsctl down --purge --force
 ```
 
-パッケージインストールはファイル配置だけを行います。Composeプロジェクトを起動するのは`lwsctl start`です。`lwsctl down`は実行環境だけを削除し、パッケージを削除する場合はAPT/DNFを使用します。パッケージマネージャーを直接使用した場合も、削除前hookがプロジェクトを撤去します。LWSは専用のComposeプロジェクトとラベルを使うため、無関係なDockerリソースは削除しません。
+フォークからインストールする場合は、`LWS_REPOSITORY=owner/repository`を設定します。
 
-インストーラーは`/etc/os-release`を確認し、Ubuntu系ではGitHub Releasesから`.deb`を取得してAPTで、AlmaLinux系では`.rpm`を取得してDNFでインストールします。対応していないOSや必要なパッケージマネージャーがない環境では、コンテナやパッケージを変更せず日本語のエラーを表示して終了します。
+### 初回起動
+
+ベースドメインを決めて起動します。
+
+```sh
+sudo lwsctl start --domain example.internal
+sudo lwsctl status
+```
+
+たとえば、`reserve`というアプリは次のURLで公開されます。
+
+```text
+reserve.example.internal
+```
+
+## LWSを操作する
+
+| コマンド | 内容 |
+|---|---|
+| `lwsctl start --domain <domain>` | 初回設定またはLWSの起動 |
+| `lwsctl stop` | LWSを停止。設定と保存データは残る |
+| `lwsctl status` | 設定とコンテナの状態を表示 |
+| `lwsctl rebuild` | 設定を作り直して実行環境を再構成 |
+| `lwsctl update` | パッケージとDockerイメージを更新 |
+| `lwsctl down` | 実行環境を削除。設定と保存データは残る |
+
+設定や保存データも含めて削除する場合は、次を実行します。
+
+```sh
+sudo lwsctl down --purge
+```
+
+詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)を参照してください。
+
+## アプリを公開する
+
+登録するGitHubリポジトリには、次のファイルが必要です。
+
+```text
+compose.yaml
+lws.manifest.yaml
+```
+
+`lws.manifest.yaml`には、公開するCompose serviceとportを書きます。
+
+```yaml
+apiVersion: lws/v1
+metadata:
+  name: 予約システム
+  description: 研究室の設備予約を管理するアプリ
+public:
+  service: web
+  port: 3000
+```
+
+LWSはリポジトリを取得して内容を確認し、問題がなければアプリを起動します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)を参照してください。
+
+## 開発
+
+このリポジトリでは、開発に必要なツールとコマンドを`mise`で管理します。
+
+```sh
+mise install
+mise run verify          # 普段の開発・通常CI用。約数秒
+mise run verify qa       # DockerとRobot QAを含む確認
+mise run verify release  # リリース前の確認とパッケージ生成
+mise run dev             # 開発用Composeを起動
+```
+
+品質ゲートの結果とログは、`test/result/YYYY-MM-DD-verify-result.md`に保存されます。
+
+| 作業 | コマンド |
+|---|---|
+| Coreのテスト | `mise run test <target>` |
+| 受け入れテスト | `mise run qa`、`mise run qa-current`、`mise run qa-lifecycle`、`mise run qa-live` |
+| パッケージ生成 | `mise run package` |
+| バージョン確認・変更 | `mise run version [core\|sdk] [version]` |
+| 公開 | `mise run release <core\|sdk\|all>` |
+
+品質ゲートとテストの役割は、[機能テストルール](docs/機能テストルール.md)を参照してください。
+
+## リポジトリ構成
+
+| 場所 | 内容 |
+|---|---|
+| `cmd/lwsctl/` | LWSを操作するCLI |
+| `backend/` | アプリ管理とDocker操作を行うBackend API |
+| `dashboard/` | Dashboardのコンテナ定義 |
+| `sdk/` | 外部アプリ向けTypeScript SDK |
+| `infrastructure/` | LWS本体のDocker Compose、DNS、Reverse Proxy設定 |
+| `packaging/` | `.deb`・`.rpm`パッケージ定義 |
+| `qa/` | Robot Frameworkの受け入れテスト |
+
+## 注意点
+
+- 管理APIには、まだ認証・認可がありません。信頼できるLAN内だけで使ってください。
+- DashboardとTypeScript SDKは、実用機能の実装途中です。
+- LAN端末へLWSのDNSを配るDHCP・DNS設定は、利用するネットワーク側で行います。
+
+## 関連資料
+
+- [利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)
+- [設計概要](docs/LabWebSystem設計概要.md)
+- [Infrastructure仕様書](docs/Infrastructure仕様書.md)
+- [Backend仕様書](docs/Backend仕様書.md)
+- [機能テストルール](docs/機能テストルール.md)
+- [LICENSE](LICENSE)

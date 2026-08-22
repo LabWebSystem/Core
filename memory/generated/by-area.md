@@ -70,6 +70,8 @@
 - CHG-055 | SHIPPED | - | Docker inspectの未存在判定を修正する
 - CHG-056 | SHIPPED | - | 品質ゲートを高速・QA・リリースへ分離し結果を集約する
 - CHG-057 | SHIPPED | - | 機能テストルールを責務と実行プロファイルに合わせて再構成する
+- CHG-058 | SHIPPED | - | miseの内部taskをライブラリ設定へ分離する
+- CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 
 ## backend

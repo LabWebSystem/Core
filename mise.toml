@@ -4,49 +4,8 @@ node = "22.22.0"
 python = "3.13.15"
 uv = "0.12.5"
 
-[tasks.lint]
-description = "静的検査を実行"
-run = "scripts/lint.sh"
-
-[tasks.test]
-description = "軽量な統合テストを実行"
-run = "scripts/test.sh ${usage_target:-}"
-usage = '''
-arg "[target]" help="テスト対象（fast、fixtures、cli、installer、release、backend、backend-http、backend-docker、infrastructure、architecture）"
-'''
-
-[tasks.test-sdk]
-description = "SDKのtestとbuildを実行"
-dir = "sdk"
-run = ["npm test", "npm run build"]
-
-[tasks.test-dashboard]
-description = "Dashboardイメージをビルド検証"
-run = "docker build --file dashboard/Dockerfile dashboard"
-
-[tasks.qa]
-description = "Robot Frameworkの受け入れテストを実行"
-run = "uv run --project qa robot --nostatusrc --exclude live --outputdir test/result/robot qa/suites"
-
-[tasks.qa-current]
-description = "現在実装済みのRobot Framework受け入れテストを実行"
-run = "uv run --project qa robot --outputdir test/result/robot-current --exclude planned --exclude isolated qa/suites"
-
-[tasks.qa-live]
-description = "起動済みLWSに対するAPI受け入れテストを実行"
-run = "uv run --project qa robot --outputdir test/result/robot-live --include live qa/suites"
-
-[tasks.qa-lifecycle]
-description = "隔離したCompose環境でLWSの起動ライフサイクルを実行"
-run = "uv run --project qa robot --outputdir test/result/robot-lifecycle qa/suites/v1/lifecycle.robot"
-
-[tasks.qa-docs]
-description = "Robot Frameworkの機能テスト項目を生成"
-run = [
-  "mkdir -p docs/generated",
-  "uv run --project qa testdoc -f html qa/suites docs/generated/機能テスト項目v1.html",
-  "uv run --project qa testdoc -f json qa/suites docs/generated/機能テスト項目v1.json",
-]
+[task_config]
+includes = ["scripts/mise.lib.toml"]
 
 [tasks.verify]
 description = "品質ゲートを実行（fast、qa、release）"
@@ -82,11 +41,3 @@ flag "-f --force" help="既存Coreリリースを確認なしで置き換える"
 [tasks.dev]
 description = "モックCompose環境を起動"
 run = "docker compose -f infrastructure/compose.yaml up"
-
-[tasks.generate-backend]
-description = "BackendのOpenAPI生成物を更新"
-run = "scripts/generate-backend.sh"
-
-[tasks.check-openapi]
-description = "OpenAPI生成物の差分を検査"
-run = "scripts/generate-backend.sh && git diff --exit-code -- backend/openapi.gen.go"
