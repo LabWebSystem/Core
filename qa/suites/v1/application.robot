@@ -25,8 +25,8 @@ FT-V1-021 不正なrepository URLを拒否する
 
 FT-V1-022 manifest指定のserviceとportで公開する
     [Documentation]    正しいmanifestとComposeを登録し指定service・portで公開する。
-    [Tags]    FT-V1-022    workflow    v1
-    Backend受け入れテストを実行する    ^TestFTV1_020RegisterValidApp$
+    [Tags]    FT-V1-022    planned    workflow    v1
+    未実装の受け入れテストとして記録する    FT-V1-022
 
 FT-V1-023 不正manifestをDocker実行前に拒否する
     [Documentation]    manifest不在・破損・schema違反でDockerを実行せず既存状態を保持する。
@@ -40,13 +40,13 @@ FT-V1-023 不正manifestをDocker実行前に拒否する
 
 FT-V1-024 危険なsource記法を拒否する
     [Documentation]    symlink、anchor、duplicate key、外部読込を含むsourceを採用しない。
-    [Tags]    FT-V1-024    workflow    v1
-    Backend受け入れテストを実行する    ^Test(ManifestSymlinkIsNotUsed|SourceTreeRejectsDotEnv)$
+    [Tags]    FT-V1-024    planned    workflow    v1
+    未実装の受け入れテストとして記録する    FT-V1-024
 
 FT-V1-025 危険なComposeを起動前に拒否する
     [Documentation]    root外path、bind mount、host port、privileged、Docker socketを拒否する。
-    [Tags]    FT-V1-025    workflow    v1
-    Backend受け入れテストを実行する    ^Test(ComposeRejectsExternalFeatures|EffectiveComposeAllowsNamedVolumeButRejectsBindMount|RuntimeRejectsEffectiveComposeBeforeUp)$
+    [Tags]    FT-V1-025    planned    workflow    v1
+    未実装の受け入れテストとして記録する    FT-V1-025
 
 FT-V1-026 Git取得失敗時に旧公開経路を保持する
     [Documentation]    cloneまたはref取得失敗時にOperationをfailedとし旧source・公開経路を維持する。
@@ -59,8 +59,8 @@ FT-V1-026 Git取得失敗時に旧公開経路を保持する
 
 FT-V1-027 アプリ間の公開とnetworkを分離する
     [Documentation]    同じCompose service名のアプリを登録しても各URLが正しく到達し相互通信を拒否する。
-    [Tags]    FT-V1-027    integration    v1
-    Backend受け入れテストを実行する    ^Test(DerivedManagerUsesManifestPublication|DockerConnectsCaddyWithAppAlias|RuntimeUsesOwnedComposeArguments)$
+    [Tags]    FT-V1-027    planned    integration    v1
+    未実装の受け入れテストとして記録する    FT-V1-027
 
 FT-V1-028 アプリのstop/start/rebuildでvolumeを保持する
     [Documentation]    起動中アプリを操作し対象だけを変更してnamed volumeを保持する。
@@ -105,8 +105,8 @@ FT-V1-033 新refへアプリをsyncする
 
 FT-V1-034 sync失敗時に旧状態を保持する
     [Documentation]    manifest・Compose・Docker・Caddy反映失敗時に旧source・container・DNS・設定を保持する。
-    [Tags]    FT-V1-034    workflow    v1
-    Backend受け入れテストを実行する    ^Test(RuntimeRestoresSourceWhenComposeValidationFails|RuntimeUpdateRestoresApplicationOnSourceFailure|DerivedManagerKeepsPreviousFilesWhen(CaddyValidationFails|CoreDNSReloadFails))$
+    [Tags]    FT-V1-034    planned    workflow    v1
+    未実装の受け入れテストとして記録する    FT-V1-034
 
 FT-V1-035 失敗したsyncを再実行する
     [Documentation]    失敗したsyncを旧状態から安全に再試行できる。

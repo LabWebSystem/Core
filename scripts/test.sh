@@ -439,7 +439,7 @@ main() {
   local target="${1:-all}"
 
   case "$target" in
-    all|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure) ;;
+    all|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure|architecture) ;;
     *)
       printf '不明なテスト対象です: %s\n' "$target" >&2
       return 2
@@ -456,6 +456,9 @@ main() {
 
   if [[ "$target" == all || "$target" == fixtures ]]; then
     "$ROOT/scripts/test-fixtures.sh"
+  fi
+  if [[ "$target" == all || "$target" == architecture ]]; then
+    "$ROOT/scripts/test-quality-architecture.sh"
   fi
   if [[ "$target" == all || "$target" == cli ]]; then
     setup_cli_environment

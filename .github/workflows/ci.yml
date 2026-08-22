@@ -1,49 +1,16 @@
 name: 継続的インテグレーション
 on: [push, pull_request]
 jobs:
-  lint:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
-      - run: mise run lint
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run test
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run test backend
-      - run: mise run test backend-http
-      - run: mise run test backend-docker
-  infrastructure:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run test infrastructure
-  qa:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run qa-current
-      - run: mise run qa-docs
+      - run: mise run verify
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lws-qa-results
+          name: lws-quality-results
           path: |
-            test/result/robot-current/
+            test/result/
             docs/generated/
-  package:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run package

@@ -13,20 +13,15 @@ jobs:
       - uses: jdx/mise-action@v4
       - name: Coreバージョンをリリースタグと照合
         run: test "$(scripts/version.sh core)" = "${GITHUB_REF_NAME#lws-v}"
-  lint:
+  quality:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
-      - run: mise run lint
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run test
+      - run: mise run verify-release
   backend-image:
-    needs: [version, lint, test]
+    needs: [quality]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -52,7 +47,7 @@ jobs:
     outputs:
       digest: ${{ steps.publish.outputs.digest }}
   dashboard-image:
-    needs: [version, lint, test]
+    needs: [quality]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -78,7 +73,7 @@ jobs:
       digest: ${{ steps.publish.outputs.digest }}
 
   package:
-    needs: [version, lint, test, backend-image, dashboard-image]
+    needs: [quality, backend-image, dashboard-image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -94,7 +89,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
   release:
-    needs: [version, lint, test, package, backend-image, dashboard-image]
+    needs: [quality, package, backend-image, dashboard-image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8

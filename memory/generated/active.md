@@ -10,6 +10,7 @@
 - ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
 - ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
+- ADR-010 | ACCEPTED | - | miseを品質ゲートの正本とする
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
@@ -21,3 +22,4 @@
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
 - BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する
 - BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
+- SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

@@ -21,8 +21,8 @@ FT-V1-040 ACTIVEアプリをunregisterする
 
 FT-V1-041 unregister失敗後に再試行可能にする
     [Documentation]    stop・切断・network削除の失敗時に既存記録を失わず再試行可能にする。
-    [Tags]    FT-V1-041    workflow    v1
-    Backend受け入れテストを実行する    ^Test(RuntimeUnregister(KeepsCaddyConnectedWhenComposeDownFails|PreservesSourceAndRegisterRestoresIt))$
+    [Tags]    FT-V1-041    planned    workflow    v1
+    未実装の受け入れテストとして記録する    FT-V1-041
 
 FT-V1-042 UNREGISTEREDアプリを再登録する
     [Documentation]    保持したsource・設定・volumeを再利用してACTIVEへ復帰する。

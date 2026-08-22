@@ -12,6 +12,7 @@
 - ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
 - ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
+- ADR-010 | ACCEPTED | - | miseを品質ゲートの正本とする
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -63,7 +64,9 @@
 - CHG-049 | SHIPPED | - | インストール受け入れテストをroot隔離実行へ変更する
 - CHG-050 | SHIPPED | - | 機能テストの環境依存失敗をskipへ分類する
 - CHG-051 | SHIPPED | - | API受け入れテストをCaddy公開経路へ接続する
-- CHG-052 | SHIPPED | - | Robot FTプレースホルダーを実行可能な検証へ置換する
+- CHG-052 | SUPERSEDED | - | Robot FTプレースホルダーを実行可能な検証へ置換する
+- CHG-053 | SHIPPED | - | 品質ゲートをmiseへ統合する
+- SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

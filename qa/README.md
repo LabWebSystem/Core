@@ -2,7 +2,7 @@
 
 このディレクトリは、LWS本体の内部実装ではなく、利用者が観測できる操作と結果を検証するためのテストを管理する。
 
-テスト定義は`.robot`ファイルを正本とする。`backend/`や`cmd/`へ機能テスト用コードを追加しない。
+テスト定義は`.robot`ファイルを正本とする。`backend/`や`cmd/`へ機能テスト用コードを追加せず、既存のGo・Shell・SDKテストをRobotから再実行して成功扱いにしない。
 
 ## 実行
 
@@ -12,7 +12,7 @@ mise run qa
 
 通常の機能テストを実行する。外部で起動済みのLWS APIを必要とする`live`タグは対象外で、`mise run qa-live`で明示的に実行する。未達成項目はFAILとして結果へ記録するが、Robotの実行自体が最後まで完了した場合は`mise`の終了statusを成功にする。実行結果は`test/result/robot/`へ生成される。インストールテストはrootで起動する一時Dockerコンテナ内で実行し、コンテナはテスト後に自動削除する。
 
-CIなど、現在実装済みの項目だけを確認する場合は次を実行する。
+CIなど、`planned`および専用環境が必要な`isolated`ではない自己完結した受け入れテストを確認する場合は次を実行する。
 
 ```sh
 mise run qa-current
@@ -29,7 +29,7 @@ LWS_QA_REPOSITORY_URL=https://github.com/example/lws-valid \
 mise run qa-live
 ```
 
-`qa-live`はLWSを自動起動しない。LWSが起動していない場合はテストをSKIPせず、接続エラーとしてFAILする。
+`qa-live`はLWSを自動起動しない。LWSが起動していない場合はテストをSKIPせず、接続エラーとしてFAILする。未実装の受け入れシナリオは`planned`タグで管理し、内部テストの結果でGREENにしてはいけない。
 
 LWSの起動・停止・再構成を実際のDocker Composeで確認する場合は、専用の隔離環境を使って次を実行する。
 

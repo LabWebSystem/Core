@@ -7,6 +7,8 @@ LabWebSystem（LWS）は、Docker Composeを基盤とするLAN向けWebアプリ
 ```sh
 mise run lint
 mise run test
+mise run test architecture
+mise run verify
 mise run package
 mise run version
 mise run version core 1.2.3
@@ -14,6 +16,8 @@ mise run version sdk 0.4.0
 mise run release core sdk
 mise run release all
 ```
+
+`verify`はCore、SDK、Dashboard、QA、パッケージをまとめて検証する通常CIの品質ゲートです。GitHub ActionsとLWSリリースは、この`mise` taskを通じて検証します。
 
 `version`は引数なしで各コンポーネントの現在バージョンを一覧表示し、対象とバージョンを指定するとその正本を更新します。`release`には認証済みの`gh` CLIが必要で、指定した`core`または`sdk`の現在のバージョンをタグとして公開し、対応するWorkflowの完了まで待機します。`all`はCoreとSDKを並列に公開し、両方のWorkflow完了まで待機します。出力には`[LWS]`または`[SDK]`が付き、関連するステップだけを表示します。既存Coreリリースを置き換える場合は、`--force`を指定します。公開済みSDKバージョンはGitHub Packagesの仕様上、再公開できません。
 
