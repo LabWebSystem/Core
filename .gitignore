@@ -34,3 +34,7 @@ sdk/dist/
 # .idea/
 # .vscode/
 test/result/*.md
+test/result/robot/
+test/result/robot-current/
+docs/generated/
+qa/.venv/

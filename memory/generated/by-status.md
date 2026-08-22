@@ -11,6 +11,7 @@
 - ADR-006 | ACCEPTED | - | Backend実装技術スタック
 - ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
+- ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
 
 ## SHIPPED
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -56,6 +57,8 @@
 - CHG-042 | SHIPPED | - | LWSリリースWorkflowのBackend build contextとActionを修正する
 - CHG-043 | SHIPPED | - | LWSリリースのDocker BuildKitキャッシュを有効化する
 - CHG-044 | SHIPPED | - | 旧設定ファイルの権限をパッケージ更新時に移行する
+- CHG-045 | SHIPPED | - | Robot Framework受け入れテスト基盤を追加する
+- CHG-046 | SHIPPED | - | v1機能テスト項目をRobot Frameworkへ移植する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

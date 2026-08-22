@@ -11,6 +11,7 @@
 - ADR-006 | ACCEPTED | - | Backend実装技術スタック
 - ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
+- ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -55,6 +56,8 @@
 - CHG-042 | SHIPPED | - | LWSリリースWorkflowのBackend build contextとActionを修正する
 - CHG-043 | SHIPPED | - | LWSリリースのDocker BuildKitキャッシュを有効化する
 - CHG-044 | SHIPPED | - | 旧設定ファイルの権限をパッケージ更新時に移行する
+- CHG-045 | SHIPPED | - | Robot Framework受け入れテスト基盤を追加する
+- CHG-046 | SHIPPED | - | v1機能テスト項目をRobot Frameworkへ移植する
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

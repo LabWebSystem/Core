@@ -9,6 +9,7 @@
 - ADR-006 | ACCEPTED | - | Backend実装技術スタック
 - ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
+- ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
