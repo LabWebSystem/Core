@@ -2,7 +2,7 @@
 
 ## 1. 目的
 
-本計画は、[Infrastructure仕様書](Infrastructure仕様書.md)、[Backend仕様書](Backend仕様書.md)、および[シナリオテスト計画](Infrastructure・Backendシナリオテスト計画.md)を満たすInfrastructureとBackendを、検証可能な小さな変更単位で実装するための順序を定める。
+本計画は、[Infrastructure仕様書](Infrastructure仕様書.md)、[Backend仕様書](Backend仕様書.md)、および[機能テスト項目v1](relese/v1/機能テスト項目v1.md)を満たすInfrastructureとBackendを、検証可能な小さな変更単位で実装するための順序を定める。
 
 仕様と受け入れテストの正本はそれぞれ上記の文書である。本書は実装の依存関係、成果物、完了条件だけを定める。
 
@@ -172,4 +172,4 @@
 
 ## 6. 完了の判定
 
-P0完了は、シナリオテスト計画の「実装開始時のP0完了条件」を全て満たし、通常CIで全テストtargetが成功することとする。P1はフェーズ5まで完了した時点で判定する。
+P0完了は、機能テスト項目v1のP0相当機能と関連するテスト項目を全て満たし、通常CIで全テストtargetが成功することとする。P1はフェーズ5まで完了した時点で判定する。
