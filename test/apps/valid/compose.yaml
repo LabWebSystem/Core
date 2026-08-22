@@ -1,0 +1,12 @@
+services:
+  web:
+    image: nginx:1.27-alpine
+    command:
+      - /bin/sh
+      - -c
+      - printf 'lws-test-app-v1\n' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'
+    volumes:
+      - app-data:/var/lib/lws-test
+
+volumes:
+  app-data:

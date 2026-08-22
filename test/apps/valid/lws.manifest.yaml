@@ -1,0 +1,7 @@
+apiVersion: lws/v1
+metadata:
+  name: LWSテストアプリ
+  description: LWSの登録、公開、停止、再構成、登録解除を検証する正常系アプリ
+public:
+  service: web
+  port: 80
