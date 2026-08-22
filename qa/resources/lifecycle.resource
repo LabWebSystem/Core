@@ -7,7 +7,6 @@ Library    String
 ${WORKSPACE}    ${CURDIR}/../..
 ${QA_ROOT}      ${EMPTY}
 ${LWSCTL}       ${EMPTY}
-${LWS_LIFECYCLE_BLOCKED}    ${False}
 
 *** Keywords ***
 LWS本体の隔離環境を準備する
@@ -24,6 +23,8 @@ LWS本体の隔離環境を準備する
     ${compose}=    Replace String    ${compose}    lws-backend-config    ${project}-backend-config
     ${compose}=    Replace String    ${compose}    lws-generated    ${project}-generated
     ${compose}=    Replace String    ${compose}    lws-internal    ${project}-internal
+    ${compose}=    Replace String    ${compose}    context: ..    context: ${WORKSPACE}
+    ${compose}=    Evaluate    __import__('re').sub(r'(?m)^\\s*image: ghcr[.]io/.*lws-backend.*\\n', '', $compose)
     ${compose_file}=    Set Variable    ${qa_root}/compose.yaml
     Copy File    ${WORKSPACE}/infrastructure/Corefile    ${qa_root}/Corefile
     Create File    ${compose_file}    ${compose}
@@ -44,14 +45,7 @@ LWS本体を停止して隔離環境を削除する
 LWSを起動する
     ${result}=    Run Process    ${LWSCTL}    start    --domain    qa.example.internal
     Log    stdout=${result.stdout} stderr=${result.stderr}
-    IF    ${result.rc} != 0 and ('dependency failed' in $result.stderr or 'unhealthy' in $result.stderr)
-        Set Suite Variable    ${LWS_LIFECYCLE_BLOCKED}    ${True}
-        Skip    ComposeのBackend healthcheckが成功しないため、起動環境を用意できません。
-    END
     Should Be Equal As Integers    ${result.rc}    0
-
-LWSライフサイクル環境が利用可能であること
-    Run Keyword If    ${LWS_LIFECYCLE_BLOCKED}    Skip    ComposeのBackend healthcheckが成功しないため、起動環境を用意できません。
 
 LWSが起動済みであることを確認する
     ${status}=    Run Process    ${LWSCTL}    status

@@ -16,7 +16,7 @@ arg "[target]" help="テスト対象（fixtures、cli、installer、release、ba
 
 [tasks.qa]
 description = "Robot Frameworkの受け入れテストを実行"
-run = "uv run --project qa robot --nostatusrc --outputdir test/result/robot qa/suites"
+run = "uv run --project qa robot --nostatusrc --exclude live --outputdir test/result/robot qa/suites"
 
 [tasks.qa-current]
 description = "現在実装済みのRobot Framework受け入れテストを実行"

@@ -76,3 +76,5 @@
 - CHG-047 | SHIPPED | - | RobotのAPI受け入れテストを実操作へ接続する
 - CHG-048 | SHIPPED | - | LWS本体の起動ライフサイクルをRobotで検証する
 - CHG-049 | SHIPPED | - | インストール受け入れテストをroot隔離実行へ変更する
+- CHG-050 | SHIPPED | - | 機能テストの環境依存失敗をskipへ分類する
+- CHG-051 | SHIPPED | - | API受け入れテストをCaddy公開経路へ接続する
