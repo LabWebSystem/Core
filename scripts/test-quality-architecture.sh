@@ -48,8 +48,16 @@ check_mise_tasks() {
   require_match 'fast\|qa\|release' "$ROOT/scripts/verify.sh"
   require_match 'VERIFY_ITEM\|' "$ROOT/scripts/verify.sh"
   require_match 'verify-result\.md' "$ROOT/scripts/verify.sh"
+  require_match 'PASS' "$ROOT/scripts/verify.sh"
+  require_match 'color: #2e7d32' "$ROOT/scripts/verify.sh"
+  require_match 'color: #c62828' "$ROOT/scripts/verify.sh"
+  require_match 'color: #f9a825' "$ROOT/scripts/verify.sh"
   require_match '^\[tasks\.test-sdk\]$' "$mise_file"
   require_match '^\[tasks\.test-dashboard\]$' "$mise_file"
+}
+
+check_result_boundary() {
+  reject_match 'test-result[.]sh|^TEST_(LOG|RESULT|TARGET|STARTED)=' "$ROOT/scripts/test.sh"
 }
 
 check_workflows() {
@@ -73,6 +81,7 @@ check_qa_boundary() {
 
 main() {
   check_mise_tasks
+  check_result_boundary
   check_workflows
   check_qa_boundary
   printf '品質ゲート構造検査: 成功\n'

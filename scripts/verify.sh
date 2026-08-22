@@ -5,6 +5,10 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROFILE="${1:-fast}"
 readonly RESULT_DIR="$ROOT/test/result"
 readonly RESULT_FILE="$RESULT_DIR/$(date +%F)-verify-result.md"
+readonly COLOR_PASS=$'\033[32m'
+readonly COLOR_FAIL=$'\033[31m'
+readonly COLOR_SKIP=$'\033[33m'
+readonly COLOR_RESET=$'\033[0m'
 
 TMP=""
 STARTED=""
@@ -26,6 +30,32 @@ append_record() {
   RECORDS+=("$id|$status|$description|$elapsed")
 }
 
+print_item() {
+  local id="$1"
+  local status="$2"
+  local description="$3"
+  local elapsed="$4"
+  local color="$COLOR_RESET"
+
+  case "$status" in
+    PASS) color="$COLOR_PASS" ;;
+    FAIL) color="$COLOR_FAIL" ;;
+    SKIP) color="$COLOR_SKIP" ;;
+  esac
+  printf 'VERIFY_ITEM|%s|%s%s%s|%s|%s\n' "$id" "$color" "$status" "$COLOR_RESET" "$description" "$elapsed"
+}
+
+render_status() {
+  local status="$1"
+
+  case "$status" in
+    PASS) printf '<span style="color: #2e7d32"><strong>PASS</strong></span>' ;;
+    FAIL) printf '<span style="color: #c62828"><strong>FAIL</strong></span>' ;;
+    SKIP) printf '<span style="color: #f9a825"><strong>SKIP</strong></span>' ;;
+    *) printf '%s' "$status" ;;
+  esac
+}
+
 run_step() {
   local id="$1"
   local description="$2"
@@ -37,17 +67,17 @@ run_step() {
   if "$@" >"$log" 2>&1; then
     finished="$(date +%s)"
     elapsed="$((finished - started))秒"
-    append_record "$id" '成功' "$description" "$elapsed"
+    append_record "$id" 'PASS' "$description" "$elapsed"
     LOGS+=("$id|$description|$log")
-    printf 'VERIFY_ITEM|%s|成功|%s|%s\n' "$id" "$description" "$elapsed"
+    print_item "$id" 'PASS' "$description" "$elapsed"
     return 0
   fi
 
   finished="$(date +%s)"
   elapsed="$((finished - started))秒"
-  append_record "$id" '失敗' "$description" "$elapsed"
+  append_record "$id" 'FAIL' "$description" "$elapsed"
   LOGS+=("$id|$description|$log")
-  printf 'VERIFY_ITEM|%s|失敗|%s|%s\n' "$id" "$description" "$elapsed" >&2
+  print_item "$id" 'FAIL' "$description" "$elapsed" >&2
   return 1
 }
 
@@ -55,8 +85,8 @@ skip_step() {
   local id="$1"
   local description="$2"
 
-  append_record "$id" '未実行' "$description" '-'
-  printf 'VERIFY_ITEM|%s|未実行|%s|-\n' "$id" "$description"
+  append_record "$id" 'SKIP' "$description" '-'
+  print_item "$id" 'SKIP' "$description" '-'
 }
 
 run_fast() {
@@ -100,12 +130,12 @@ has_step() {
 
 write_result() {
   local status="$1"
-  local result='成功'
+  local result='PASS'
   local finished
   local record id item_status description elapsed log_id log_description log_path
 
   if [[ "$status" != 0 ]]; then
-    result='失敗'
+    result='FAIL'
   fi
   finished="$(date --iso-8601=seconds)"
   mkdir -p "$RESULT_DIR"
@@ -113,7 +143,7 @@ write_result() {
   {
     printf '# LWS 品質ゲート結果\n\n'
     printf -- '- プロファイル: `%s`\n' "$PROFILE"
-    printf -- '- 結果: **%s**\n' "$result"
+    printf -- '- 結果: %s\n' "$(render_status "$result")"
     printf -- '- 終了status: `%s`\n' "$status"
     printf -- '- 開始: `%s`\n' "$STARTED"
     printf -- '- 終了: `%s`\n' "$finished"
@@ -122,7 +152,7 @@ write_result() {
     printf '|---|---|---|---|\n'
     for record in "${RECORDS[@]}"; do
       IFS='|' read -r id item_status description elapsed <<<"$record"
-      printf '| `%s` | %s | %s | %s |\n' "$id" "$item_status" "$description" "$elapsed"
+      printf '| `%s` | %s | %s | %s |\n' "$id" "$(render_status "$item_status")" "$description" "$elapsed"
     done
     printf '\n## Robot Frameworkの詳細結果\n\n'
     if has_step 'VFY-006'; then
@@ -187,7 +217,11 @@ main() {
     fi
   fi
 
-  printf 'VERIFY_RESULT|%s|%s\n' "$PROFILE" "$([[ "$OVERALL_STATUS" == 0 ]] && printf '成功' || printf '失敗')"
+  if [[ "$OVERALL_STATUS" == 0 ]]; then
+    printf 'VERIFY_RESULT|%s|%sPASS%s\n' "$PROFILE" "$COLOR_PASS" "$COLOR_RESET"
+  else
+    printf 'VERIFY_RESULT|%s|%sFAIL%s\n' "$PROFILE" "$COLOR_FAIL" "$COLOR_RESET"
+  fi
   printf 'VERIFY_REPORT|%s\n' "$RESULT_FILE"
   return "$OVERALL_STATUS"
 }

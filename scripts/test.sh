@@ -5,25 +5,8 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly HOST_PATH="$PATH"
 
 TMP=""
-TEST_LOG=""
-TEST_RESULT=""
-TEST_TARGET=""
-TEST_STARTED=""
 
 cleanup() {
-  local status=$?
-
-  if [[ -n "$TEST_LOG" && -n "$TEST_RESULT" ]]; then
-    "$ROOT/scripts/test-result.sh" write \
-      "$TEST_RESULT" \
-      "$TEST_TARGET" \
-      "$status" \
-      "$TEST_STARTED" \
-      "$(date --iso-8601=seconds)" \
-      "$TEST_LOG" \
-      >/dev/null 2>&1 || true
-  fi
-
   [[ -z "$TMP" ]] || rm -rf "$TMP"
 }
 
@@ -447,12 +430,7 @@ main() {
   esac
 
   TMP="$(mktemp -d)"
-  TEST_LOG="$TMP/test-output.log"
-  TEST_RESULT="$ROOT/test/result/$(date +%F)-test-result.md"
-  TEST_TARGET="$target"
-  TEST_STARTED="$(date --iso-8601=seconds)"
   trap cleanup EXIT
-  exec > >(tee "$TEST_LOG") 2>&1
 
   if [[ "$target" == all || "$target" == fast || "$target" == fixtures ]]; then
     "$ROOT/scripts/test-fixtures.sh"
