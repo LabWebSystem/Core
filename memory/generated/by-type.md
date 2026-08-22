@@ -85,6 +85,7 @@
 - CHG-053 | SHIPPED | - | 品質ゲートをmiseへ統合する
 - CHG-054 | SHIPPED | - | 構造検査をgrepだけで実行する
 - CHG-055 | SHIPPED | - | Docker inspectの未存在判定を修正する
+- CHG-056 | SHIPPED | - | 品質ゲートを高速・QA・リリースへ分離し結果を集約する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

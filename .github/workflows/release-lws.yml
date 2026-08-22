@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
-      - run: mise run verify-release
+      - run: mise run verify release
   backend-image:
     needs: [quality]
     runs-on: ubuntu-latest

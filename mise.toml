@@ -12,7 +12,7 @@ run = "scripts/lint.sh"
 description = "軽量な統合テストを実行"
 run = "scripts/test.sh ${usage_target:-}"
 usage = '''
-arg "[target]" help="テスト対象（fixtures、cli、installer、release、backend、backend-http、backend-docker、infrastructure、architecture）"
+arg "[target]" help="テスト対象（fast、fixtures、cli、installer、release、backend、backend-http、backend-docker、infrastructure、architecture）"
 '''
 
 [tasks.test-sdk]
@@ -48,25 +48,12 @@ run = [
   "uv run --project qa testdoc -f json qa/suites docs/generated/機能テスト項目v1.json",
 ]
 
-[tasks.verify-quality]
-description = "全コンポーネントと受け入れテストの品質を検証"
-run = [
-  "mise run lint",
-  "mise run test",
-  "mise run test-sdk",
-  "mise run test-dashboard",
-  "mise run qa-current",
-  "mise run qa-lifecycle",
-  "mise run qa-docs",
-]
-
 [tasks.verify]
-description = "通常CI向けの品質ゲートを実行"
-run = ["mise run verify-quality", "mise run package"]
-
-[tasks.verify-release]
-description = "LWSリリース前の品質ゲートを実行"
-run = "mise run verify-quality"
+description = "品質ゲートを実行（fast、qa、release）"
+run = "scripts/verify.sh ${usage_profile:-fast}"
+usage = '''
+arg "[profile]" help="検証プロファイル（fast、qa、release）"
+'''
 
 [tasks.build]
 description = "lwsctlバイナリとリリースパッケージを生成"

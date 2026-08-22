@@ -439,7 +439,7 @@ main() {
   local target="${1:-all}"
 
   case "$target" in
-    all|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure|architecture) ;;
+    all|fast|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure|architecture) ;;
     *)
       printf '不明なテスト対象です: %s\n' "$target" >&2
       return 2
@@ -454,10 +454,10 @@ main() {
   trap cleanup EXIT
   exec > >(tee "$TEST_LOG") 2>&1
 
-  if [[ "$target" == all || "$target" == fixtures ]]; then
+  if [[ "$target" == all || "$target" == fast || "$target" == fixtures ]]; then
     "$ROOT/scripts/test-fixtures.sh"
   fi
-  if [[ "$target" == all || "$target" == architecture ]]; then
+  if [[ "$target" == all || "$target" == fast || "$target" == architecture ]]; then
     "$ROOT/scripts/test-quality-architecture.sh"
   fi
   if [[ "$target" == all || "$target" == cli ]]; then
@@ -480,7 +480,7 @@ main() {
     test_release_selected_components
   fi
 
-  if [[ "$target" == all || "$target" == backend ]]; then
+  if [[ "$target" == all || "$target" == fast || "$target" == backend ]]; then
     (cd "$ROOT" && go test -count=1 ./backend/...)
   fi
   if [[ "$target" == all || "$target" == backend-http ]]; then

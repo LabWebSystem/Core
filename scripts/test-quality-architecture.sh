@@ -40,11 +40,16 @@ check_mise_tasks() {
   local mise_file="$ROOT/mise.toml"
 
   require_match 'architecture' "$ROOT/scripts/test.sh"
+  require_match 'all\|fast\|fixtures' "$ROOT/scripts/test.sh"
+  require_match '^\[tasks\.verify\]$' "$mise_file"
+  require_match 'scripts/verify\.sh \$\{usage_profile:-fast\}' "$mise_file"
+  require_match 'arg "\[profile\]" help="検証プロファイル（fast、qa、release）"' "$mise_file"
+  require_match 'case "\$PROFILE" in' "$ROOT/scripts/verify.sh"
+  require_match 'fast\|qa\|release' "$ROOT/scripts/verify.sh"
+  require_match 'VERIFY_ITEM\|' "$ROOT/scripts/verify.sh"
+  require_match 'verify-result\.md' "$ROOT/scripts/verify.sh"
   require_match '^\[tasks\.test-sdk\]$' "$mise_file"
   require_match '^\[tasks\.test-dashboard\]$' "$mise_file"
-  require_match '^\[tasks\.verify-quality\]$' "$mise_file"
-  require_match '^\[tasks\.verify-release\]$' "$mise_file"
-  require_match '^\[tasks\.verify\]$' "$mise_file"
 }
 
 check_workflows() {
@@ -55,7 +60,7 @@ check_workflows() {
 
   require_match 'mise run verify$' "$ci"
   require_match_count '^[[:space:]]*-[[:space:]]*run:' 1 "$ci"
-  require_match 'mise run verify-release$' "$lws_release"
+  require_match 'mise run verify release$' "$lws_release"
   require_match 'mise run test-sdk$' "$sdk_release"
   reject_match "$direct_runner" "$ci" "$lws_release" "$sdk_release"
 }
