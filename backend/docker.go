@@ -169,7 +169,8 @@ func (d *DockerResources) VerifyProjectOwnership(ctx context.Context, app string
 func (d *DockerResources) inspect(ctx context.Context, kind, name string) (DockerResource, error) {
 	out, err := d.Runner.Run(ctx, "docker", kind, "inspect", name)
 	if err != nil {
-		if strings.Contains(strings.ToLower(string(out)), "no such") || strings.Contains(strings.ToLower(err.Error()), "no such") {
+		message := strings.ToLower(string(out) + "\n" + err.Error())
+		if strings.Contains(message, "no such") || strings.Contains(message, "not found") {
 			return DockerResource{}, &dockerNotFoundError{message: "Docker資源が見つかりません"}
 		}
 		return DockerResource{}, fmt.Errorf("Docker資源を確認できません")

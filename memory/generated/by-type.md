@@ -26,6 +26,8 @@
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
 - BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する
 - BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
+- BUG-012 | VERIFIED | test | 品質ゲート構造検査が未管理のrgへ依存する
+- BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -81,6 +83,8 @@
 - CHG-051 | SHIPPED | - | API受け入れテストをCaddy公開経路へ接続する
 - CHG-052 | SUPERSEDED | - | Robot FTプレースホルダーを実行可能な検証へ置換する
 - CHG-053 | SHIPPED | - | 品質ゲートをmiseへ統合する
+- CHG-054 | SHIPPED | - | 構造検査をgrepだけで実行する
+- CHG-055 | SHIPPED | - | Docker inspectの未存在判定を修正する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

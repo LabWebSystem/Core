@@ -27,7 +27,9 @@ func (r OSRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	defer cancel()
 	cmd := exec.CommandContext(c, name, args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	return cmd.Output()
+	// Dockerは資源未存在などの判定情報を標準エラーへ出力する。
+	// 呼び出し側が安全に状態を分類できるよう、失敗時も出力を回収する。
+	return cmd.CombinedOutput()
 }
 
 func (r OSRunner) Stream(ctx context.Context, name string, args ...string) (io.ReadCloser, error) {

@@ -7,7 +7,7 @@ require_match() {
   local pattern="$1"
   local file="$2"
 
-  if ! rg -q -- "$pattern" "$file"; then
+  if ! grep -Eq -- "$pattern" "$file"; then
     printf '品質ゲート構造検査: %s に必要な定義がありません: %s\n' "$file" "$pattern" >&2
     return 1
   fi
@@ -19,7 +19,7 @@ require_match_count() {
   local file="$3"
   local actual
 
-  actual="$(rg -c -- "$pattern" "$file" || true)"
+  actual="$(grep -Ec -- "$pattern" "$file" || true)"
   if [[ "$actual" != "$expected" ]]; then
     printf '品質ゲート構造検査: %s の一致数が不正です（期待: %s、実際: %s）\n' "$file" "$expected" "$actual" >&2
     return 1
@@ -30,7 +30,7 @@ reject_match() {
   local pattern="$1"
   shift
 
-  if rg -n -- "$pattern" "$@"; then
+  if grep -REn --exclude-dir=.venv -- "$pattern" "$@"; then
     printf '品質ゲート構造検査: 直接実行してはいけないコマンドがあります\n' >&2
     return 1
   fi
@@ -43,8 +43,8 @@ check_mise_tasks() {
   require_match '^\[tasks\.test-sdk\]$' "$mise_file"
   require_match '^\[tasks\.test-dashboard\]$' "$mise_file"
   require_match '^\[tasks\.verify-quality\]$' "$mise_file"
-  require_match '^\[tasks\.verify\]$' "$mise_file"
   require_match '^\[tasks\.verify-release\]$' "$mise_file"
+  require_match '^\[tasks\.verify\]$' "$mise_file"
 }
 
 check_workflows() {

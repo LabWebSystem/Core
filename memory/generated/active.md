@@ -22,4 +22,6 @@
 - BUG-009 | VERIFIED | cli | 未設定時のstatusがCompose補間エラーを返す
 - BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する
 - BUG-011 | VERIFIED | infrastructure | CoreDNSが生成hostsを読み取れない
+- BUG-012 | VERIFIED | test | 品質ゲート構造検査が未管理のrgへ依存する
+- BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

@@ -911,6 +911,16 @@ func TestOSRunnerUsesArgvAndTimeout(t *testing.T) {
 	}
 }
 
+func TestOSRunnerReturnsStandardErrorOutput(t *testing.T) {
+	out, err := (OSRunner{}).Run(context.Background(), "sh", "-c", "printf 'network missing\\n' >&2; exit 1")
+	if err == nil {
+		t.Fatal("失敗するコマンドを成功扱いしました")
+	}
+	if !strings.Contains(string(out), "network missing") {
+		t.Fatalf("標準エラーを取得できません: %q", out)
+	}
+}
+
 func TestGeneratedOverrideCarriesOwnershipLabels(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "override.yaml")
 	e := &RuntimeExecutor{InstallationID: "installation"}
@@ -1034,6 +1044,17 @@ func TestDockerNetworkDoesNotCreateAfterInspectFailure(t *testing.T) {
 	}
 	if len(r.calls) != 1 {
 		t.Fatalf("unexpected Docker calls: %v", r.calls)
+	}
+}
+
+func TestDockerNetworkCreatesWhenInspectReportsNotFound(t *testing.T) {
+	r := &networkNotFoundRunner{}
+	d := NewDockerResources(r, "installation")
+	if err := d.EnsureNetwork(context.Background(), "app"); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 2 || !strings.Contains(strings.Join(r.calls[1], " "), "network create") {
+		t.Fatalf("未存在networkを作成しませんでした: %v", r.calls)
 	}
 }
 
@@ -1301,6 +1322,16 @@ func TestRuntimeUnregisterPreservesSourceAndRegisterRestoresIt(t *testing.T) {
 type errorRunner struct {
 	output []byte
 	calls  [][]string
+}
+
+type networkNotFoundRunner struct{ calls [][]string }
+
+func (r *networkNotFoundRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	r.calls = append(r.calls, append([]string{name}, args...))
+	if len(r.calls) == 1 {
+		return []byte("Error response from daemon: network lws-app-app-edge not found\\n"), fmt.Errorf("exit status 1")
+	}
+	return nil, nil
 }
 
 func (r *errorRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
