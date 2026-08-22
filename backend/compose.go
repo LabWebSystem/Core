@@ -25,7 +25,7 @@ func ValidateComposeSource(root string, data []byte) error {
 
 func walkCompose(nodes []*yaml.Node, root string) error {
 	for _, n := range nodes {
-		if n.Kind == yaml.AliasNode || n.Anchor != "" || n.Tag != "" && strings.HasPrefix(n.Tag, "!") {
+		if n.Kind == yaml.AliasNode || n.Anchor != "" || n.Style&yaml.TaggedStyle != 0 {
 			return NewValidationError("compose", "Composeにaliasまたは独自tagは許可されていません", "INVALID_COMPOSE")
 		}
 		if n.Kind == yaml.MappingNode {

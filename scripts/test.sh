@@ -422,7 +422,7 @@ main() {
   local target="${1:-all}"
 
   case "$target" in
-    all|cli|installer|release|backend|backend-http|backend-docker|infrastructure) ;;
+    all|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure) ;;
     *)
       printf '不明なテスト対象です: %s\n' "$target" >&2
       return 2
@@ -432,6 +432,9 @@ main() {
   TMP="$(mktemp -d)"
   trap cleanup EXIT
 
+  if [[ "$target" == all || "$target" == fixtures ]]; then
+    "$ROOT/scripts/test-fixtures.sh"
+  fi
   if [[ "$target" == all || "$target" == cli ]]; then
     setup_cli_environment
     test_help

@@ -1,0 +1,7 @@
+apiVersion: lws/wrong
+metadata:
+  name: 不正なテストアプリ
+  description: manifest検証失敗用fixture
+public:
+  service: web
+  port: 80

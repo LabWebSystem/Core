@@ -15,10 +15,10 @@ fixtureの追加・変更では、次を守る。
 
 - source root外を参照しない
 - bind mount、host port、Docker socketを使わない
-- テストで識別できる固定的なHTTP応答を返す
+- 公開serviceからHTTP応答を返せる最小構成にする
 - アプリ固有のテスト用分岐をLWS本体へ追加しない
 - 正常系と失敗系のfixtureを別ディレクトリで管理する
 
 ## 現在のfixture
 
-`valid/`は、公開service、named volume、固定的なHTTP応答を持つ最小の正常系アプリである。
+`valid/`は、nginxの`web` serviceを公開する最小の正常系アプリである。
