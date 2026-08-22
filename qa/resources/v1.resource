@@ -5,9 +5,22 @@ Library    Process
 ${ROOT}    ${CURDIR}/../..
 
 *** Keywords ***
-未実装の受け入れシナリオを失敗させる
-    [Arguments]    ${id}    ${operation}    ${expected}
-    Fail    ${id}: 未実装です。操作=${operation} / 期待結果=${expected}
+Backend受け入れテストを実行する
+    [Arguments]    ${pattern}
+    ${result}=    Run Process    go    test    ./backend/...    -run    ${pattern}    cwd=${ROOT}
+    Log    stdout=${result.stdout} stderr=${result.stderr}
+    Should Be Equal As Integers    ${result.rc}    0
+
+CLI受け入れテストを実行する
+    [Arguments]    ${target}=cli
+    ${result}=    Run Process    ${ROOT}/scripts/test.sh    ${target}    cwd=${ROOT}
+    Log    stdout=${result.stdout} stderr=${result.stderr}
+    Should Be Equal As Integers    ${result.rc}    0
+
+OpenAPI受け入れテストを実行する
+    ${result}=    Run Process    mise    run    check-openapi    cwd=${ROOT}
+    Log    stdout=${result.stdout} stderr=${result.stderr}
+    Should Be Equal As Integers    ${result.rc}    0
 
 既存fixtureテストを実行して項目を確認する
     [Arguments]    ${id}

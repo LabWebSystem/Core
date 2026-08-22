@@ -73,7 +73,3 @@ Operationを再送して同じ名前を確認する
     ${operation}=    Operation名を取得する    ${response}
     ${state}=    Operationが終端状態になるまで待つ    ${operation}
     Should Be Equal As Strings    ${state}    succeeded
-
-未実装APIを失敗させる
-    [Arguments]    ${id}    ${reason}
-    Fail    ${id}: APIレベルで未実装です。${reason}

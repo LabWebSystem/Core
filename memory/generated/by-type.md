@@ -78,3 +78,4 @@
 - CHG-049 | SHIPPED | - | インストール受け入れテストをroot隔離実行へ変更する
 - CHG-050 | SHIPPED | - | 機能テストの環境依存失敗をskipへ分類する
 - CHG-051 | SHIPPED | - | API受け入れテストをCaddy公開経路へ接続する
+- CHG-052 | SHIPPED | - | Robot FTプレースホルダーを実行可能な検証へ置換する

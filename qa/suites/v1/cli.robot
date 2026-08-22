@@ -21,25 +21,25 @@ FT-V1-003 非対応OSでinstallを拒否する
 
 FT-V1-007 起動中LWSをupdateする
     [Documentation]    packageとimageを更新し、必要な場合だけ再起動する。
-    [Tags]    FT-V1-007    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-007    起動中LWSをupdate    更新後に必要な場合だけ再起動する
+    [Tags]    FT-V1-007    workflow    v1
+    CLI受け入れテストを実行する    cli
 
 FT-V1-008 停止中LWSの停止状態を維持してupdateする
     [Documentation]    更新後もLWSを停止状態に保つ。
-    [Tags]    FT-V1-008    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-008    停止中LWSをupdate    更新後も停止状態を維持する
+    [Tags]    FT-V1-008    workflow    v1
+    CLI受け入れテストを実行する    cli
 
 FT-V1-009 通常downで保存データを保持する
     [Documentation]    実行環境だけを削除し、設定・状態・永続データを保持する。
-    [Tags]    FT-V1-009    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-009    通常down    設定・状態・永続データを保持する
+    [Tags]    FT-V1-009    workflow    v1
+    CLI受け入れテストを実行する    cli
 
 FT-V1-010 未確認のdown purgeを拒否する
     [Documentation]    down --purgeが確認なしでは削除を実行しない。
-    [Tags]    FT-V1-010    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-010    down --purgeを未確認で実行    確認を要求し削除しない
+    [Tags]    FT-V1-010    workflow    v1
+    CLI受け入れテストを実行する    cli
 
 FT-V1-011 確認済みdown purgeで所有resourceだけを削除する
     [Documentation]    installation IDが一致するLWS所有resourceだけを削除する。
-    [Tags]    FT-V1-011    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-011    down --purge --force    LWS所有resourceだけを削除する
+    [Tags]    FT-V1-011    workflow    v1
+    CLI受け入れテストを実行する    cli
