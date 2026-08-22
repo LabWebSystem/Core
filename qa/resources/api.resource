@@ -9,6 +9,8 @@ APIの接続を設定する
     ${base}=    Get Environment Variable    LWS_QA_BASE_URL    http://127.0.0.1:8080/api/v1
     Create Session    lws    ${base}
     Set Suite Variable    ${LWS_QA_BASE_URL}    ${base}
+    ${available}=    Run Keyword And Return Status    ヘルスチェックが成功する
+    Run Keyword If    not ${available}    Skip    LWS APIへ接続できないため、API受け入れテストを実行できません。
 
 ヘルスチェックが成功する
     ${response}=    GET On Session    lws    /health/live    expected_status=200

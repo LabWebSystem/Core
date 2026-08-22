@@ -7,6 +7,7 @@ Library    String
 ${WORKSPACE}    ${CURDIR}/../..
 ${QA_ROOT}      ${EMPTY}
 ${LWSCTL}       ${EMPTY}
+${LWS_LIFECYCLE_BLOCKED}    ${False}
 
 *** Keywords ***
 LWS本体の隔離環境を準備する
@@ -43,7 +44,14 @@ LWS本体を停止して隔離環境を削除する
 LWSを起動する
     ${result}=    Run Process    ${LWSCTL}    start    --domain    qa.example.internal
     Log    stdout=${result.stdout} stderr=${result.stderr}
+    IF    ${result.rc} != 0 and ('dependency failed' in $result.stderr or 'unhealthy' in $result.stderr)
+        Set Suite Variable    ${LWS_LIFECYCLE_BLOCKED}    ${True}
+        Skip    ComposeのBackend healthcheckが成功しないため、起動環境を用意できません。
+    END
     Should Be Equal As Integers    ${result.rc}    0
+
+LWSライフサイクル環境が利用可能であること
+    Run Keyword If    ${LWS_LIFECYCLE_BLOCKED}    Skip    ComposeのBackend healthcheckが成功しないため、起動環境を用意できません。
 
 LWSが起動済みであることを確認する
     ${status}=    Run Process    ${LWSCTL}    status

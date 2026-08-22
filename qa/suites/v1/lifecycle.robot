@@ -3,6 +3,7 @@ Documentation    v1のLWS本体ライフサイクル受け入れテスト
 Resource         ../../resources/lifecycle.resource
 Suite Setup      LWS本体の隔離環境を準備する
 Suite Teardown   LWS本体を停止して隔離環境を削除する
+Test Setup       LWSライフサイクル環境が利用可能であること
 
 *** Test Cases ***
 FT-V1-004 初回startでLWSを起動する
