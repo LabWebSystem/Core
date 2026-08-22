@@ -36,5 +36,7 @@ sdk/dist/
 test/result/*.md
 test/result/robot/
 test/result/robot-current/
+test/result/robot-live/
+test/result/robot-lifecycle/
 docs/generated/
 qa/.venv/

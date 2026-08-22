@@ -1,17 +1,22 @@
 *** Settings ***
 Documentation    v1のOperation・SSE・障害復旧受け入れテスト
 Resource         ../../resources/v1.resource
+Resource         ../../resources/api.resource
+Suite Setup      APIの接続を設定する
 
 *** Test Cases ***
 FT-V1-050 同じrequestIdの変更を冪等に再送する
     [Documentation]    同じOperationを返し副作用を重複実行しない。
-    [Tags]    FT-V1-050    planned    contract    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-050    同じrequestIdで同じ変更を再送    同じOperationを返し副作用を重複させない
+    [Tags]    FT-V1-050    live    planned    contract    v1
+    Operationを再送して同じ名前を確認する    550e8400-e29b-41d4-a716-446655440250    idempotent
 
 FT-V1-051 requestIdの異なる内容を拒否する
     [Documentation]    同じrequestIdで異なる内容を送信した場合は副作用なしで拒否する。
-    [Tags]    FT-V1-051    planned    contract    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-051    同じrequestIdで異なる変更を送信    副作用なしで拒否する
+    [Tags]    FT-V1-051    live    planned    contract    v1
+    ${first}=    アプリ登録要求を送信する    550e8400-e29b-41d4-a716-446655440251    request-a
+    Should Be Equal As Integers    ${first.status_code}    202
+    ${second}=    アプリ登録要求を送信する    550e8400-e29b-41d4-a716-446655440251    request-b
+    Should Be Equal As Integers    ${second.status_code}    400
 
 FT-V1-052 同じアプリへの並行変更を排他する
     [Documentation]    一方を実行し、他方を409で拒否する。
@@ -20,8 +25,11 @@ FT-V1-052 同じアプリへの並行変更を排他する
 
 FT-V1-053 OperationをSSE購読する
     [Documentation]    envelope、状態遷移、終端状態を受信する。
-    [Tags]    FT-V1-053    planned    contract    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-053    OperationをSSE購読    状態遷移と終端状態を受信する
+    [Tags]    FT-V1-053    live    planned    contract    v1
+    ${response}=    アプリ登録要求を送信する    550e8400-e29b-41d4-a716-446655440253    sse-app
+    ${operation}=    Operation名を取得する    ${response}
+    ${watch}=    GET On Session    lws    /operations/${operation}:watch    expected_status=200
+    Should Contain    ${watch.headers}[Content-Type]    text/event-stream
 
 FT-V1-054 SSE切断後に状態を復元する
     [Documentation]    再接続時にHTTP再取得またはsnapshotで欠損状態を復元する。

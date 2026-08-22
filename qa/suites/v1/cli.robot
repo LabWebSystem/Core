@@ -1,37 +1,23 @@
 *** Settings ***
 Documentation    v1のLWSインストール・ライフサイクル受け入れテスト
 Resource         ../../resources/v1.resource
+Resource         ../../resources/install.resource
 
 *** Test Cases ***
 FT-V1-001 Ubuntu系へinstallできる
-    [Documentation]    .debを配置し、インストール時にLWSを自動起動しない。
+    [Documentation]    隔離したUbuntuコンテナ内でcurl経由のinstallをrootとして実行する。
     [Tags]    FT-V1-001    planned    lifecycle    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-001    Ubuntu系へinstall    .debが配置されLWSは自動起動しない
+    Ubuntuコンテナでinstallスクリプトをroot実行する
 
 FT-V1-002 AlmaLinux系へinstallできる
-    [Documentation]    .rpmを配置し、インストール時にLWSを自動起動しない。
+    [Documentation]    隔離したAlmaLinuxコンテナ内でcurl経由のinstallをrootとして実行する。
     [Tags]    FT-V1-002    planned    lifecycle    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-002    AlmaLinux系へinstall    .rpmが配置されLWSは自動起動しない
+    AlmaLinuxコンテナでinstallスクリプトをroot実行する
 
 FT-V1-003 非対応OSでinstallを拒否する
-    [Documentation]    環境を変更せず日本語で失敗する。
+    [Documentation]    隔離した非対応OSコンテナでinstallを拒否する。
     [Tags]    FT-V1-003    planned    lifecycle    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-003    非対応OSでinstall    環境を変更せず日本語で失敗する
-
-FT-V1-004 初回startでLWSを起動する
-    [Documentation]    設定、secret、installation ID、公開IP、Composeを準備して起動する。
-    [Tags]    FT-V1-004    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-004    初回start --domain    設定とComposeが準備され起動する
-
-FT-V1-005 不正domainでstartを拒否する
-    [Documentation]    設定を変更せず、Composeを起動しない。
-    [Tags]    FT-V1-005    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-005    不正domainでstart    設定と実行環境を変更しない
-
-FT-V1-006 start済みLWSを安全に操作する
-    [Documentation]    stop、status、rebuildが対象だけを操作し設定・状態・volumeを保持する。
-    [Tags]    FT-V1-006    planned    workflow    v1
-    未実装の受け入れシナリオを失敗させる    FT-V1-006    start済みLWSをstop/status/rebuild    対象だけを操作し保存データを保持する
+    非対応OSコンテナでinstallスクリプトを拒否する
 
 FT-V1-007 起動中LWSをupdateする
     [Documentation]    packageとimageを更新し、必要な場合だけ再起動する。

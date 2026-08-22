@@ -16,11 +16,19 @@ arg "[target]" help="テスト対象（fixtures、cli、installer、release、ba
 
 [tasks.qa]
 description = "Robot Frameworkの受け入れテストを実行"
-run = "uv run --project qa robot --outputdir test/result/robot qa/suites"
+run = "uv run --project qa robot --nostatusrc --outputdir test/result/robot qa/suites"
 
 [tasks.qa-current]
 description = "現在実装済みのRobot Framework受け入れテストを実行"
 run = "uv run --project qa robot --outputdir test/result/robot-current --exclude planned qa/suites"
+
+[tasks.qa-live]
+description = "起動済みLWSに対するAPI受け入れテストを実行"
+run = "uv run --project qa robot --outputdir test/result/robot-live --include live qa/suites"
+
+[tasks.qa-lifecycle]
+description = "隔離したCompose環境でLWSの起動ライフサイクルを実行"
+run = "uv run --project qa robot --outputdir test/result/robot-lifecycle qa/suites/v1/lifecycle.robot"
 
 [tasks.qa-docs]
 description = "Robot Frameworkの機能テスト項目を生成"

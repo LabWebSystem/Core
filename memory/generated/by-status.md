@@ -59,6 +59,9 @@
 - CHG-044 | SHIPPED | - | 旧設定ファイルの権限をパッケージ更新時に移行する
 - CHG-045 | SHIPPED | - | Robot Framework受け入れテスト基盤を追加する
 - CHG-046 | SHIPPED | - | v1機能テスト項目をRobot Frameworkへ移植する
+- CHG-047 | SHIPPED | - | RobotのAPI受け入れテストを実操作へ接続する
+- CHG-048 | SHIPPED | - | LWS本体の起動ライフサイクルをRobotで検証する
+- CHG-049 | SHIPPED | - | インストール受け入れテストをroot隔離実行へ変更する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
