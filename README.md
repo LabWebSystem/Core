@@ -58,7 +58,7 @@ reserve.example.internal
 | `lwsctl stop` | LWSを停止。設定と保存データは残る |
 | `lwsctl status` | 設定とコンテナの状態を表示 |
 | `lwsctl rebuild` | 設定を作り直して実行環境を再構成 |
-| `lwsctl update` | パッケージとDockerイメージを更新 |
+| `lwsctl update` | パッケージとDockerイメージを更新。同じdigestのイメージは再取得しない |
 | `lwsctl down` | 実行環境を削除。設定と保存データは残る |
 
 設定や保存データも含めて削除する場合は、次を実行します。
@@ -105,6 +105,7 @@ mise run dev             # 開発用Composeを起動
 ```
 
 品質ゲートの結果とログは、`test/result/YYYY-MM-DD-verify-result.md`に保存されます。
+QAとDashboardのイメージ検証は、実行中に新しく取得・作成したDockerイメージを終了時に削除します。
 
 | 作業 | コマンド |
 |---|---|

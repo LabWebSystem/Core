@@ -18,15 +18,15 @@ run = ["npm test", "npm run build"]
 
 [test-dashboard]
 description = "Dashboardイメージをビルド検証"
-run = "docker build --file dashboard/Dockerfile dashboard"
+run = "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"
 
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"
-run = "uv run --project qa robot --nostatusrc --exclude live --outputdir test/result/robot qa/suites"
+run = "scripts/run-with-image-cleanup.sh uv run --project qa robot --nostatusrc --exclude live --outputdir test/result/robot qa/suites"
 
 [qa-current]
 description = "現在実装済みのRobot Framework受け入れテストを実行"
-run = "uv run --project qa robot --outputdir test/result/robot-current --exclude planned --exclude isolated qa/suites"
+run = "scripts/run-with-image-cleanup.sh uv run --project qa robot --outputdir test/result/robot-current --exclude planned --exclude isolated qa/suites"
 
 [qa-live]
 description = "起動済みLWSに対するAPI受け入れテストを実行"
@@ -34,7 +34,7 @@ run = "uv run --project qa robot --outputdir test/result/robot-live --include li
 
 [qa-lifecycle]
 description = "隔離したCompose環境でLWSの起動ライフサイクルを実行"
-run = "uv run --project qa robot --outputdir test/result/robot-lifecycle qa/suites/v1/lifecycle.robot"
+run = "scripts/run-with-image-cleanup.sh uv run --project qa robot --outputdir test/result/robot-lifecycle qa/suites/v1/lifecycle.robot"
 
 [qa-docs]
 description = "Robot Frameworkの機能テスト項目を生成"

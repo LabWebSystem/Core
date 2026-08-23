@@ -64,7 +64,7 @@ sudo lwsctl status
 | `lwsctl stop` | LWSを停止する。設定や保存データは残る |
 | `lwsctl status` | 設定と実行状態を確認する |
 | `lwsctl rebuild` | LWSの設定を再生成して実行環境を作り直す |
-| `lwsctl update` | LWSのパッケージとDockerイメージを更新する |
+| `lwsctl update` | LWSのパッケージとDockerイメージを更新する。同じdigestのイメージは再取得しない |
 | `lwsctl down` | LWSの実行環境を削除する。設定や保存データは残る |
 
 `down`は実行環境だけを削除します。設定・状態・保存データまで削除する場合は、確認のうえで次を実行します。

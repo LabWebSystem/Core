@@ -20,6 +20,8 @@ mise run qa-current
 
 Robot Frameworkは`output.xml`、`log.html`、`report.html`を生成する。
 
+`qa`、`qa-current`、`qa-lifecycle`は、実行前になかったDockerイメージだけを終了時に削除します。実行前からあるイメージ、起動済みLWSを使う`qa-live`、Docker build cacheは削除しません。
+
 起動済みLWSのCaddy公開経路へ接続してAPIレベルの受け入れテストを実行する場合は、`LWS_QA_BASE_URL`と`LWS_QA_BASE_DOMAIN`などを設定して次を実行する。Backend内部の8080/tcpへは直接接続しない。
 
 ```sh

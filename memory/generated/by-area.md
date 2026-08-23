@@ -73,6 +73,7 @@
 - CHG-058 | SHIPPED | - | miseの内部taskをライブラリ設定へ分離する
 - CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
 - CHG-060 | SHIPPED | - | 初回起動前のLWS更新を許可する
+- CHG-061 | SHIPPED | - | テスト用Dockerイメージを実行後に削除する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 
 ## backend
@@ -93,6 +94,9 @@
 ## installer
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-006 | VERIFIED | installer | アーキテクチャ名なしのRPMをインストーラーが見つけられない
+
+## quality-gate
+- BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る
 
 ## release
 - BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない

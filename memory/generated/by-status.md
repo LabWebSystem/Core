@@ -76,6 +76,7 @@
 - CHG-058 | SHIPPED | - | miseの内部taskをライブラリ設定へ分離する
 - CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
 - CHG-060 | SHIPPED | - | 初回起動前のLWS更新を許可する
+- CHG-061 | SHIPPED | - | テスト用Dockerイメージを実行後に削除する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
@@ -96,3 +97,4 @@
 - BUG-012 | VERIFIED | test | 品質ゲート構造検査が未管理のrgへ依存する
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
 - BUG-014 | VERIFIED | cli | 初回起動前にupdateを実行できない
+- BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る

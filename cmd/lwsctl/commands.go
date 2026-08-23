@@ -265,7 +265,7 @@ func (a *application) update() error {
 			return err
 		}
 	}
-	if err := a.compose("pull"); err != nil {
+	if err := a.pullImagesIfNeeded(); err != nil {
 		return err
 	}
 	if configured && os.Getenv("LWS_RESTART_AFTER_UPDATE") == "1" {
@@ -278,6 +278,22 @@ func (a *application) update() error {
 		return nil
 	}
 	fmt.Println("LWSを更新しました")
+	return nil
+}
+
+func (a *application) pullImagesIfNeeded() error {
+	output, err := a.composeOutput("config", "--images")
+	if err != nil {
+		return err
+	}
+	for _, image := range strings.Fields(string(output)) {
+		if !strings.Contains(image, "@sha256:") {
+			return a.compose("pull")
+		}
+		if _, err := a.dockerOutput("image", "inspect", image); err != nil {
+			return a.compose("pull")
+		}
+	}
 	return nil
 }
 
