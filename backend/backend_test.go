@@ -729,6 +729,29 @@ func TestGetApplicationIncludesOperationStateFields(t *testing.T) {
 	}
 }
 
+func TestGetApplicationRetainsLatestCompletedOperation(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	op, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440098", "START")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetOperationState(context.Background(), db, op.ID, "SUCCEEDED", ""); err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	(&Server{DB: db}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications/a", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), op.ID) || strings.Contains(rr.Body.String(), `"reconciling":true`) {
+		t.Fatalf("完了済みOperationを復元できません: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestDerivedConfigIsAtomic(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "hosts")
 	if err := WriteAtomic(p, []byte(GenerateHosts("example.internal", "192.0.2.1", []PublishedApplication{{Subdomain: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
@@ -1120,6 +1143,15 @@ func TestDockerConnectsCaddyWithAppAlias(t *testing.T) {
 	}
 }
 
+func TestDockerTreatsExistingCaddyEndpointAsConnected(t *testing.T) {
+	r := &errorRunner{output: []byte("Error response from daemon: endpoint with name caddy-container already exists in network lws-app-app-id-edge\n")}
+	d := NewDockerResources(r, "installation")
+	d.CaddyContainer = "caddy-container"
+	if err := d.EnsureCaddyConnected(context.Background(), "app-id"); err != nil {
+		t.Fatalf("接続済みCaddyを失敗扱いにしました: %v", err)
+	}
+}
+
 func TestDockerRejectsForeignInfrastructureContainer(t *testing.T) {
 	r := &recordingRunner{output: []byte(`[{"Id":"c1","Name":"foreign","Config":{"Labels":{"com.labwebsystem.owner":"other","com.labwebsystem.installation-id":"installation"}}}]`)}
 	d := NewDockerResources(r, "installation")
@@ -1235,12 +1267,11 @@ func TestPurgeRequiresConfirmationAndRejectsActiveApplication(t *testing.T) {
 	}
 	s := (&Server{DB: db}).Handler()
 	for _, tc := range []struct {
-		path string
-		body string
-		want int
+		path, body string
+		want       int
 	}{
 		{path: "/api/v1/applications/app-UNREGISTERED:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440000"}`, want: 400},
-		{path: "/api/v1/applications/app-ACTIVE:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440001","confirm":true}`, want: 400},
+		{path: "/api/v1/applications/app-ACTIVE:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440001","confirm":true}`, want: 202},
 	} {
 		r := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
 		r.Header.Set("Content-Type", "application/json")

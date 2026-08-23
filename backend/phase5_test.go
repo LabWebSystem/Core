@@ -238,8 +238,17 @@ func TestOperationSSEDisconnectAndReconnectCanRecoverFromHTTP(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if got["state"] != "failed" {
+	if got["state"] != "failed" || got["kind"] != "start" {
 		t.Fatalf("HTTP再取得で状態を回復できません: %#v", got)
+	}
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		value, ok := got[field].(string)
+		if !ok || value == "" {
+			t.Fatalf("Operationの%sがありません: %#v", field, got)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+			t.Fatalf("Operationの%sがRFC3339ではありません: %q: %v", field, value, err)
+		}
 	}
 }
 

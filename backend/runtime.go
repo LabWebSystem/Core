@@ -233,6 +233,13 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return nil
 	case "PURGE":
+		if state == "ACTIVE" {
+			reportOperationProgress(ctx, "登録を解除してから完全削除します")
+			if err := e.Run(ctx, Operation{ApplicationID: op.ApplicationID, Kind: "UNREGISTER"}); err != nil {
+				return err
+			}
+			state = "UNREGISTERED"
+		}
 		if state != "UNREGISTERED" {
 			return fmt.Errorf("登録解除済みアプリだけ完全削除できます")
 		}

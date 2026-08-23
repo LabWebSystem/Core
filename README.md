@@ -103,12 +103,15 @@ mise run verify          # 普段の開発・通常CI用。約数秒
 mise run verify qa       # DockerとRobot QAを含む確認
 mise run verify release  # リリース前の確認とパッケージ生成
 mise run dev             # 開発用Composeを起動
-mise run dev-dashboard   # Dashboardと実Backendを http://dashboard.lws.localhost:18180 で起動
+mise run dev-dashboard   # HMR対応のDashboardと実Backendを起動
+mise run dev-dashboard-build # 初回またはBackend変更時に再ビルドして起動
 ```
 
 ### Dashboardを実際に操作する
 
-`mise run dev-dashboard`は、`dashboard.lws.localhost:18180`でDashboardを公開します。Caddyの同一Originプロキシを通じて実Backendへ接続するため、画面とAPIの接続をブラウザで確認できます。通常のLWSとは別のCompose project、volume、networkと、80/53番以外のportを使用します。
+`mise run dev-dashboard`は、`dashboard/src`をマウントしたVite開発サーバーを`dashboard.lws.localhost:18180`で公開します。保存したUI変更はHMRで即時反映され、Caddyの同一Originプロキシを通じて実Backendへ接続します。通常のLWSとは別のCompose project、volume、networkと、80/53番以外のportを使用します。
+
+初回起動時、または`backend/`・Dockerfile・Compose構成を変更したときだけ、先に`mise run dev-dashboard-build`でBackendを再ビルドします。BackendのGoモジュール・コンパイルキャッシュはBuildKitで再利用します。`dashboard/src`だけの変更には再ビルド不要です。
 
 起動後にブラウザで次を開きます。
 

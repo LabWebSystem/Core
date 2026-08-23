@@ -201,8 +201,12 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 500, "DATABASE_ERROR", "アプリを取得できません", "")
 		return
 	}
-	var latestOperation string
-	if err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM operations WHERE application_id=? AND state IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1`, id).Scan(&latestOperation); err != nil && err != sql.ErrNoRows {
+	var activeOperation, latestOperation string
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM operations WHERE application_id=? AND state IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1`, id).Scan(&activeOperation); err != nil && err != sql.ErrNoRows {
+		writeAPIError(w, 500, "DATABASE_ERROR", "Operation状態を取得できません", "")
+		return
+	}
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM operations WHERE application_id=? ORDER BY created_at DESC LIMIT 1`, id).Scan(&latestOperation); err != nil && err != sql.ErrNoRows {
 		writeAPIError(w, 500, "DATABASE_ERROR", "Operation状態を取得できません", "")
 		return
 	}
@@ -217,7 +221,7 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		"registrationState": state,
 		"createdAt":         created,
 		"updatedAt":         updated,
-		"reconciling":       latestOperation != "",
+		"reconciling":       activeOperation != "",
 		"latestOperation":   latestOperation,
 		"etag":              etag,
 		"observedAt":        time.Now().UTC().Format(time.RFC3339Nano),
@@ -335,13 +339,18 @@ func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	id := appID(r)
-	var exists string
-	clause := " AND registration_state='ACTIVE'"
-	if strings.HasSuffix(r.URL.Path, ":purge") || strings.HasSuffix(r.URL.Path, ":register") {
-		clause = " AND registration_state='UNREGISTERED'"
-	}
-	if err := s.DB.QueryRowContext(context.Background(), `SELECT id FROM applications WHERE id=?`+clause, id).Scan(&exists); err != nil {
+	var registrationState string
+	if err := s.DB.QueryRowContext(context.Background(), `SELECT registration_state FROM applications WHERE id=?`, id).Scan(&registrationState); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Operation{}, errors.New("アプリが見つかりません")
+		}
 		return Operation{}, err
+	}
+	if kind == "REGISTER" && registrationState != "UNREGISTERED" {
+		return Operation{}, errors.New("再登録は登録解除済みアプリだけに実行できます")
+	}
+	if kind != "REGISTER" && kind != "PURGE" && registrationState != "ACTIVE" {
+		return Operation{}, errors.New("登録解除済みアプリにはこの操作を実行できません")
 	}
 	var request struct {
 		RequestID string `json:"requestId"`
@@ -364,7 +373,7 @@ func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var o Operation
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id,application_id,request_id,kind,state,error_message FROM operations WHERE id=?`, operationID(r)).Scan(&o.ID, &o.ApplicationID, &o.RequestID, &o.Kind, &o.State, &o.ErrorMessage)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,application_id,request_id,kind,state,error_message,created_at,updated_at FROM operations WHERE id=?`, operationID(r)).Scan(&o.ID, &o.ApplicationID, &o.RequestID, &o.Kind, &o.State, &o.ErrorMessage, &o.CreatedAt, &o.UpdatedAt)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, 404, "NOT_FOUND", "Operationが見つかりません", "operation")
 		return
@@ -373,7 +382,7 @@ func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 500, "DATABASE_ERROR", "Operationを取得できません", "")
 		return
 	}
-	writeJSON(w, 200, map[string]string{"name": "operations/" + o.ID, "state": strings.ToLower(o.State), "errorMessage": o.ErrorMessage})
+	writeJSON(w, 200, map[string]string{"name": "operations/" + o.ID, "kind": strings.ToLower(o.Kind), "state": strings.ToLower(o.State), "errorMessage": o.ErrorMessage, "createdAt": o.CreatedAt, "updatedAt": o.UpdatedAt})
 }
 func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
 	if s.DB == nil {

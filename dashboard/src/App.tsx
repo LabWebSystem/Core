@@ -6,11 +6,16 @@ import { api, ApiError, type Application, type Operation } from "./api/client";
 type PendingAction = { label: string; execute: () => Promise<{ name: string }> };
 
 const appId = (app: Application) => app.name.replace("applications/", "");
-const stateLabel = (app: Application) => app.reconciling ? "処理中" : app.observedState === "RUNNING" ? "稼働中" : "停止中";
+const stateLabel = (app: Application) => app.reconciling ? "処理中" : app.observedState === "RUNNING" ? "稼働中" : app.observedState === "ERROR" ? "異常" : app.observedState === "UNKNOWN" ? "状態未確認" : "停止中";
+const stateTone = (app: Application) => app.reconciling ? "busy" : app.observedState === "RUNNING" ? "running" : app.observedState === "ERROR" ? "error" : "stopped";
+const observedStateLabel = (state: string) => ({ RUNNING: "稼働中", STOPPED: "停止中", ERROR: "異常", UNKNOWN: "状態未確認" })[state] ?? state;
+const desiredStateLabel = (state: string) => ({ RUNNING: "起動を希望", STOPPED: "停止を希望" })[state] ?? state;
+const registrationStateLabel = (state: string) => ({ ACTIVE: "登録済み", UNREGISTERED: "登録解除済み" })[state] ?? state;
 const publicUrl = (app: Application) => {
   const host = window.location.host.replace(/^dashboard\./, "");
   return `${window.location.protocol}//${app.subdomain}.${host}`;
 };
+const operationLabel = (kind?: string) => ({ create: "登録", update: "更新", configure: "設定更新", start: "開始", stop: "停止", sync: "同期", rebuild: "再構成", unregister: "登録解除", register: "再登録", purge: "完全削除" })[kind ?? ""] ?? "操作";
 
 export function App() {
   const client = useQueryClient();
@@ -27,10 +32,17 @@ export function App() {
   useEffect(() => {
     if (!operation?.name || ["succeeded", "failed", "cancelled"].includes(operation.state)) return;
     return api.watchOperation(operation.name, (next) => {
-      setOperation(next);
+      setOperation((current) => current ? { ...current, ...next } : { ...next, kind: "", createdAt: "", updatedAt: "" });
       if (["succeeded", "failed", "cancelled"].includes(next.state)) void client.invalidateQueries({ queryKey: ["applications"] });
     }, () => setMessage("操作の進行状況を再接続できません。しばらくしてから更新してください。"));
   }, [operation?.name, operation?.state, client]);
+  useEffect(() => {
+    setOperation(undefined);
+    if (!selected?.latestOperation) return;
+    let active = true;
+    void api.operation(selected.latestOperation).then((next) => { if (active) setOperation(next); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [selected?.latestOperation]);
   useEffect(() => {
     if (!selected) return;
     setLogs([]);
@@ -41,8 +53,21 @@ export function App() {
     try {
       setMessage(undefined);
       const result = await task();
-      setOperation({ name: result.name, state: "queued" });
-    } catch (error) { setMessage(error instanceof ApiError ? error.message : "通信に失敗しました"); }
+      setOperation(await api.operation(result.name));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409 && selected) {
+        try {
+          const current = await api.get(appId(selected));
+          if (current.reconciling && current.latestOperation) {
+            const activeOperation = await api.operation(current.latestOperation);
+            setOperation(activeOperation);
+            setMessage(`「${operationLabel(activeOperation.kind)}」が${activeOperation.state === "queued" ? "開始待ち" : "実行中"}です。完了するまでこのアプリの操作はできません。`);
+            return;
+          }
+        } catch { /* 競合内容を取得できない場合はAPIのメッセージを表示する。 */ }
+      }
+      setMessage(error instanceof ApiError ? error.message : "通信に失敗しました");
+    }
   };
   const register = useMutation({ mutationFn: api.create, onSuccess: (result) => void run(async () => result), onError: () => setMessage("アプリを登録できませんでした") });
   const action = (kind: "start" | "stop" | "sync" | "rebuild" | "register") => selected && void run(() => api.action(selected, kind));
@@ -53,7 +78,7 @@ export function App() {
     <header className="topbar"><div><span className="eyebrow">LAB WEB SYSTEM</span><h1>運用台帳</h1></div><div className="health"><Activity size={16} /> Backend {apps.isError ? "要確認" : "接続中"}</div></header>
     {message && <div className="notice" role="alert"><AlertTriangle size={17} />{message}<button onClick={() => setMessage(undefined)}>閉じる</button></div>}
     <section className="workbench">
-      <aside className="ledger-pane"><div className="pane-title"><span>アプリ</span><b>{apps.data?.length ?? 0}</b></div><button className="new-app" onClick={() => setSelectedId(undefined)}><CirclePlus size={17} />登録する</button><div className="app-list">{apps.isLoading && <p>台帳を読み込んでいます</p>}{apps.data?.map((app) => <button key={app.name} className={selected?.name === app.name ? "app-row active" : "app-row"} onClick={() => setSelectedId(appId(app))}><span className={`dot ${app.reconciling ? "busy" : app.observedState === "RUNNING" ? "running" : "stopped"}`} /><span><strong>{app.subdomain}</strong><small>{stateLabel(app)}</small></span></button>)}</div></aside>
+      <aside className="ledger-pane"><div className="pane-title"><span>アプリ</span><b>{apps.data?.length ?? 0}</b></div><button className="new-app" onClick={() => setSelectedId(undefined)}><CirclePlus size={17} />登録する</button><div className="app-list">{apps.isLoading && <p>台帳を読み込んでいます</p>}{apps.data?.map((app) => <button key={app.name} className={selected?.name === app.name ? "app-row active" : "app-row"} onClick={() => setSelectedId(appId(app))}><span className={`dot ${stateTone(app)}`} /><span><strong>{app.subdomain}</strong><small>{stateLabel(app)}</small></span></button>)}</div></aside>
       <section className="main-pane">{selected ? <AppWorkbench app={selected} variables={variableRows} configLoading={config.isLoading} onAction={action} onRun={run} onConfirm={(label, execute) => setPending({ label, execute })} /> : <RegisterForm busy={register.isPending} onSubmit={(input) => register.mutate(input)} />}</section>
       <aside className="activity-pane"><div className="pane-title"><span>操作とログ</span><ScrollText size={17} /></div><OperationView operation={operation} /><pre className="log-stream" aria-label="コンテナログ">{logs.length ? logs.join("\n") : "選択したアプリのログがここに表示されます。"}</pre></aside>
     </section>
@@ -70,7 +95,8 @@ function AppWorkbench({ app, variables, configLoading, onAction, onRun, onConfir
   const [values, setValues] = useState<Record<string, { value: string; secret: boolean }>>({});
   const [newName, setNewName] = useState(""); const [newValue, setNewValue] = useState(""); const [newSecret, setNewSecret] = useState(false);
   const rows = [...variables.map((item) => ({ ...item, value: values[item.name]?.value ?? "" })), ...(newName ? [{ name: newName, isSecret: newSecret, value: newValue }] : [])];
-  return <section className="app-workbench"><header className="app-heading"><div><span className="eyebrow">公開アプリ</span><h2>{app.subdomain}</h2><a href={publicUrl(app)} target="_blank" rel="noreferrer">{publicUrl(app)} <ExternalLink size={14} /></a></div><span className={`state-pill ${app.reconciling ? "busy" : app.observedState === "RUNNING" ? "running" : "stopped"}`}>{stateLabel(app)}</span></header><div className="action-strip"><button onClick={() => onAction("start")}><Play size={16} />開始</button><button onClick={() => onAction("stop")}><Square size={16} />停止</button><button onClick={() => onAction("sync")}><RotateCw size={16} />同期</button><button onClick={() => onAction("rebuild")}><Settings2 size={16} />再構成</button><button onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}><FileCog size={16} />登録解除</button><button className="danger-outline" onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}><Trash2 size={16} />完全削除</button></div><section className="details-grid"><div><span>リポジトリ</span><code>{app.repositoryUrl}</code></div><div><span>参照</span><code>{app.ref}</code></div><div><span>希望状態</span><strong>{app.desiredState}</strong></div><div><span>最終確認</span><time>{new Date(app.observedAt).toLocaleString("ja-JP")}</time></div></section><section className="settings-section"><div className="section-heading"><div><span className="eyebrow">環境設定</span><h3>変数</h3></div><button className="primary small" onClick={() => onConfirm("環境設定を更新する", () => api.saveConfiguration(app, Object.fromEntries(rows.filter((row) => row.value).map((row) => [row.name, { value: row.value, secret: row.isSecret }]))))}>保存</button></div>{configLoading ? <p>設定を読み込んでいます</p> : <><div className="variable-list">{rows.map((row) => <label key={row.name} className="variable-row"><code>{row.name}</code><input type={row.isSecret ? "password" : "text"} value={row.value} placeholder={row.isSecret ? "secret は表示されません" : "値を入力"} onChange={(event) => setValues((current) => ({ ...current, [row.name]: { value: event.target.value, secret: row.isSecret } }))} /><small>{row.isSecret ? "secret" : "通常値"}</small></label>)}</div><div className="add-variable"><input placeholder="変数名" value={newName} onChange={(e) => setNewName(e.target.value.toUpperCase())} /><input placeholder="値" value={newValue} onChange={(e) => setNewValue(e.target.value)} /><label><input type="checkbox" checked={newSecret} onChange={(e) => setNewSecret(e.target.checked)} />secret</label></div></>}</section></section>;
+  const disabled = app.reconciling;
+  return <section className="app-workbench"><header className="app-heading"><div><span className="eyebrow">公開アプリ</span><h2>{app.subdomain}</h2><a href={publicUrl(app)} target="_blank" rel="noreferrer">{publicUrl(app)} <ExternalLink size={14} /></a></div><span className={`state-pill ${stateTone(app)}`}>{stateLabel(app)}</span></header><div className="action-strip" aria-label="アプリ操作"><button disabled={disabled} title={disabled ? "実行中の操作が完了するまで待ってください" : undefined} onClick={() => onAction("start")}><Play size={16} />開始</button><button disabled={disabled} title={disabled ? "実行中の操作が完了するまで待ってください" : undefined} onClick={() => onAction("stop")}><Square size={16} />停止</button><button disabled={disabled} title={disabled ? "実行中の操作が完了するまで待ってください" : undefined} onClick={() => onAction("sync")}><RotateCw size={16} />同期</button><button disabled={disabled} title={disabled ? "実行中の操作が完了するまで待ってください" : undefined} onClick={() => onAction("rebuild")}><Settings2 size={16} />再構成</button><button disabled={disabled} title={disabled ? "実行中の操作が完了するまで待ってください" : undefined} onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}><FileCog size={16} />登録解除</button><button className="danger-outline" disabled={disabled} title={disabled ? "実行中の操作が完了するまで待ってください" : undefined} onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}><Trash2 size={16} />完全削除</button></div><section className="details-grid"><div><span>リポジトリ</span><code>{app.repositoryUrl}</code></div><div><span>参照</span><code>{app.ref}</code></div><div><span>希望状態</span><strong>{desiredStateLabel(app.desiredState)}</strong></div><div><span>実行状態</span><strong>{observedStateLabel(app.observedState)}</strong></div><div><span>登録状態</span><strong>{registrationStateLabel(app.registrationState)}</strong></div><div><span>最終確認</span><time>{new Date(app.observedAt).toLocaleString("ja-JP")}</time></div></section><section className="settings-section"><div className="section-heading"><div><span className="eyebrow">環境設定</span><h3>変数</h3></div><button className="primary small" disabled={disabled} onClick={() => onConfirm("環境設定を更新する", () => api.saveConfiguration(app, Object.fromEntries(rows.filter((row) => row.value).map((row) => [row.name, { value: row.value, secret: row.isSecret }]))))}>保存</button></div>{configLoading ? <p>設定を読み込んでいます</p> : <><div className="variable-list">{rows.map((row) => <label key={row.name} className="variable-row"><code>{row.name}</code><input disabled={disabled} type={row.isSecret ? "password" : "text"} value={row.value} placeholder={row.isSecret ? "secret は表示されません" : "値を入力"} onChange={(event) => setValues((current) => ({ ...current, [row.name]: { value: event.target.value, secret: row.isSecret } }))} /><small>{row.isSecret ? "secret" : "通常値"}</small></label>)}</div><div className="add-variable"><input disabled={disabled} placeholder="変数名" value={newName} onChange={(e) => setNewName(e.target.value.toUpperCase())} /><input disabled={disabled} placeholder="値" value={newValue} onChange={(e) => setNewValue(e.target.value)} /><label><input disabled={disabled} type="checkbox" checked={newSecret} onChange={(e) => setNewSecret(e.target.checked)} />secret</label></div></>}</section></section>;
 }
 
-function OperationView({ operation }: { operation?: Operation }) { return <section className="operation" aria-live="polite"><span className="eyebrow">現在の操作</span>{operation ? <><strong>{operation.state === "queued" ? "待機中" : operation.state === "running" ? "実行中" : operation.state === "succeeded" ? "完了" : operation.state === "cancelled" ? "中止" : "失敗"}</strong><small>{operation.name}</small><p>{operation.errorMessage || (operation.state === "running" ? "処理を実行しています。完了までこのままお待ちください。" : "")}</p></> : <p>まだ操作はありません。</p>}</section>; }
+function OperationView({ operation }: { operation?: Operation }) { return <section className="operation" aria-live="polite"><span className="eyebrow">現在の操作</span>{operation ? <><strong>{operationLabel(operation.kind)}: {operation.state === "queued" ? "開始待ち" : operation.state === "running" ? "実行中" : operation.state === "succeeded" ? "完了" : operation.state === "cancelled" ? "中止" : "失敗"}</strong><small>{operation.name}</small><time>{operation.createdAt ? `開始: ${new Date(operation.createdAt).toLocaleString("ja-JP")}` : "開始時刻を確認中です"}</time><p>{operation.errorMessage || (operation.state === "running" || operation.state === "queued" ? "この操作が完了するまで、このアプリへの他の操作は開始できません。" : "")}</p></> : <p>実行中の操作はありません。</p>}</section>; }

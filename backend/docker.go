@@ -32,8 +32,8 @@ func (d *DockerResources) EnsureCaddyConnected(ctx context.Context, app string) 
 	if d.CaddyContainer == "" {
 		return fmt.Errorf("Caddy containerが設定されていません")
 	}
-	_, err := d.Runner.Run(ctx, "docker", "network", "connect", "--alias", "lws-"+app, EdgeNetworkName(app), d.CaddyContainer)
-	message := strings.ToLower(errString(err))
+	out, err := d.Runner.Run(ctx, "docker", "network", "connect", "--alias", "lws-"+app, EdgeNetworkName(app), d.CaddyContainer)
+	message := strings.ToLower(string(out) + "\n" + errString(err))
 	if err != nil && !strings.Contains(message, "already connected") && !strings.Contains(message, "already exists") {
 		return fmt.Errorf("Caddyをedge networkへ接続できません")
 	}
@@ -51,8 +51,9 @@ func (d *DockerResources) DisconnectCaddy(ctx context.Context, app string) error
 	if d.CaddyContainer == "" {
 		return fmt.Errorf("Caddy containerが設定されていません")
 	}
-	_, err := d.Runner.Run(ctx, "docker", "network", "disconnect", "-f", EdgeNetworkName(app), d.CaddyContainer)
-	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "not connected") {
+	out, err := d.Runner.Run(ctx, "docker", "network", "disconnect", "-f", EdgeNetworkName(app), d.CaddyContainer)
+	message := strings.ToLower(string(out) + "\n" + errString(err))
+	if err != nil && !strings.Contains(message, "not connected") {
 		return fmt.Errorf("Caddyをedge networkから切断できません")
 	}
 	return nil

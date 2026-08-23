@@ -46,7 +46,7 @@ export const api = {
   saveConfiguration: (app: Application, variables: Record<string, { value: string; secret: boolean }>) =>
     request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}/configuration`, { method: "PATCH", body: JSON.stringify({ variables, requestId: requestId() }) }),
   operation: (name: string) => request<Operation>(`/${name}`),
-  watchOperation(name: string, onState: (operation: Operation) => void, onError: () => void) {
+  watchOperation(name: string, onState: (operation: Pick<Operation, "name" | "state" | "errorMessage">) => void, onError: () => void) {
     const source = new EventSource(`/api/v1/${name}:watch`);
     let finished = false;
     const receive = (event: Event) => {

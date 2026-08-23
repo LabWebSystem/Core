@@ -43,13 +43,17 @@ description = "モックCompose環境を起動"
 run = "docker compose -f infrastructure/compose.yaml up"
 
 [tasks.dev-dashboard]
-description = "DashboardとBackendを隔離されたローカル開発環境で起動"
-run = "LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml up --build --remove-orphans"
+description = "HMR対応のDashboardとBackendを隔離されたローカル開発環境で起動"
+run = "LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml --file infrastructure/compose.dashboard-hmr.yaml up --remove-orphans"
+
+[tasks.dev-dashboard-build]
+description = "Backendを再ビルドし、HMR対応のDashboardを起動"
+run = "DOCKER_BUILDKIT=1 LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml --file infrastructure/compose.dashboard-hmr.yaml up --build --remove-orphans"
 
 [tasks.dev-dashboard-down]
 description = "隔離されたDashboard開発環境を停止・削除"
-run = "LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml down --remove-orphans"
+run = "LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml --file infrastructure/compose.dashboard-hmr.yaml down --remove-orphans"
 
 [tasks.dev-dashboard-reset]
 description = "Dashboard開発環境とテストデータを完全に削除"
-run = "LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml down --volumes --remove-orphans"
+run = "LWS_HTTP_PORT=18180 LWS_DNS_PORT=1053 LWS_INSTALLATION_ID=dashboard-dev docker compose --project-name lws-dashboard-dev --file infrastructure/compose.yaml --file infrastructure/compose.dashboard-dev.yaml --file infrastructure/compose.dashboard-hmr.yaml down --volumes --remove-orphans"

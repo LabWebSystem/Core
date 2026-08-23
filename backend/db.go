@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -78,7 +79,7 @@ func OpenDB(ctx context.Context, path string) (*sql.DB, error) {
 }
 
 func MarkUnfinishedOperations(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx, `UPDATE operations SET state='FAILED', error_message='Backend再起動により未完了Operationを終了しました', updated_at=datetime('now') WHERE state IN ('QUEUED','RUNNING')`)
+	_, err := db.ExecContext(ctx, `UPDATE operations SET state='FAILED', error_message='Backend再起動により未完了Operationを終了しました', updated_at=? WHERE state IN ('QUEUED','RUNNING')`, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 

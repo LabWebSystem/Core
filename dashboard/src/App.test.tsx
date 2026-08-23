@@ -44,4 +44,21 @@ describe("Dashboard デバッグルーム", () => {
     fireEvent.click(screen.getByRole("button", { name: "実行する" }));
     await waitFor(() => expect(apiMock.purge).toHaveBeenCalledTimes(1));
   });
+
+  it("未完了の操作とアプリの実行状態を表示し、操作を無効化する", async () => {
+    apiMock.list.mockResolvedValue([{ name: "applications/test", subdomain: "test", repositoryUrl: "https://github.com/example/test", ref: "main", desiredState: "RUNNING", observedState: "ERROR", registrationState: "ACTIVE", observedAt: "2026-08-23T00:00:00Z", reconciling: true, latestOperation: "operation-1", etag: "tag" }]);
+    apiMock.operation.mockResolvedValue({ name: "operations/operation-1", kind: "rebuild", state: "running", createdAt: "2026-08-23T00:00:00Z", updatedAt: "2026-08-23T00:01:00Z" });
+    renderApp();
+    await screen.findByText("再構成: 実行中");
+    expect(screen.getByText("実行状態").nextElementSibling?.textContent).toContain("異常");
+    expect(screen.getByRole("button", { name: "開始" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("ページを読み込み直しても直近の完了Operationを表示する", async () => {
+    apiMock.list.mockResolvedValue([{ name: "applications/test", subdomain: "test", repositoryUrl: "https://github.com/example/test", ref: "main", desiredState: "RUNNING", observedState: "RUNNING", registrationState: "ACTIVE", observedAt: "2026-08-23T00:00:00Z", reconciling: false, latestOperation: "operation-2", etag: "tag" }]);
+    apiMock.operation.mockResolvedValue({ name: "operations/operation-2", kind: "start", state: "succeeded", createdAt: "2026-08-23T00:00:00Z", updatedAt: "2026-08-23T00:01:00Z" });
+    renderApp();
+    await screen.findByText("開始: 完了");
+    expect(screen.getByRole("button", { name: "開始" }).hasAttribute("disabled")).toBe(false);
+  });
 });

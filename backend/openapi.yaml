@@ -142,11 +142,14 @@ components:
         name: { type: string, pattern: '^operations/.+$' }
     OperationResource:
       type: object
-      required: [name, state]
+      required: [name, kind, state, createdAt, updatedAt]
       properties:
         name: { type: string, pattern: '^operations/.+$' }
+        kind: { type: string }
         state: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
         errorMessage: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     Application:
       type: object
       required: [name, subdomain, repositoryUrl, ref, desiredState, observedState, registrationState, observedAt, reconciling, etag]

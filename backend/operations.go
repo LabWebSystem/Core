@@ -30,7 +30,7 @@ func reportOperationOutput(ctx context.Context, task, message, level string) {
 	}
 }
 
-type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage, Payload string }
+type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage, Payload, CreatedAt, UpdatedAt string }
 
 type sqlExecutor interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
@@ -85,6 +85,6 @@ func createOperationWithExecutor(ctx context.Context, db sqlExecutor, applicatio
 }
 
 func SetOperationState(ctx context.Context, db *sql.DB, id, state, message string) error {
-	_, err := db.ExecContext(ctx, `UPDATE operations SET state=?,error_message=?,updated_at=datetime('now') WHERE id=?`, state, message, id)
+	_, err := db.ExecContext(ctx, `UPDATE operations SET state=?,error_message=?,updated_at=? WHERE id=?`, state, message, time.Now().UTC().Format(time.RFC3339Nano), id)
 	return err
 }

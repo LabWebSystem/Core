@@ -116,15 +116,19 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
-		var latestOperation string
-		if err := s.DB.QueryRow(`SELECT id FROM operations WHERE application_id=? AND state IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1`, id).Scan(&latestOperation); err != nil && err != sql.ErrNoRows {
+		var activeOperation, latestOperation string
+		if err := s.DB.QueryRow(`SELECT id FROM operations WHERE application_id=? AND state IN ('QUEUED','RUNNING') ORDER BY created_at DESC LIMIT 1`, id).Scan(&activeOperation); err != nil && err != sql.ErrNoRows {
+			writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operation状態を取得できません", "")
+			return
+		}
+		if err := s.DB.QueryRow(`SELECT id FROM operations WHERE application_id=? ORDER BY created_at DESC LIMIT 1`, id).Scan(&latestOperation); err != nil && err != sql.ErrNoRows {
 			writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operation状態を取得できません", "")
 			return
 		}
 		items = append(items, map[string]any{
 			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref,
 			"desiredState": desired, "observedState": observed, "registrationState": state,
-			"observedAt": time.Now().UTC().Format(time.RFC3339Nano), "reconciling": latestOperation != "",
+			"observedAt": time.Now().UTC().Format(time.RFC3339Nano), "reconciling": activeOperation != "",
 			"latestOperation": latestOperation, "etag": fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed))),
 		})
 	}

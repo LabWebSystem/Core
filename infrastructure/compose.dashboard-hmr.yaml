@@ -1,0 +1,15 @@
+services:
+  dashboard:
+    build: !reset null
+    image: node:22.22.0-alpine
+    working_dir: /app
+    command: >-
+      sh -c 'test -d node_modules/vite || npm ci --no-audit --no-fund;
+      exec npm run dev -- --port 80 --strictPort'
+    volumes:
+      - ../dashboard:/app
+      - lws-dashboard-node-modules:/app/node_modules
+
+volumes:
+  lws-dashboard-node-modules:
+    name: lws-dashboard-dev-node-modules

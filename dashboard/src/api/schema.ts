@@ -288,9 +288,14 @@ export interface components {
         };
         OperationResource: {
             name: string;
+            kind: string;
             /** @enum {string} */
             state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
             errorMessage?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         Application: {
             name: string;
