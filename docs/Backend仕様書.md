@@ -63,7 +63,8 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | `GET` / `PATCH` | `/applications/{application}/configuration` | 変数定義・設定状況、値の更新。secret値は返さない |
 | `POST` | `/applications/{application}:register`、`:start`、`:stop`、`:sync`、`:rebuild` | アプリ操作（Operationを返す） |
 | `GET` | `/operations/{operation}`、`/operations/{operation}:watch` | Operation取得、SSEによる状態配信 |
-| `GET` | `/applications/{application}:tailLogs` | SSEによるコンテナログ配信 |
+| `GET` | `/applications/{application}/logEntries` | 永続ログの取得。`view=task|application|related`、service、期間、cursor、limitで絞り込む |
+| `GET` | `/applications/{application}/logEntries:watch` | cursorから再開できるSSEによる永続ログ配信 |
 
 - 登録要求は`repositoryUrl`、`ref`、`subdomain`を含む。表示名と説明はmanifestから読む。
 - 長時間操作はOperationを返す。未完了Operationがあるapp-idへの新規変更は409で拒否する。

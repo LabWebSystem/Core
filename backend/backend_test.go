@@ -25,7 +25,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v err=%v", fk, wal, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 4 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 5 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -34,7 +34,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 4 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 5 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -984,6 +984,22 @@ func TestNamedVolumesReceiveOwnershipLabels(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "data") || !strings.Contains(string(data), "com.labwebsystem.app-id") {
 		t.Fatalf("volume ownership labels missing: %s", data)
+	}
+}
+
+func TestGeneratedOverrideLabelsAllComposeServices(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "override.yaml")
+	e := &RuntimeExecutor{InstallationID: "installation"}
+	if err := e.GenerateOverrideWithServicesAndVolumes("app-id", "web", []string{"web", "worker"}, nil, path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, `"worker"`) || strings.Count(text, "com.labwebsystem.app-id") != 2 {
+		t.Fatalf("全serviceに所有labelがありません: %s", text)
 	}
 }
 

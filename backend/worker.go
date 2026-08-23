@@ -25,6 +25,7 @@ type Worker struct {
 	mu     sync.Mutex
 	apps   map[string]chan struct{}
 	events *Events
+	logs   *LogStore
 	run    func(context.Context, Operation) error
 }
 
@@ -54,8 +55,14 @@ func (w *Worker) execute(op Operation, lock chan struct{}) {
 	defer func() { <-w.slots }()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
+	ctx = withOperationProgress(ctx, func(message string) {
+		w.events.Publish(op.ID, "running", map[string]string{"message": message})
+		w.appendLog(ctx, op, "operation", message, "info")
+	})
+	ctx = withOperationOutput(ctx, func(task, message, level string) { w.appendLog(ctx, op, task, message, level) })
 	_ = SetOperationState(ctx, w.db, op.ID, "RUNNING", "")
-	w.events.Publish(op.ID, "running", nil)
+	w.events.Publish(op.ID, "running", map[string]string{"message": "操作を開始しています"})
+	w.appendLog(ctx, op, "operation", "操作を開始しています", "info")
 	err := error(nil)
 	if w.run != nil {
 		err = w.run(ctx, op)
@@ -67,6 +74,21 @@ func (w *Worker) execute(op Operation, lock chan struct{}) {
 	}
 	_ = SetOperationState(ctx, w.db, op.ID, state, msg)
 	w.events.Publish(op.ID, stringsLower(state), map[string]string{"message": msg})
+	if msg == "" {
+		msg = "操作が完了しました"
+	}
+	level := "info"
+	if state == "FAILED" {
+		level = "error"
+	}
+	w.appendLog(ctx, op, "operation", msg, level)
+}
+
+func (w *Worker) appendLog(ctx context.Context, op Operation, task, message, level string) {
+	if w.logs == nil {
+		return
+	}
+	_, _ = w.logs.Append(ctx, StoredLogEntry{Level: level, Component: "backend", ApplicationID: op.ApplicationID, OperationID: op.ID, Message: "[" + task + "] " + message})
 }
 func stringsLower(s string) string {
 	if s == "SUCCEEDED" {

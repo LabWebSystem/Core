@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -14,8 +15,8 @@ import (
 type CommandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
 }
-type StreamRunner interface {
-	Stream(context.Context, string, ...string) (io.ReadCloser, error)
+type StreamingCommandRunner interface {
+	RunStreaming(context.Context, string, []string, io.Writer, io.Writer) error
 }
 type OSRunner struct{ Timeout time.Duration }
 
@@ -32,48 +33,67 @@ func (r OSRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	return cmd.CombinedOutput()
 }
 
-func (r OSRunner) Stream(ctx context.Context, name string, args ...string) (io.ReadCloser, error) {
+func (r OSRunner) RunStreaming(ctx context.Context, name string, args []string, stdout, stderr io.Writer) error {
 	if r.Timeout == 0 {
 		r.Timeout = 5 * time.Minute
 	}
 	streamCtx, cancel := context.WithTimeout(ctx, r.Timeout)
+	defer cancel()
 	cmd := exec.CommandContext(streamCtx, name, args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		cancel()
-		return nil, err
-	}
-	return &waitReadCloser{ReadCloser: stdout, wait: func() error {
-		err := cmd.Wait()
-		cancel()
-		return err
-	}}, nil
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	return cmd.Run()
 }
 
-type waitReadCloser struct {
-	io.ReadCloser
-	wait func() error
+func runLogged(ctx context.Context, runner CommandRunner, task, name string, args ...string) ([]byte, error) {
+	if streaming, ok := runner.(StreamingCommandRunner); ok {
+		var stdout, stderr bytes.Buffer
+		outWriter := &operationLineWriter{task: task, level: "info", report: func(message string) { reportOperationOutput(ctx, task, message, "info") }}
+		errWriter := &operationLineWriter{task: task, level: "error", report: func(message string) { reportOperationOutput(ctx, task, message, "error") }}
+		err := streaming.RunStreaming(ctx, name, args, io.MultiWriter(&stdout, outWriter), io.MultiWriter(&stderr, errWriter))
+		outWriter.Flush()
+		errWriter.Flush()
+		return append(stdout.Bytes(), stderr.Bytes()...), err
+	}
+	out, err := runner.Run(ctx, name, args...)
+	if len(out) > 0 {
+		reportOperationOutput(ctx, task, strings.TrimSpace(string(out)), "info")
+	}
+	return out, err
 }
 
-func (r *waitReadCloser) Close() error {
-	closeErr := r.ReadCloser.Close()
-	if err := r.wait(); closeErr == nil {
-		closeErr = err
-	}
-	return closeErr
+type operationLineWriter struct {
+	task, level string
+	pending     string
+	report      func(string)
 }
+
+func (w *operationLineWriter) Write(data []byte) (int, error) {
+	w.pending += string(data)
+	for {
+		i := strings.IndexByte(w.pending, '\n')
+		if i < 0 {
+			break
+		}
+		w.report(w.pending[:i])
+		w.pending = w.pending[i+1:]
+	}
+	return len(data), nil
+}
+func (w *operationLineWriter) Flush() {
+	if w.pending != "" {
+		w.report(w.pending)
+		w.pending = ""
+	}
+}
+
 func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest string) error {
 	tmp := dest + ".tmp"
 	_ = os.RemoveAll(tmp)
 	if err := os.MkdirAll(filepath.Dir(tmp), 0700); err != nil {
 		return err
 	}
-	if _, err := runner.Run(ctx, "git", "clone", "--no-tags", "--depth", "1", "--branch", ref, url, tmp); err != nil {
+	if _, err := runLogged(ctx, runner, "git取得", "git", "clone", "--no-tags", "--depth", "1", "--branch", ref, url, tmp); err != nil {
 		return fmt.Errorf("リポジトリ取得に失敗しました")
 	}
 	if err := ValidateSourceTree(tmp); err != nil {

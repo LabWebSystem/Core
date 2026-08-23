@@ -21,34 +21,6 @@ type RuntimeExecutor struct {
 	InstallationID string
 }
 
-func (e *RuntimeExecutor) TailLogs(ctx context.Context, app string) (<-chan string, error) {
-	if e.Docker == nil {
-		return nil, fmt.Errorf("Dockerが利用できません")
-	}
-	rows, err := e.DB.QueryContext(ctx, `SELECT value FROM application_variables WHERE application_id=? AND is_secret=1`, app)
-	if err != nil {
-		return nil, fmt.Errorf("secret設定を取得できません")
-	}
-	defer rows.Close()
-	redactions := []string{}
-	for rows.Next() {
-		var encrypted []byte
-		if err := rows.Scan(&encrypted); err != nil {
-			return nil, fmt.Errorf("secret設定を取得できません")
-		}
-		plain, err := Decrypt(e.SecretKey, encrypted)
-		if err != nil {
-			return nil, fmt.Errorf("secretを復号できません")
-		}
-		redactions = append(redactions, string(plain))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("secret設定を取得できません")
-	}
-	root := filepath.Join(e.Root, app)
-	return e.Docker.TailLogs(ctx, app, filepath.Join(root, "runtime", "app.env"), filepath.Join(root, "source", "compose.yaml"), filepath.Join(root, "runtime", "lws.override.yaml"), redactions)
-}
-
 func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
 	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}}
 }
@@ -99,6 +71,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 	runtime := filepath.Join(root, "runtime")
 	switch op.Kind {
 	case "CONFIGURE":
+		reportOperationProgress(ctx, "環境設定を反映しています")
 		var desired string
 		if err := e.DB.QueryRowContext(ctx, `SELECT desired_state FROM applications WHERE id=?`, op.ApplicationID).Scan(&desired); err != nil {
 			return fmt.Errorf("アプリ状態を取得できません")
@@ -144,6 +117,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return nil
 	case "CREATE", "SYNC":
+		reportOperationProgress(ctx, "GitHubリポジトリを取得しています")
 		if err := ValidateRef(ref); err != nil {
 			return err
 		}
@@ -153,6 +127,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := CloneAndValidate(ctx, e.Runner, repo, ref, source); err != nil {
 			return err
 		}
+		reportOperationProgress(ctx, "アプリ定義を検証しています")
 		sourceSwapActive := true
 		metadataUpdated := false
 		defer func() {
@@ -190,9 +165,11 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			return err
 		}
 		metadataUpdated = true
+		reportOperationProgress(ctx, "Composeでアプリを起動しています")
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}
+		reportOperationProgress(ctx, "公開設定を更新しています")
 		if err := e.syncDerived(ctx); err != nil {
 			return err
 		}
@@ -365,7 +342,7 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 	}
 	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override}
 	args = append(args, action...)
-	if _, err := e.Runner.Run(ctx, "docker", args...); err != nil {
+	if _, err := runLogged(ctx, e.Runner, "Compose実行", "docker", args...); err != nil {
 		return fmt.Errorf("Docker Compose操作に失敗しました")
 	}
 	return nil
@@ -447,7 +424,7 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	if override != "" {
 		args = []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override, "config", "--format", "json"}
 	}
-	out, err := e.Runner.Run(ctx, "docker", args...)
+	out, err := runLogged(ctx, e.Runner, "Compose検証", "docker", args...)
 	if err != nil {
 		return fmt.Errorf("Compose設定の検証に失敗しました")
 	}
@@ -469,10 +446,18 @@ func (e *RuntimeExecutor) GenerateOverrideFromCompose(id, service, compose strin
 	if err != nil {
 		return err
 	}
-	return e.GenerateOverrideWithVolumes(id, service, volumes, path)
+	services, err := ComposeServiceNames(data)
+	if err != nil {
+		return err
+	}
+	return e.GenerateOverrideWithServicesAndVolumes(id, service, services, volumes, path)
 }
 
 func (e *RuntimeExecutor) GenerateOverrideWithVolumes(id, service string, volumes []string, path string) error {
+	return e.GenerateOverrideWithServicesAndVolumes(id, service, []string{service}, volumes, path)
+}
+
+func (e *RuntimeExecutor) GenerateOverrideWithServicesAndVolumes(id, publicService string, services, volumes []string, path string) error {
 	labels := map[string]string{
 		"com.labwebsystem.owner":           "lws",
 		"com.labwebsystem.installation-id": e.InstallationID,
@@ -482,15 +467,17 @@ func (e *RuntimeExecutor) GenerateOverrideWithVolumes(id, service string, volume
 	for _, name := range volumes {
 		volumeModels[name] = map[string]any{"labels": labels}
 	}
+	serviceModels := map[string]any{}
+	for _, name := range services {
+		serviceModels[name] = map[string]any{"labels": labels}
+	}
+	public, ok := serviceModels[publicService].(map[string]any)
+	if !ok {
+		return fmt.Errorf("公開serviceがComposeにありません")
+	}
+	public["networks"] = map[string]any{"lws-edge": map[string]any{"aliases": []string{"lws-" + id}}}
 	model := map[string]any{
-		"services": map[string]any{service: map[string]any{
-			"labels": map[string]string{
-				"com.labwebsystem.owner":           "lws",
-				"com.labwebsystem.installation-id": e.InstallationID,
-				"com.labwebsystem.app-id":          id,
-			},
-			"networks": map[string]any{"lws-edge": map[string]any{"aliases": []string{"lws-" + id}}},
-		}},
+		"services": serviceModels,
 		"networks": map[string]any{"lws-edge": map[string]any{"external": true, "name": EdgeNetworkName(id)}},
 	}
 	if len(volumeModels) > 0 {

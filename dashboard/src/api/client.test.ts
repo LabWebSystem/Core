@@ -18,4 +18,24 @@ describe("Dashboard API client", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "指定された値が不正です" } }), { status: 400 })));
     await expect(api.list()).rejects.toEqual(new ApiError("指定された値が不正です", 400));
   });
+
+  it("OperationのカスタムSSEイベントを状態として受け取る", () => {
+    class EventSourceMock {
+      static instance: EventSourceMock;
+      listeners = new Map<string, (event: Event) => void>();
+      onerror: (() => void) | null = null;
+      close = vi.fn();
+      constructor() { EventSourceMock.instance = this; }
+      addEventListener(type: string, listener: (event: Event) => void) { this.listeners.set(type, listener); }
+      emit(type: string, data: unknown) { this.listeners.get(type)?.(new MessageEvent("message", { data: JSON.stringify(data) })); }
+    }
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const onState = vi.fn();
+    api.watchOperation("operations/test", onState, vi.fn());
+    EventSourceMock.instance.emit("running", { type: "running", data: { message: "Composeでアプリを起動しています" } });
+    EventSourceMock.instance.emit("succeeded", { type: "succeeded", data: { message: "" } });
+    expect(onState).toHaveBeenNthCalledWith(1, { name: "operations/test", state: "running", errorMessage: "Composeでアプリを起動しています" });
+    expect(onState).toHaveBeenNthCalledWith(2, { name: "operations/test", state: "succeeded", errorMessage: "" });
+    expect(EventSourceMock.instance.close).toHaveBeenCalledTimes(1);
+  });
 });

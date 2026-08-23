@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -177,6 +178,9 @@ func appID(r *http.Request) string {
 		return id
 	}
 	p := strings.TrimPrefix(r.URL.Path, "/api/v1/applications/")
+	if i := strings.IndexByte(p, '/'); i >= 0 {
+		p = p[:i]
+	}
 	if i := strings.IndexByte(p, ':'); i >= 0 {
 		p = p[:i]
 	}
@@ -409,6 +413,9 @@ func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.writeEvent(w, f, e)
+			if e.Type == "succeeded" || e.Type == "failed" || e.Type == "cancelled" {
+				return
+			}
 		}
 	}
 }
@@ -419,37 +426,131 @@ func (s *Server) writeEvent(w http.ResponseWriter, f http.Flusher, e event) {
 	f.Flush()
 }
 
-func (s *Server) tailLogs(w http.ResponseWriter, r *http.Request) {
-	if s.LogSource == nil {
-		writeAPIError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "ログ配信を利用できません", "")
+func (s *Server) logQuery(r *http.Request, watch bool) (LogQuery, error) {
+	query := r.URL.Query()
+	view := query.Get("view")
+	service := query.Get("service")
+	cursor := query.Get("cursor")
+	if watch {
+		cursor = query.Get("after")
+	}
+	q := LogQuery{ApplicationID: appID(r), View: view, Service: service, Cursor: cursor}
+	if !watch {
+		if value := query.Get("limit"); value != "" {
+			limit, err := strconv.Atoi(value)
+			if err != nil {
+				return LogQuery{}, errors.New("limitが不正です")
+			}
+			q.Limit = limit
+		}
+		for _, item := range []struct {
+			value  string
+			target **time.Time
+		}{{query.Get("startAt"), &q.StartAt}, {query.Get("endAt"), &q.EndAt}} {
+			if item.value == "" {
+				continue
+			}
+			parsed, err := time.Parse(time.RFC3339Nano, item.value)
+			if err != nil {
+				return LogQuery{}, errors.New("時刻がRFC3339ではありません")
+			}
+			*item.target = &parsed
+		}
+	}
+	return q, nil
+}
+
+func (s *Server) ensureLogApplication(ctx context.Context, id string) error {
+	if s.DB == nil || s.Logs == nil {
+		return errors.New("ログデータベースを利用できません")
+	}
+	var count int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM applications WHERE id=?`, id).Scan(&count); err != nil {
+		return err
+	}
+	if count != 1 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Server) listLogEntries(w http.ResponseWriter, r *http.Request) {
+	if err := s.ensureLogApplication(r.Context(), appID(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "アプリが見つかりません", "application")
+		} else {
+			writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "ログを取得できません", "")
+		}
 		return
 	}
-	lines, err := s.LogSource(r.Context(), appID(r))
+	q, err := s.logQuery(r, false)
 	if err != nil {
-		writeAPIError(w, http.StatusServiceUnavailable, "LOG_UNAVAILABLE", "コンテナログを取得できません", "")
+		writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error(), "query")
+		return
+	}
+	page, err := s.Logs.Query(r.Context(), q)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error(), "query")
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) watchLogEntries(w http.ResponseWriter, r *http.Request) {
+	if err := s.ensureLogApplication(r.Context(), appID(r)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "アプリが見つかりません", "application")
+		} else {
+			writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "ログを取得できません", "")
+		}
+		return
+	}
+	q, err := s.logQuery(r, true)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error(), "query")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
 	f, ok := w.(http.Flusher)
 	if !ok {
 		return
 	}
-	// 接続確立を直ちに通知し、購読者が最初のログ行を送るまでHTTP接続を
-	// ブロックしない。
-	_, _ = fmt.Fprint(w, ": connected\n\n")
-	f.Flush()
-	seq := int64(0)
+	notifications, closeSubscription := s.Logs.Subscribe()
+	defer closeSubscription()
+	writePage := func() bool {
+		for {
+			page, err := s.Logs.Query(r.Context(), q)
+			if err != nil {
+				return false
+			}
+			for _, entry := range page.Entries {
+				body, _ := json.Marshal(entry)
+				_, _ = fmt.Fprintf(w, "id: %s\nevent: logEntry\ndata: %s\n\n", entry.Cursor, body)
+				f.Flush()
+				q.Cursor = entry.Cursor
+			}
+			if page.NextCursor == "" {
+				return true
+			}
+			q.Cursor = page.NextCursor
+		}
+	}
+	if !writePage() {
+		return
+	}
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case line, open := <-lines:
-			if !open {
+		case _, open := <-notifications:
+			if !open || !writePage() {
 				return
 			}
-			seq++
-			s.writeEvent(w, f, event{ID: fmt.Sprintf("%s-log-%d", appID(r), seq), Sequence: seq, Timestamp: time.Now().UTC(), Type: "log", Data: map[string]string{"line": line}})
+		case <-time.After(15 * time.Second):
+			_, _ = fmt.Fprint(w, ": keepalive\n\n")
+			f.Flush()
 		}
 	}
 }

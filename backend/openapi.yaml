@@ -106,9 +106,33 @@ paths:
   /operations/{operation}:watch:
     parameters: [{ name: operation, in: path, required: true, schema: { type: string } }]
     get: { operationId: watchOperation, responses: { '200': { description: SSE, content: { text/event-stream: { schema: { type: string } } } } } }
-  /applications/{application}:tailLogs:
-    parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
-    get: { operationId: tailLogs, responses: { '200': { description: SSE, content: { text/event-stream: { schema: { type: string } } } } } }
+  /applications/{application}/logEntries:
+    parameters:
+      - { name: application, in: path, required: true, schema: { type: string } }
+      - { name: view, in: query, required: true, schema: { type: string, enum: [task, application, related] } }
+      - { name: service, in: query, schema: { type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,127}$' } }
+      - { name: startAt, in: query, schema: { type: string, format: date-time } }
+      - { name: endAt, in: query, schema: { type: string, format: date-time } }
+      - { name: cursor, in: query, schema: { type: string, minLength: 1 } }
+      - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500 } }
+    get:
+      operationId: listLogEntries
+      responses:
+        '200': { description: ログ一覧, content: { application/json: { schema: { $ref: '#/components/schemas/LogEntryList' } } } }
+        '400': { description: 検索条件が不正 }
+        '404': { description: 未検出 }
+  /applications/{application}/logEntries:watch:
+    parameters:
+      - { name: application, in: path, required: true, schema: { type: string } }
+      - { name: view, in: query, required: true, schema: { type: string, enum: [task, application, related] } }
+      - { name: service, in: query, schema: { type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,127}$' } }
+      - { name: after, in: query, schema: { type: string, minLength: 1 } }
+    get:
+      operationId: watchLogEntries
+      responses:
+        '200': { description: SSE, content: { text/event-stream: { schema: { type: string } } } }
+        '400': { description: 検索条件が不正 }
+        '404': { description: 未検出 }
 components:
   schemas:
     OperationReference:
@@ -143,6 +167,27 @@ components:
       required: [applications]
       properties:
         applications: { type: array, items: { $ref: '#/components/schemas/Application' } }
+    LogEntry:
+      type: object
+      required: [id, cursor, occurredAt, level, component, message]
+      properties:
+        id: { type: string }
+        cursor: { type: string }
+        occurredAt: { type: string, format: date-time }
+        level: { type: string, enum: [debug, info, warn, error] }
+        component: { type: string, enum: [backend, caddy, coredns, dashboard, application] }
+        applicationId: { type: string }
+        operationId: { type: string }
+        service: { type: string }
+        containerName: { type: string }
+        message: { type: string }
+    LogEntryList:
+      type: object
+      required: [entries, liveCursor]
+      properties:
+        entries: { type: array, items: { $ref: '#/components/schemas/LogEntry' } }
+        nextCursor: { type: string }
+        liveCursor: { type: string }
     ConfigurationResponse:
       type: object
       required: [variables]

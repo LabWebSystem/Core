@@ -205,6 +205,24 @@ func NamedVolumeNames(data []byte) ([]string, error) {
 	return result, nil
 }
 
+func ComposeServiceNames(data []byte) ([]string, error) {
+	var model struct {
+		Services map[string]any `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	if len(model.Services) == 0 {
+		return nil, NewValidationError("services", "Composeにserviceがありません", "INVALID_COMPOSE")
+	}
+	names := make([]string, 0, len(model.Services))
+	for name := range model.Services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
 func ComposeError(err error) string {
 	if err == nil {
 		return ""

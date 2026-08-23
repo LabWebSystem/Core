@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -175,46 +174,6 @@ func TestCreateApplicationRollsBackWhenOperationCreationFails(t *testing.T) {
 	}
 }
 
-func TestDockerTailLogsUsesComposeFilesAndRedactsSecret(t *testing.T) {
-	runner := &streamTestRunner{inspect: `[ {"Id":"container","Config":{"Labels":{"com.labwebsystem.owner":"lws","com.labwebsystem.installation-id":"installation","com.docker.compose.project":"lws-app-id"}}} ]`}
-	docker := NewDockerResources(runner, "installation")
-	lines, err := docker.TailLogs(context.Background(), "id", "/tmp/app.env", "/tmp/compose.yaml", "/tmp/override.yaml", []string{"secret-value"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	line := <-lines
-	if strings.Contains(line, "secret-value") || line != "token=[REDACTED]" {
-		t.Fatalf("ログのsecretが除去されていません: %q", line)
-	}
-	joined := strings.Join(runner.args, " ")
-	for _, expected := range []string{"--env-file /tmp/app.env", "-f /tmp/compose.yaml", "-f /tmp/override.yaml", "logs --follow"} {
-		if !strings.Contains(joined, expected) {
-			t.Fatalf("ログ取得引数が不足しています: %s", joined)
-		}
-	}
-}
-
-type streamTestRunner struct {
-	args    []string
-	inspect string
-}
-
-func (r *streamTestRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
-	if name == "docker" && len(args) >= 3 && args[1] == "ps" {
-		r.args = append(r.args, args...)
-		return []byte("container\n"), nil
-	}
-	if name == "docker" && len(args) >= 3 && args[1] == "container" && args[2] == "inspect" {
-		return []byte(r.inspect), nil
-	}
-	return nil, nil
-}
-
-func (r *streamTestRunner) Stream(_ context.Context, name string, args ...string) (io.ReadCloser, error) {
-	r.args = append(r.args, args...)
-	return io.NopCloser(strings.NewReader("token=secret-value\n")), nil
-}
-
 func TestOperationSSEPublishesEnvelopeAndReplaysTerminalState(t *testing.T) {
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
@@ -300,49 +259,6 @@ func TestSSESlowSubscriberIsBoundedAndDoesNotBlockPublisher(t *testing.T) {
 		}
 	}
 	sub.Close()
-}
-
-func TestContainerLogsAreStreamedAsSSE(t *testing.T) {
-	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
-		t.Fatal(err)
-	}
-	logs := make(chan string, 1)
-	serverImpl := NewServer(db, nil)
-	serverImpl.LogSource = func(context.Context, string) (<-chan string, error) { return logs, nil }
-	httpServer := httptest.NewServer(serverImpl.Handler())
-	defer httpServer.Close()
-	response, err := httpServer.Client().Get(httpServer.URL + "/api/v1/applications/app:tailLogs")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.Header.Get("Content-Type") != "text/event-stream" {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("ログSSEではありません: %q body=%s", response.Header.Get("Content-Type"), body)
-	}
-	logs <- "secretを含まないログ行"
-	reader := bufio.NewReader(response.Body)
-	line, err := reader.ReadString('\n')
-	if err != nil || line != ": connected\n" {
-		t.Fatalf("接続eventがありません: %q err=%v", line, err)
-	}
-	line, err = reader.ReadString('\n')
-	if line == "\n" {
-		line, err = reader.ReadString('\n')
-	}
-	if err != nil || !strings.HasPrefix(line, "id: ") {
-		t.Fatalf("ログevent idがありません: %q err=%v", line, err)
-	}
-	for i := 0; i < 3; i++ {
-		if _, err := reader.ReadString('\n'); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 func TestRestartMarksUnfinishedOperationsFailed(t *testing.T) {

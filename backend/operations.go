@@ -9,6 +9,27 @@ import (
 	"github.com/google/uuid"
 )
 
+type operationProgressKey struct{}
+type operationOutputKey struct{}
+
+func withOperationProgress(ctx context.Context, report func(string)) context.Context {
+	return context.WithValue(ctx, operationProgressKey{}, report)
+}
+
+func reportOperationProgress(ctx context.Context, message string) {
+	if report, ok := ctx.Value(operationProgressKey{}).(func(string)); ok {
+		report(message)
+	}
+}
+func withOperationOutput(ctx context.Context, report func(task, message, level string)) context.Context {
+	return context.WithValue(ctx, operationOutputKey{}, report)
+}
+func reportOperationOutput(ctx context.Context, task, message, level string) {
+	if report, ok := ctx.Value(operationOutputKey{}).(func(string, string, string)); ok && message != "" {
+		report(task, message, level)
+	}
+}
+
 type Operation struct{ ID, ApplicationID, RequestID, Kind, State, ErrorMessage, Payload string }
 
 type sqlExecutor interface {

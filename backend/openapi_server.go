@@ -47,8 +47,11 @@ func (a generatedAPI) StopApplication(w http.ResponseWriter, r *http.Request, ap
 func (a generatedAPI) SyncApplication(w http.ResponseWriter, r *http.Request, application string) {
 	a.server.appOperation(w, withApplicationPath(r, application))
 }
-func (a generatedAPI) TailLogs(w http.ResponseWriter, r *http.Request, application string) {
-	a.server.tailLogs(w, withApplicationPath(r, application))
+func (a generatedAPI) ListLogEntries(w http.ResponseWriter, r *http.Request, application string, _ ListLogEntriesParams) {
+	a.server.listLogEntries(w, withApplicationPath(r, application))
+}
+func (a generatedAPI) WatchLogEntries(w http.ResponseWriter, r *http.Request, application string, _ WatchLogEntriesParams) {
+	a.server.watchLogEntries(w, withApplicationPath(r, application))
 }
 func (a generatedAPI) HealthLive(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

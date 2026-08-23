@@ -232,16 +232,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/applications/{application}:tailLogs": {
+    "/applications/{application}/logEntries": {
         parameters: {
-            query?: never;
+            query: {
+                view: "task" | "application" | "related";
+                service?: string;
+                startAt?: string;
+                endAt?: string;
+                cursor?: string;
+                limit?: number;
+            };
             header?: never;
             path: {
                 application: string;
             };
             cookie?: never;
         };
-        get: operations["tailLogs"];
+        get: operations["listLogEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{application}/logEntries:watch": {
+        parameters: {
+            query: {
+                view: "task" | "application" | "related";
+                service?: string;
+                after?: string;
+            };
+            header?: never;
+            path: {
+                application: string;
+            };
+            cookie?: never;
+        };
+        get: operations["watchLogEntries"];
         put?: never;
         post?: never;
         delete?: never;
@@ -280,6 +309,26 @@ export interface components {
         };
         ApplicationList: {
             applications: components["schemas"]["Application"][];
+        };
+        LogEntry: {
+            id: string;
+            cursor: string;
+            /** Format: date-time */
+            occurredAt: string;
+            /** @enum {string} */
+            level: "debug" | "info" | "warn" | "error";
+            /** @enum {string} */
+            component: "backend" | "caddy" | "coredns" | "dashboard" | "application";
+            applicationId?: string;
+            operationId?: string;
+            service?: string;
+            containerName?: string;
+            message: string;
+        };
+        LogEntryList: {
+            entries: components["schemas"]["LogEntry"][];
+            nextCursor?: string;
+            liveCursor: string;
         };
         ConfigurationResponse: {
             variables: {
@@ -757,9 +806,56 @@ export interface operations {
             };
         };
     };
-    tailLogs: {
+    listLogEntries: {
         parameters: {
-            query?: never;
+            query: {
+                view: "task" | "application" | "related";
+                service?: string;
+                startAt?: string;
+                endAt?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                application: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ログ一覧 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogEntryList"];
+                };
+            };
+            /** @description 検索条件が不正 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未検出 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    watchLogEntries: {
+        parameters: {
+            query: {
+                view: "task" | "application" | "related";
+                service?: string;
+                after?: string;
+            };
             header?: never;
             path: {
                 application: string;
@@ -776,6 +872,20 @@ export interface operations {
                 content: {
                     "text/event-stream": string;
                 };
+            };
+            /** @description 検索条件が不正 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未検出 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

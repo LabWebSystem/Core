@@ -3,6 +3,9 @@ import type { components } from "./schema";
 export type Application = components["schemas"]["Application"];
 export type Operation = components["schemas"]["OperationResource"];
 export type Configuration = components["schemas"]["ConfigurationResponse"];
+type LogEntry = components["schemas"]["LogEntry"];
+type LogEntryList = components["schemas"]["LogEntryList"];
+type OperationEvent = { type: Operation["state"]; data?: { message?: string } };
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -45,13 +48,31 @@ export const api = {
   operation: (name: string) => request<Operation>(`/${name}`),
   watchOperation(name: string, onState: (operation: Operation) => void, onError: () => void) {
     const source = new EventSource(`/api/v1/${name}:watch`);
-    source.onmessage = (event) => onState(JSON.parse(event.data) as Operation);
-    source.onerror = () => onError();
-    return () => source.close();
+    let finished = false;
+    const receive = (event: Event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as OperationEvent;
+      const operation = { name, state: payload.type, errorMessage: payload.data?.message ?? "" };
+      onState(operation);
+      if (["succeeded", "failed", "cancelled"].includes(operation.state)) {
+        finished = true;
+        source.close();
+      }
+    };
+    for (const state of ["queued", "running", "succeeded", "failed", "cancelled"] as const) source.addEventListener(state, receive);
+    source.onerror = () => { if (!finished) onError(); };
+    return () => { finished = true; source.close(); };
   },
   tailLogs(app: Application, onLine: (line: string) => void) {
-    const source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}:tailLogs`);
-    source.onmessage = (event) => onLine(event.data);
-    return () => source.close();
+    let closed = false;
+    let source: EventSource | undefined;
+    const path = `/applications/${encodeURIComponent(appId(app))}/logEntries?view=application&limit=200`;
+    void request<LogEntryList>(path).then((snapshot) => {
+      if (closed) return;
+      snapshot.entries.forEach((entry) => onLine(entry.message));
+      const after = snapshot.liveCursor ? `&after=${encodeURIComponent(snapshot.liveCursor)}` : "";
+      source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?view=application${after}`);
+      source.addEventListener("logEntry", (event) => onLine((JSON.parse((event as MessageEvent<string>).data) as LogEntry).message));
+    }).catch(() => undefined);
+    return () => { closed = true; source?.close(); };
   },
 };

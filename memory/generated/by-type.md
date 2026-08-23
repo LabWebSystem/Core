@@ -15,6 +15,7 @@
 - ADR-010 | ACCEPTED | - | miseを品質ゲートの正本とする
 - ADR-011 | ACCEPTED | - | Dashboardはデバッグルームから段階的に洗練する
 - ADR-012 | ACCEPTED | - | DashboardをReact・Chakra UIの同一画面管理クライアントとして実装する
+- ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 
 ## BUG
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
@@ -99,6 +100,8 @@
 - CHG-063 | SHIPPED | - | LWSのプロダクト文脈を定義する
 - CHG-064 | SHIPPED | - | Dashboardデバッグルームと公開経路を実装する
 - CHG-065 | SHIPPED | - | Dashboardのローカル結合確認環境を追加する
+- CHG-066 | SHIPPED | - | Dashboardの公開URLとOperation進行表示を修正する
+- CHG-067 | SHIPPED | - | Backend永続ログ収集・検索・SSE配信を実装する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

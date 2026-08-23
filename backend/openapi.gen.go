@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,6 +37,57 @@ func (e ApplicationRegistrationState) Valid() bool {
 	case ACTIVE:
 		return true
 	case UNREGISTERED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LogEntryComponent.
+const (
+	LogEntryComponentApplication LogEntryComponent = "application"
+	LogEntryComponentBackend     LogEntryComponent = "backend"
+	LogEntryComponentCaddy       LogEntryComponent = "caddy"
+	LogEntryComponentCoredns     LogEntryComponent = "coredns"
+	LogEntryComponentDashboard   LogEntryComponent = "dashboard"
+)
+
+// Valid indicates whether the value is a known member of the LogEntryComponent enum.
+func (e LogEntryComponent) Valid() bool {
+	switch e {
+	case LogEntryComponentApplication:
+		return true
+	case LogEntryComponentBackend:
+		return true
+	case LogEntryComponentCaddy:
+		return true
+	case LogEntryComponentCoredns:
+		return true
+	case LogEntryComponentDashboard:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LogEntryLevel.
+const (
+	LogEntryLevelDebug LogEntryLevel = "debug"
+	LogEntryLevelError LogEntryLevel = "error"
+	LogEntryLevelInfo  LogEntryLevel = "info"
+	LogEntryLevelWarn  LogEntryLevel = "warn"
+)
+
+// Valid indicates whether the value is a known member of the LogEntryLevel enum.
+func (e LogEntryLevel) Valid() bool {
+	switch e {
+	case LogEntryLevelDebug:
+		return true
+	case LogEntryLevelError:
+		return true
+	case LogEntryLevelInfo:
+		return true
+	case LogEntryLevelWarn:
 		return true
 	default:
 		return false
@@ -139,6 +191,33 @@ type Error struct {
 	Error map[string]interface{} `json:"error"`
 }
 
+// LogEntry defines model for LogEntry.
+type LogEntry struct {
+	ApplicationId *string           `json:"applicationId,omitempty"`
+	Component     LogEntryComponent `json:"component"`
+	ContainerName *string           `json:"containerName,omitempty"`
+	Cursor        string            `json:"cursor"`
+	Id            string            `json:"id"`
+	Level         LogEntryLevel     `json:"level"`
+	Message       string            `json:"message"`
+	OccurredAt    time.Time         `json:"occurredAt"`
+	OperationId   *string           `json:"operationId,omitempty"`
+	Service       *string           `json:"service,omitempty"`
+}
+
+// LogEntryComponent defines model for LogEntry.Component.
+type LogEntryComponent string
+
+// LogEntryLevel defines model for LogEntry.Level.
+type LogEntryLevel string
+
+// LogEntryList defines model for LogEntryList.
+type LogEntryList struct {
+	Entries    []LogEntry `json:"entries"`
+	LiveCursor string     `json:"liveCursor"`
+	NextCursor *string    `json:"nextCursor,omitempty"`
+}
+
 // OperationReference defines model for OperationReference.
 type OperationReference struct {
 	Name string `json:"name"`
@@ -174,6 +253,23 @@ type UpdateApplicationRequest struct {
 type Variable struct {
 	Secret bool   `json:"secret"`
 	Value  string `json:"value"`
+}
+
+// ListLogEntriesParams defines parameters for ListLogEntries.
+type ListLogEntriesParams struct {
+	View    string     `form:"view" json:"view"`
+	Service *string    `form:"service,omitempty" json:"service,omitempty"`
+	StartAt *time.Time `form:"startAt,omitempty" json:"startAt,omitempty"`
+	EndAt   *time.Time `form:"endAt,omitempty" json:"endAt,omitempty"`
+	Cursor  *string    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit   *int       `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// WatchLogEntriesParams defines parameters for WatchLogEntries.
+type WatchLogEntriesParams struct {
+	View    string  `form:"view" json:"view"`
+	Service *string `form:"service,omitempty" json:"service,omitempty"`
+	After   *string `form:"after,omitempty" json:"after,omitempty"`
 }
 
 // CreateApplicationJSONRequestBody defines body for CreateApplication for application/json ContentType.
@@ -321,6 +417,12 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	UpdateConfiguration(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListLogEntries performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
+	ListLogEntries(ctx context.Context, application string, params *ListLogEntriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WatchLogEntries performs a GET /applications/{application}/logEntries:watch (the `WatchLogEntries` operationId) request.
+	WatchLogEntries(ctx context.Context, application string, params *WatchLogEntriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PurgeApplicationWithBody performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
 	// with any type of body and a specified content type.
 	PurgeApplicationWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -368,9 +470,6 @@ type ClientInterface interface {
 	// SyncApplication performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
 	// Takes a body of the `application/json` content type.
 	SyncApplication(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TailLogs performs a GET /applications/{application}:tailLogs (the `TailLogs` operationId) request.
-	TailLogs(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HealthLive performs a GET /health/live (the `HealthLive` operationId) request.
 	HealthLive(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -526,6 +625,32 @@ func (c *Client) UpdateConfigurationWithBody(ctx context.Context, application st
 // Takes a body of the `application/json` content type.
 func (c *Client) UpdateConfiguration(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateConfigurationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListLogEntries performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
+func (c *Client) ListLogEntries(ctx context.Context, application string, params *ListLogEntriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListLogEntriesRequest(c.Server, application, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WatchLogEntries performs a GET /applications/{application}/logEntries:watch (the `WatchLogEntries` operationId) request.
+func (c *Client) WatchLogEntries(ctx context.Context, application string, params *WatchLogEntriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWatchLogEntriesRequest(c.Server, application, params)
 	if err != nil {
 		return nil, err
 	}
@@ -694,19 +819,6 @@ func (c *Client) SyncApplicationWithBody(ctx context.Context, application string
 // Takes a body of the `application/json` content type.
 func (c *Client) SyncApplication(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSyncApplicationRequest(c.Server, application, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// TailLogs performs a GET /applications/{application}:tailLogs (the `TailLogs` operationId) request.
-func (c *Client) TailLogs(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTailLogsRequest(c.Server, application)
 	if err != nil {
 		return nil, err
 	}
@@ -1045,6 +1157,204 @@ func NewUpdateConfigurationRequestWithBody(server string, application string, co
 	return req, nil
 }
 
+// NewListLogEntriesRequest constructs an http.Request for the ListLogEntries method
+func NewListLogEntriesRequest(server string, application string, params *ListLogEntriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "application", application, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/applications/%s/logEntries", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "view", params.View, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Service != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "service", *params.Service, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.StartAt != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "startAt", *params.StartAt, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.EndAt != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "endAt", *params.EndAt, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWatchLogEntriesRequest constructs an http.Request for the WatchLogEntries method
+func NewWatchLogEntriesRequest(server string, application string, params *WatchLogEntriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "application", application, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/applications/%s/logEntries:watch", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "view", params.View, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Service != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "service", *params.Service, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPurgeApplicationRequest calls the generic PurgeApplication builder with application/json body
 func NewPurgeApplicationRequest(server string, application string, body PurgeApplicationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1327,40 +1637,6 @@ func NewSyncApplicationRequestWithBody(server string, application string, conten
 	return req, nil
 }
 
-// NewTailLogsRequest constructs an http.Request for the TailLogs method
-func NewTailLogsRequest(server string, application string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "application", application, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/applications/%s:tailLogs", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewHealthLiveRequest constructs an http.Request for the HealthLive method
 func NewHealthLiveRequest(server string) (*http.Request, error) {
 	var err error
@@ -1582,6 +1858,16 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	UpdateConfigurationWithResponse(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConfigurationResponse, error)
 
+	// ListLogEntriesWithResponse performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ListLogEntriesWithResponse(ctx context.Context, application string, params *ListLogEntriesParams, reqEditors ...RequestEditorFn) (*ListLogEntriesResponse, error)
+
+	// WatchLogEntriesWithResponse performs a GET /applications/{application}/logEntries:watch (the `WatchLogEntries` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	WatchLogEntriesWithResponse(ctx context.Context, application string, params *WatchLogEntriesParams, reqEditors ...RequestEditorFn) (*WatchLogEntriesResponse, error)
+
 	// PurgeApplicationWithBodyWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
 	// with any type of body and a specified content type.
 	//
@@ -1641,11 +1927,6 @@ type ClientWithResponsesInterface interface {
 	// SyncApplicationWithResponse performs a POST /applications/{application}:sync (the `SyncApplication` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	SyncApplicationWithResponse(ctx context.Context, application string, body SyncApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SyncApplicationResponse, error)
-
-	// TailLogsWithResponse performs a GET /applications/{application}:tailLogs (the `TailLogs` operationId) request.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	TailLogsWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*TailLogsResponse, error)
 
 	// HealthLiveWithResponse performs a GET /health/live (the `HealthLive` operationId) request.
 	//
@@ -1955,6 +2236,81 @@ func (r UpdateConfigurationResponse) ContentType() string {
 	return ""
 }
 
+type ListLogEntriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *LogEntryList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListLogEntriesResponse) GetJSON200() *LogEntryList {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ListLogEntriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListLogEntriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListLogEntriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListLogEntriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WatchLogEntriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r WatchLogEntriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WatchLogEntriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WatchLogEntriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WatchLogEntriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PurgeApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2195,40 +2551,6 @@ func (r SyncApplicationResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SyncApplicationResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type TailLogsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-}
-
-// GetBody returns the raw response body bytes
-func (r TailLogsResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r TailLogsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TailLogsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r TailLogsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2499,6 +2821,28 @@ func (c *ClientWithResponses) UpdateConfigurationWithResponse(ctx context.Contex
 	return ParseUpdateConfigurationResponse(rsp)
 }
 
+// ListLogEntriesWithResponse performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ListLogEntriesWithResponse(ctx context.Context, application string, params *ListLogEntriesParams, reqEditors ...RequestEditorFn) (*ListLogEntriesResponse, error) {
+	rsp, err := c.ListLogEntries(ctx, application, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListLogEntriesResponse(rsp)
+}
+
+// WatchLogEntriesWithResponse performs a GET /applications/{application}/logEntries:watch (the `WatchLogEntries` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) WatchLogEntriesWithResponse(ctx context.Context, application string, params *WatchLogEntriesParams, reqEditors ...RequestEditorFn) (*WatchLogEntriesResponse, error) {
+	rsp, err := c.WatchLogEntries(ctx, application, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWatchLogEntriesResponse(rsp)
+}
+
 // PurgeApplicationWithBodyWithResponse performs a POST /applications/{application}:purge (the `PurgeApplication` operationId) request,
 // with any type of body and a specified content type.
 //
@@ -2629,17 +2973,6 @@ func (c *ClientWithResponses) SyncApplicationWithResponse(ctx context.Context, a
 		return nil, err
 	}
 	return ParseSyncApplicationResponse(rsp)
-}
-
-// TailLogsWithResponse performs a GET /applications/{application}:tailLogs (the `TailLogs` operationId) request.
-//
-// Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) TailLogsWithResponse(ctx context.Context, application string, reqEditors ...RequestEditorFn) (*TailLogsResponse, error) {
-	rsp, err := c.TailLogs(ctx, application, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTailLogsResponse(rsp)
 }
 
 // HealthLiveWithResponse performs a GET /health/live (the `HealthLive` operationId) request.
@@ -2874,6 +3207,54 @@ func ParseUpdateConfigurationResponse(rsp *http.Response) (*UpdateConfigurationR
 	return response, nil
 }
 
+// ParseListLogEntriesResponse parses an HTTP response from a ListLogEntriesWithResponse call
+func ParseListLogEntriesResponse(rsp *http.Response) (*ListLogEntriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListLogEntriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogEntryList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 400:
+		break // No content-type
+
+	case rsp.StatusCode == 404:
+		break // No content-type
+
+	}
+
+	return response, nil
+}
+
+// ParseWatchLogEntriesResponse parses an HTTP response from a WatchLogEntriesWithResponse call
+func ParseWatchLogEntriesResponse(rsp *http.Response) (*WatchLogEntriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WatchLogEntriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParsePurgeApplicationResponse parses an HTTP response from a PurgeApplicationWithResponse call
 func ParsePurgeApplicationResponse(rsp *http.Response) (*PurgeApplicationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3030,22 +3411,6 @@ func ParseSyncApplicationResponse(rsp *http.Response) (*SyncApplicationResponse,
 	return response, nil
 }
 
-// ParseTailLogsResponse parses an HTTP response from a TailLogsWithResponse call
-func ParseTailLogsResponse(rsp *http.Response) (*TailLogsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TailLogsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	return response, nil
-}
-
 // ParseHealthLiveResponse parses an HTTP response from a HealthLiveWithResponse call
 func ParseHealthLiveResponse(rsp *http.Response) (*HealthLiveResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3144,6 +3509,12 @@ type ServerInterface interface {
 	// (PATCH /applications/{application}/configuration)
 	UpdateConfiguration(w http.ResponseWriter, r *http.Request, application string)
 
+	// (GET /applications/{application}/logEntries)
+	ListLogEntries(w http.ResponseWriter, r *http.Request, application string, params ListLogEntriesParams)
+
+	// (GET /applications/{application}/logEntries:watch)
+	WatchLogEntries(w http.ResponseWriter, r *http.Request, application string, params WatchLogEntriesParams)
+
 	// (POST /applications/{application}:purge)
 	PurgeApplication(w http.ResponseWriter, r *http.Request, application string)
 
@@ -3161,9 +3532,6 @@ type ServerInterface interface {
 
 	// (POST /applications/{application}:sync)
 	SyncApplication(w http.ResponseWriter, r *http.Request, application string)
-
-	// (GET /applications/{application}:tailLogs)
-	TailLogs(w http.ResponseWriter, r *http.Request, application string)
 
 	// (GET /health/live)
 	HealthLive(w http.ResponseWriter, r *http.Request)
@@ -3345,6 +3713,181 @@ func (siw *ServerInterfaceWrapper) UpdateConfiguration(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListLogEntries operation middleware
+func (siw *ServerInterfaceWrapper) ListLogEntries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "application" -------------
+	var application string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "application", r.PathValue("application"), &application, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "application", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListLogEntriesParams
+
+	// ------------- Required query parameter "view" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "view", r.URL.Query(), &params.View, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "view"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "view", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "startAt" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "startAt", r.URL.Query(), &params.StartAt, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "startAt"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "startAt", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "endAt" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "endAt", r.URL.Query(), &params.EndAt, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "endAt"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "endAt", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLogEntries(w, r, application, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// WatchLogEntries operation middleware
+func (siw *ServerInterfaceWrapper) WatchLogEntries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "application" -------------
+	var application string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "application", r.PathValue("application"), &application, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "application", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params WatchLogEntriesParams
+
+	// ------------- Required query parameter "view" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "view", r.URL.Query(), &params.View, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "view"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "view", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WatchLogEntries(w, r, application, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PurgeApplication operation middleware
 func (siw *ServerInterfaceWrapper) PurgeApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -3492,32 +4035,6 @@ func (siw *ServerInterfaceWrapper) SyncApplication(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncApplication(w, r, application)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// TailLogs operation middleware
-func (siw *ServerInterfaceWrapper) TailLogs(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "application" -------------
-	var application string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "application", r.PathValue("application"), &application, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "application", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.TailLogs(w, r, application)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3744,7 +4261,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/applications/{application}/configuration", wrapper.UpdateConfiguration)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/operations/{operation}", wrapper.GetOperation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/operations/{operation}:watch", wrapper.WatchOperation)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications/{application}:tailLogs", wrapper.TailLogs)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications/{application}/logEntries", wrapper.ListLogEntries)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications/{application}/logEntries:watch", wrapper.WatchLogEntries)
 
 	return m
 }
@@ -3921,6 +4439,113 @@ func (response UpdateConfiguration202JSONResponse) VisitUpdateConfigurationRespo
 	return err
 }
 
+type ListLogEntriesRequestObject struct {
+	Application string `json:"application"`
+	Params      ListLogEntriesParams
+}
+
+type ListLogEntriesResponseObject interface {
+	VisitListLogEntriesResponse(w http.ResponseWriter) error
+}
+
+type ListLogEntries200JSONResponse LogEntryList
+
+func (response ListLogEntries200JSONResponse) VisitListLogEntriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLogEntries400Response struct {
+}
+
+func (response ListLogEntries400Response) VisitListLogEntriesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type ListLogEntries404Response struct {
+}
+
+func (response ListLogEntries404Response) VisitListLogEntriesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type WatchLogEntriesRequestObject struct {
+	Application string `json:"application"`
+	Params      WatchLogEntriesParams
+}
+
+type WatchLogEntriesResponseObject interface {
+	VisitWatchLogEntriesResponse(w http.ResponseWriter) error
+}
+
+type WatchLogEntries200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response WatchLogEntries200TexteventStreamResponse) VisitWatchLogEntriesResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+type WatchLogEntries400Response struct {
+}
+
+func (response WatchLogEntries400Response) VisitWatchLogEntriesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type WatchLogEntries404Response struct {
+}
+
+func (response WatchLogEntries404Response) VisitWatchLogEntriesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type PurgeApplicationRequestObject struct {
 	Application string `json:"application"`
 	Body        *PurgeApplicationJSONRequestBody
@@ -4059,57 +4684,6 @@ func (response SyncApplication202JSONResponse) VisitSyncApplicationResponse(w ht
 	return err
 }
 
-type TailLogsRequestObject struct {
-	Application string `json:"application"`
-}
-
-type TailLogsResponseObject interface {
-	VisitTailLogsResponse(w http.ResponseWriter) error
-}
-
-type TailLogs200TexteventStreamResponse struct {
-	Body          io.Reader
-	ContentLength int64
-}
-
-func (response TailLogs200TexteventStreamResponse) VisitTailLogsResponse(w http.ResponseWriter) error {
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	if response.ContentLength != 0 {
-		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
-	}
-	w.WriteHeader(200)
-
-	if closer, ok := response.Body.(io.ReadCloser); ok {
-		defer closer.Close()
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		// If w doesn't support flushing, fall back to io.Copy.
-		_, err := io.Copy(w, response.Body)
-		return err
-	}
-	// text/event-stream messages are typically small; use a
-	// modest buffer and flush after each chunk so clients see
-	// events immediately instead of waiting on OS buffering.
-	buf := make([]byte, 4096)
-	for {
-		n, err := response.Body.Read(buf)
-		if n > 0 {
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return writeErr
-			}
-			flusher.Flush()
-		}
-		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		}
-	}
-}
-
 type HealthLiveRequestObject struct {
 }
 
@@ -4245,6 +4819,12 @@ type StrictServerInterface interface {
 	// (PATCH /applications/{application}/configuration)
 	UpdateConfiguration(ctx context.Context, request UpdateConfigurationRequestObject) (UpdateConfigurationResponseObject, error)
 
+	// (GET /applications/{application}/logEntries)
+	ListLogEntries(ctx context.Context, request ListLogEntriesRequestObject) (ListLogEntriesResponseObject, error)
+
+	// (GET /applications/{application}/logEntries:watch)
+	WatchLogEntries(ctx context.Context, request WatchLogEntriesRequestObject) (WatchLogEntriesResponseObject, error)
+
 	// (POST /applications/{application}:purge)
 	PurgeApplication(ctx context.Context, request PurgeApplicationRequestObject) (PurgeApplicationResponseObject, error)
 
@@ -4262,9 +4842,6 @@ type StrictServerInterface interface {
 
 	// (POST /applications/{application}:sync)
 	SyncApplication(ctx context.Context, request SyncApplicationRequestObject) (SyncApplicationResponseObject, error)
-
-	// (GET /applications/{application}:tailLogs)
-	TailLogs(ctx context.Context, request TailLogsRequestObject) (TailLogsResponseObject, error)
 
 	// (GET /health/live)
 	HealthLive(ctx context.Context, request HealthLiveRequestObject) (HealthLiveResponseObject, error)
@@ -4524,6 +5101,60 @@ func (sh *strictHandler) UpdateConfiguration(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// ListLogEntries operation middleware
+func (sh *strictHandler) ListLogEntries(w http.ResponseWriter, r *http.Request, application string, params ListLogEntriesParams) {
+	var request ListLogEntriesRequestObject
+
+	request.Application = application
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListLogEntries(ctx, request.(ListLogEntriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListLogEntries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListLogEntriesResponseObject); ok {
+		if err := validResponse.VisitListLogEntriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// WatchLogEntries operation middleware
+func (sh *strictHandler) WatchLogEntries(w http.ResponseWriter, r *http.Request, application string, params WatchLogEntriesParams) {
+	var request WatchLogEntriesRequestObject
+
+	request.Application = application
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.WatchLogEntries(ctx, request.(WatchLogEntriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "WatchLogEntries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(WatchLogEntriesResponseObject); ok {
+		if err := validResponse.VisitWatchLogEntriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // PurgeApplication operation middleware
 func (sh *strictHandler) PurgeApplication(w http.ResponseWriter, r *http.Request, application string) {
 	var request PurgeApplicationRequestObject
@@ -4722,32 +5353,6 @@ func (sh *strictHandler) SyncApplication(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-// TailLogs operation middleware
-func (sh *strictHandler) TailLogs(w http.ResponseWriter, r *http.Request, application string) {
-	var request TailLogsRequestObject
-
-	request.Application = application
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.TailLogs(ctx, request.(TailLogsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "TailLogs")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(TailLogsResponseObject); ok {
-		if err := validResponse.VisitTailLogsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // HealthLive operation middleware
 func (sh *strictHandler) HealthLive(w http.ResponseWriter, r *http.Request) {
 	var request HealthLiveRequestObject
@@ -4853,29 +5458,34 @@ func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"7FlPbxtFFP8q1dADiE3stAWJvVRusUIkA5GdNIfISOPdZ3vK7sx2ZtZgrJWgkaCXKhVCVEK5gBCESk2v",
-	"EaJ8mcRJPgaaXe96/4wdJ42JGuU2630z773f+70/4x0gi7keo0ClQOYACasLLg6XFUsSRuvwyAch1Q8e",
-	"Zx5wSSB8zaMXK7Z6aDPuYolM5PvERgaSfQ+QiYTkhHZQEBihOOFgI3MztbWZiLLWQ7AkCgxU8TyHWFgp",
-	"L2q1QahTGhJLUM85RQYCiTvaFw6WIOTnHvDk6IIMxW54qoelBE6Rib7AY2tEafH9m0XnDMRaAngP7IrM",
-	"YGFjCQuSuDBtz2RPOFiMWsRRj+P3LcYcwDQSaE/Y2CFCRm4mxwP1XYV95f7ayoMqMtD6Z/Xq8kpjrVqv",
-	"fpyKQ/oYjwkiGe+vc0erSPgtm7mY6MDMhTxENr0jf37kjpENcB4mnW8Z+LOojdhwCslqREfvdNzVM5Hg",
-	"houbIezondI4cUqjrCmlqRskWjHnuF9AJKNAZ+J9Rtuk40e+XkgaGqiHOcEtZ+SibRN1NnZWM0dO8/DB",
-	"6ICUe7HFOf/GqoxTEj7nqPAYFVD0NGN7Eo6sDBENsDhIfcLE6T0TVZOjdCZPjezYUK23HLCEFFOmhDbM",
-	"b5fQGtCO7CJzaZY0HZOAE6TdcBbGZHI8VRc38cI35YWPmu/eNUfLheagbHy4FMRv3rt7c4ZOoKsB2Sox",
-	"jTpVzhkvIgfxz9MpGonpzk3aRB3awIFaGj5qmgWLt01oFTqmnaJeMJ/rtIe2fwpC4A7M2stOM89AIt8u",
-	"HvnggyIG9ymNaqrwLQvADn9tY+KECwtTCxy1bhoztoJQlc77VZ93YGJWWKpacHe0VBKS+2Bo++MFTChG",
-	"olBn6rpnny2ZLzIb32TISup4wVAxpYD2sOPPUEEjMSM+qqhfbSC0zUYTncWJF81kqLbROPhu7+Dxbwdb",
-	"zw+2Xhzv/Xr87PvK6ooCg0hlL6rh1ga0Gn0hwb1xD1tfArVvRCI94CI6Z2mxvFgO5ywPKPYIMtHtxaXF",
-	"MjJUQnRDT0v5Ht+J/E7SRAUFqfGgkhZUvkY9Ktx0q1wecVEClbnRofRQRKNm1D/PMD+EU0kIVBagBJrD",
-	"/W9P/vgzEvGY0Fhe6DTjcnqP2f0Ls3piRwuyxFB5GhTQu3VhdmiKtgbAROrg8Y+Hr3eOnjxTUoGRpUNp",
-	"kHoKIp46ENXGLMrrNJpJgc8f6eyV7C2C19Dn1jLIPGjzz6ypWTXc/nn473NVOO6U7xTL09HOi6Pfd4Y/",
-	"/D3KO8yxCxK4QObmAKmyHJYXFLfftMUoHywjZXu+oDbDOmV1NXzLt5w5cW1ia7syWV2y0hePiQ1gGWTm",
-	"hjJPmuqvQhp/T3ZfDvd+eVvYWsRvDl1Id12+Mlw1PTUUR/P8PKOoHSTCgXz+FScz91+dyHFo+cSxLyl2",
-	"9Uj79Wxy/vBF092lxe96uHyzAAqJubyk6DWU7uvQnT90zLu0yDHvOnDnDlyfWpcVuD61rgN33sBJTJwa",
-	"60z+O2wtFjj1FiTha1mCHlC5ICQH7GYdzAe0YH+jUZ37vUWh0QXsyG7JIT2Y6PUnoUxNiej9zpp+vPvP",
-	"cOvp4f7LGPGRDg444uAUJfVQZhYtwyd/Hf+0O9x+dbL1Wt0BPyjfniR0uP90uP0qtib1HWCQrINpF+Dx",
-	"Z/M5Xn6LXz2msTq++87GEJZx4Ez80KNlfhVfeLWYbai3Z0Dtf0yW80IRGCj8zj462ecOMlUtIaXeEgqa",
-	"wX8BAAD//w==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,43 +16,6 @@ type DockerResource struct {
 	ID     string
 	Name   string
 	Labels ResourceLabels
-}
-
-// TailLogsは所有確認済みのCompose projectだけをargv形式で追跡する。
-// channelをboundedにして、HTTP購読者の速度をDocker側へ伝播させない。
-func (d *DockerResources) TailLogs(ctx context.Context, app, envFile, composeFile, overrideFile string, redactions []string) (<-chan string, error) {
-	if err := d.VerifyProjectOwnership(ctx, app); err != nil {
-		return nil, err
-	}
-	streamer, ok := d.Runner.(StreamRunner)
-	if !ok {
-		return nil, fmt.Errorf("コンテナログ取得器を利用できません")
-	}
-	args := []string{"compose", "--project-name", ProjectName(app), "--env-file", envFile, "-f", composeFile, "-f", overrideFile, "logs", "--follow", "--no-color", "--tail", "100"}
-	stdout, err := streamer.Stream(ctx, "docker", args...)
-	if err != nil {
-		return nil, fmt.Errorf("コンテナログを開始できません")
-	}
-	lines := make(chan string, 32)
-	go func() {
-		defer close(lines)
-		defer stdout.Close()
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			for _, secret := range redactions {
-				if secret != "" {
-					line = strings.ReplaceAll(line, secret, "[REDACTED]")
-				}
-			}
-			select {
-			case lines <- line:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return lines, nil
 }
 
 type DockerResources struct {

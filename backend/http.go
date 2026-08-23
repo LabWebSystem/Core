@@ -24,13 +24,14 @@ type Server struct {
 	Ready         func() bool
 	events        *Events
 	worker        *Worker
-	LogSource     func(context.Context, string) (<-chan string, error)
+	Logs          *LogStore
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
-	s := &Server{DB: db, events: NewEvents()}
+	s := &Server{DB: db, events: NewEvents(), Logs: NewLogStore(db)}
 	s.worker = NewWorker(db, run)
 	s.worker.events = s.events
+	s.worker.logs = s.Logs
 	return s
 }
 
@@ -50,8 +51,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/applications/{application}", wrapper.UnregisterApplication)
 	// 通常取得とcustom method suffixは同じprefix dispatcherで分岐する。
 	mux.HandleFunc("GET /api/v1/applications/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ":tailLogs") {
-			s.tailLogs(w, r)
+		if strings.HasSuffix(r.URL.Path, "/logEntries:watch") {
+			s.watchLogEntries(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/logEntries") {
+			s.listLogEntries(w, r)
 			return
 		}
 		s.getApplication(w, r)

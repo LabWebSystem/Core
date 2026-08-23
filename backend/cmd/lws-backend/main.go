@@ -85,8 +85,8 @@ func main() {
 		}()
 	}
 	server := backend.NewServer(db, runtime.Run)
-	server.LogSource = runtime.TailLogs
 	server.SecretKey = secretKey
+	server.Logs.SecretKey = secretKey
 	server.AllowedHost = os.Getenv("LWS_ALLOWED_HOST")
 	if server.AllowedHost == "" {
 		server.AllowedHost = "api." + os.Getenv("LWS_BASE_DOMAIN")
@@ -95,6 +95,24 @@ func main() {
 	if server.AllowedOrigin == "" {
 		server.AllowedOrigin = "http://dashboard." + os.Getenv("LWS_BASE_DOMAIN")
 	}
+	if source, err := backend.NewMobyDockerRuntimeSource(runtime.InstallationID); err != nil {
+		slog.Error("Dockerログ監視を初期化できません", "error", err)
+	} else {
+		monitor := backend.NewRuntimeMonitor(source, server.Logs, db, runtime.InstallationID, os.Getenv("LWS_BASE_DOMAIN"), secretKey)
+		monitorContext, cancelMonitor := context.WithCancel(context.Background())
+		defer cancelMonitor()
+		go monitor.Run(monitorContext)
+	}
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			if err := server.Logs.RemoveExpired(context.Background(), 30*24*time.Hour, 100*1024*1024); err != nil {
+				slog.Error("ログ保持期限の整理に失敗しました", "error", err)
+			}
+			<-ticker.C
+		}
+	}()
 	if err := http.ListenAndServe(addr, server.Handler()); err != nil {
 		slog.Error("Backend停止", "error", err)
 		os.Exit(1)
