@@ -82,6 +82,7 @@
 - CHG-062 | SHIPPED | - | Impeccableデザインスキルをプロジェクトへ導入する
 - CHG-063 | SHIPPED | - | LWSのプロダクト文脈を定義する
 - CHG-064 | SHIPPED | - | Dashboardデバッグルームと公開経路を実装する
+- CHG-065 | SHIPPED | - | Dashboardのローカル結合確認環境を追加する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

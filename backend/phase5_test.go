@@ -111,7 +111,7 @@ func TestInfrastructureImagesArePinnedAndRequiredPortsAreFixed(t *testing.T) {
 			t.Fatalf("固定digestのimageがありません: %s", image)
 		}
 	}
-	for _, port := range []string{"\"80:80\"", "\"53:53/tcp\"", "\"53:53/udp\""} {
+	for _, port := range []string{"\"${LWS_HTTP_PORT:-80}:80\"", "\"${LWS_DNS_PORT:-53}:53/tcp\"", "\"${LWS_DNS_PORT:-53}:53/udp\""} {
 		if !strings.Contains(text, port) {
 			t.Fatalf("必須公開portが固定されていません: %s", port)
 		}

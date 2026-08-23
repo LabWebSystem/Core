@@ -103,6 +103,29 @@ mise run verify          # 普段の開発・通常CI用。約数秒
 mise run verify qa       # DockerとRobot QAを含む確認
 mise run verify release  # リリース前の確認とパッケージ生成
 mise run dev             # 開発用Composeを起動
+mise run dev-dashboard   # Dashboardと実Backendを http://dashboard.lws.localhost:18180 で起動
+```
+
+### Dashboardを実際に操作する
+
+`mise run dev-dashboard`は、`dashboard.lws.localhost:18180`でDashboardを公開します。Caddyの同一Originプロキシを通じて実Backendへ接続するため、画面とAPIの接続をブラウザで確認できます。通常のLWSとは別のCompose project、volume、networkと、80/53番以外のportを使用します。
+
+起動後にブラウザで次を開きます。
+
+```text
+http://dashboard.lws.localhost:18180
+```
+
+`.localhost`はローカル端末へ解決されるため、hostsの編集は不要です。停止してデータを残すには`Ctrl+C`、コンテナとnetworkを削除するには次を実行します。
+
+```sh
+mise run dev-dashboard-down
+```
+
+登録したテストアプリとDashboardの開発データも最初からやり直す場合だけ、専用volumeを含めて削除します。
+
+```sh
+mise run dev-dashboard-reset
 ```
 
 品質ゲートの結果とログは、`test/result/YYYY-MM-DD-verify-result.md`に保存されます。

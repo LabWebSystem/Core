@@ -98,6 +98,7 @@
 - CHG-062 | SHIPPED | - | Impeccableデザインスキルをプロジェクトへ導入する
 - CHG-063 | SHIPPED | - | LWSのプロダクト文脈を定義する
 - CHG-064 | SHIPPED | - | Dashboardデバッグルームと公開経路を実装する
+- CHG-065 | SHIPPED | - | Dashboardのローカル結合確認環境を追加する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

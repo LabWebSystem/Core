@@ -47,7 +47,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "80:80"
+      - "${LWS_HTTP_PORT:-80}:80"
     volumes:
       - lws-generated:/var/lib/lws/generated:ro
     networks: [lws-internal]
@@ -59,8 +59,8 @@ services:
     image: coredns/coredns:1.12.4@sha256:986f04c2e15e147d00bdd51e8c51bcef3644b13ff806be7d2ff1b261d6dfbae1
     command: -conf /etc/coredns/Corefile
     ports:
-      - "53:53/tcp"
-      - "53:53/udp"
+      - "${LWS_DNS_PORT:-53}:53/tcp"
+      - "${LWS_DNS_PORT:-53}:53/udp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
       - lws-generated:/var/lib/lws/generated
