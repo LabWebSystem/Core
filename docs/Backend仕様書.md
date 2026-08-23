@@ -51,7 +51,7 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 ### 3.1 HTTP API
 
 - prefixは`/api/v1`。成功・失敗レスポンスはJSON、利用者向けメッセージは日本語とする。
-- 認証・認可は持たない。到達可能なLAN端末を管理者として扱う。BackendはCaddy経由以外を受け付けず、CORSを許可しない。
+- 認証・認可は持たない。到達可能なLAN端末を管理者として扱う。BackendはCaddy経由以外を受け付けず、CORSを許可しない。`dashboard.<base-domain>`から同一Originの`/api/v1`へ送られた要求だけを許可し、任意の`Origin`は拒否する。
 - 状態変更はJSONの`Content-Type`と許可済み`Host`を要求する。`Origin` headerがある要求は許可済みoriginだけを受け付ける。
 
 | メソッド | パス | 処理 |

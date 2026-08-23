@@ -148,7 +148,7 @@ Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdom
 ## v0.1.7での注意点
 
 - 管理操作の中心はBackend APIです。
-- Dashboardはまだ実用的な管理画面ではありません。
+- Dashboardでは、アプリの登録、状態確認、開始・停止・同期・再構成、環境設定、ログ確認、登録解除、完全削除を行えます。LWS本体の起動・停止・更新は引き続き`lwsctl`で行います。
 - TypeScript SDKはまだモック段階です。
 - APIの認証・認可はありません。
 - WebSocketは使用せず、処理状態やログの通知にはSSEを使います。

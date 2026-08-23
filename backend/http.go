@@ -17,13 +17,14 @@ import (
 )
 
 type Server struct {
-	DB          *sql.DB
-	SecretKey   []byte
-	AllowedHost string
-	Ready       func() bool
-	events      *Events
-	worker      *Worker
-	LogSource   func(context.Context, string) (<-chan string, error)
+	DB            *sql.DB
+	SecretKey     []byte
+	AllowedHost   string
+	AllowedOrigin string
+	Ready         func() bool
+	events        *Events
+	worker        *Worker
+	LogSource     func(context.Context, string) (<-chan string, error)
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
@@ -63,7 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
 	// custom methodとSSE tail routeはURL suffixを検査する既存dispatcherへ委譲する。
 	mux.HandleFunc("POST /api/v1/applications/", s.appOperation)
-	return requestBoundary(openAPIValidation(mux), s.AllowedHost)
+	return requestBoundary(openAPIValidation(mux), s.AllowedHost, s.AllowedOrigin)
 }
 
 func openAPIValidation(next http.Handler) http.Handler {
@@ -216,13 +217,13 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 
-func requestBoundary(next http.Handler, allowedHost string) http.Handler {
+func requestBoundary(next http.Handler, allowedHost, allowedOrigin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if allowedHost != "" && r.Host != allowedHost {
 			writeAPIError(w, http.StatusForbidden, "HOST_FORBIDDEN", "許可されていないHostです", "host")
 			return
 		}
-		if r.Header.Get("Origin") != "" {
+		if origin := r.Header.Get("Origin"); origin != "" && origin != allowedOrigin {
 			writeAPIError(w, http.StatusForbidden, "ORIGIN_FORBIDDEN", "許可されていないOriginです", "origin")
 			return
 		}

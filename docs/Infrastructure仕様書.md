@@ -50,7 +50,7 @@
 - Caddyのedge network接続はBackendがDocker APIで行い、Backend起動後はSQLiteの正本から再調整する。
 - Docker daemonのアドレスプールは、想定アプリ数に必要なbridge network数を運用者が確保する。枯渇時は登録・起動を失敗させ、既存アプリを変更しない。
 - `config.env`には`LWS_BASE_DOMAIN`、`LWS_VERSION`、`LWS_INSTALLATION_ID`、`LWS_PUBLIC_ADDRESS`を保存する。初回`lwsctl start --domain`はデフォルト経路のIPv4を保存し、`LWS_PUBLIC_ADDRESS`があれば優先する。IPを一意に決められなければ失敗する。
-- Backendは起動時および状態変更後に、SQLiteの有効アプリ一覧からhostsとCaddyfileを一時ファイルへ生成しatomic renameする。hostsは`api.<base-domain>`と各アプリURLを`LWS_PUBLIC_ADDRESS`へ対応付ける。CaddyfileにはAPIのReverse Proxyとmanifestの公開service・portを反映する。
+- Backendは起動時および状態変更後に、SQLiteの有効アプリ一覧からhostsとCaddyfileを一時ファイルへ生成しatomic renameする。hostsは`api.<base-domain>`、`dashboard.<base-domain>`、各アプリURLを`LWS_PUBLIC_ADDRESS`へ対応付ける。CaddyfileにはDashboard、APIのReverse Proxy、manifestの公開service・portを反映する。Dashboardの`/api/v1`はBackendへ中継し、Backendには`api.<base-domain>`のHostを渡す。
 - CoreDNSはhosts再読込で反映する。Caddyは生成volume上のCaddyfileを検証後、所有確認済みコンテナのadmin APIへ`caddy reload`を実行して無停止再読込する。いずれかの反映に失敗した場合は既存設定を維持する。
 - Backend起動時は、SQLiteで`ACTIVE`かつ`desired_state=RUNNING`のアプリについて、edge networkの存在とCaddy接続をDocker実状態と照合し、不足部分だけを再作成・再接続する。Caddy起動待ちの間は再試行し、DBの状態を先に変更しない。
 - LWSをDNSとして配布するDHCP設定は運用者の責務とする。LWSサーバーIPは固定またはDHCP予約を推奨する。`lwsctl start`は53/tcp・53/udp競合時に起動しない。

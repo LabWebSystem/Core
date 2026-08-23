@@ -27,6 +27,8 @@ go.work.sum
 # env file
 .env
 dist/
+dashboard/node_modules/
+dashboard/tsconfig.tsbuildinfo
 .package-work/
 sdk/dist/
 

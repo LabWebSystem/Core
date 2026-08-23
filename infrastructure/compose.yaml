@@ -29,6 +29,9 @@ services:
       timeout: 2s
       retries: 30
   dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
     image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}@${LWS_DASHBOARD_DIGEST:-sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4}
     restart: unless-stopped
     depends_on: [backend]

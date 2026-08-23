@@ -1,0 +1,33 @@
+{
+  "name": "@labwebsystem/dashboard",
+  "private": true,
+  "version": "0.1.7",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "npm run generate:api && npm run build:static",
+    "build:static": "tsc -b && vite build",
+    "generate:api": "openapi-typescript ../backend/openapi.yaml -o src/api/schema.ts",
+    "lint": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^3.36.1",
+    "@emotion/react": "^11.14.0",
+    "@tanstack/react-query": "^5.102.0",
+    "lucide-react": "^1.33.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.1.0",
+    "jsdom": "^30.0.1",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

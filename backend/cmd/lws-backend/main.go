@@ -91,6 +91,10 @@ func main() {
 	if server.AllowedHost == "" {
 		server.AllowedHost = "api." + os.Getenv("LWS_BASE_DOMAIN")
 	}
+	server.AllowedOrigin = os.Getenv("LWS_ALLOWED_ORIGIN")
+	if server.AllowedOrigin == "" {
+		server.AllowedOrigin = "http://dashboard." + os.Getenv("LWS_BASE_DOMAIN")
+	}
 	if err := http.ListenAndServe(addr, server.Handler()); err != nil {
 		slog.Error("Backend停止", "error", err)
 		os.Exit(1)

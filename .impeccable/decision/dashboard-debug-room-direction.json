@@ -1,0 +1,94 @@
+{
+  "title": "Dashboard の視覚的な土台を選ぶ",
+  "question": "機能を先に検証するデバッグルームに、どの見た目と操作の文法を与えますか？",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "研究室の運用台帳",
+      "kicker": "THE ROLL",
+      "lineage": "設備の稼働記録と当番引き継ぎノート",
+      "thesis": "アプリの状態と操作履歴を、次の担当者にも一目で渡せる運用台帳として扱う。",
+      "palette": ["#F7F8F4", "#183153", "#2D7A65", "#D36D45"],
+      "materials": ["罫線", "状態印", "余白のある記録面"],
+      "viewport": "上部にLWSの稼働表示、中央に空のアプリ台帳、右側に登録操作と操作履歴を置く。",
+      "risk": "紙の比喩を強めすぎると、現代的な管理画面としての軽快さを失う。",
+      "raised": [
+        {
+          "from": "ダークファースト開発コンソール",
+          "raise": "破壊的操作は独立した余白と確認段階を持ち、ほかの操作に紛れない。"
+        },
+        {
+          "from": "オシロスコープの信号ベンチ",
+          "raise": "状態変化と進行中の操作は、短い時系列として即座に読み取れる。"
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/dashboard-debug-room-assigned.webp"
+    },
+    {
+      "id": "model-pick",
+      "label": "駅の運行案内板",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "駅の発着案内と運行状況表示",
+      "thesis": "アプリを行、現在の稼働状態を大きな信号として見せ、次の行動を迷わせない。",
+      "palette": ["#FCFCFA", "#17212B", "#007C74", "#D54B3D"],
+      "materials": ["整列した行", "色による状態信号", "時間表示"],
+      "viewport": "空の一覧では登録への一本道を示し、登録後はアプリごとの状態行と進行中の操作を並べる。",
+      "risk": "状態の一覧性を優先しすぎると、設定やログの詳細へ入る導線が弱くなる。",
+      "comp": ".impeccable/mocks/decision/dashboard-debug-room-pick.webp"
+    },
+    {
+      "id": "challenger-developer-console",
+      "label": "ダークファースト開発コンソール",
+      "verdict": "competitive",
+      "lineage": "グラファイト地に細い境界線を使う運用コンソール",
+      "thesis": "一画面の作業面で、アプリ・設定・ログ・操作を並行して扱う。",
+      "palette": ["#171A1D", "#252A2F", "#8CCB9B", "#F0B55E"],
+      "materials": ["ヘアライン", "等幅数字", "孤立した危険操作"],
+      "viewport": "常設のパネル群が同じ場所に残り、選択したアプリだけの詳細がその場で切り替わる。",
+      "case": "操作の密度と破壊的操作の安全性は強いが、非専門家には開発者向けに見えやすい。",
+      "risk": "専門的で近寄りがたい印象になる。",
+      "comp": ".impeccable/mocks/decision/dashboard-debug-room-console.webp"
+    },
+    {
+      "id": "challenger-oscilloscope",
+      "label": "オシロスコープの信号ベンチ",
+      "verdict": "declined",
+      "lineage": "計測器のグリッドと即時の状態信号",
+      "thesis": "アプリの状態変化を計測信号のように監視する。",
+      "palette": ["#101714", "#8EE6A9", "#B5C2B8", "#E1A84A"],
+      "materials": ["測定グリッド", "発光トレース"],
+      "viewport": "進行中の操作がグリッド上のタイムラインとして動く。",
+      "case": "状態変化の可視性は高いが、初回登録という主作業を計測比喩が覆ってしまう。",
+      "kept": "状態変化を時系列で読む規律。",
+      "risk": "装飾が機能の理解を上回る。",
+      "comp": ".impeccable/mocks/decision/dashboard-debug-room-oscilloscope.webp"
+    },
+    {
+      "id": "challenger-miura",
+      "label": "展開する作業シート",
+      "verdict": "declined",
+      "lineage": "折り畳み式の技術作業票",
+      "thesis": "必要な詳細だけを段階的に展開する。",
+      "palette": ["#FAF8F0", "#293447", "#BCA25A", "#6F9EB6"],
+      "materials": ["斜めの区切り", "展開状態"],
+      "viewport": "空の一覧から登録フォームへ、必要な情報だけが順に開く。",
+      "case": "段階的な入力には合うが、デバッグルームの同時可視性を損なう。",
+      "kept": "詳細を必要な時だけ開く段階性。",
+      "risk": "構造が先行して操作が遅くなる。",
+      "comp": ".impeccable/mocks/decision/dashboard-debug-room-miura.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": true },
+  "canon": true,
+  "canonCard": {
+    "label": "管理画面の標準形",
+    "thesis": "サイドバー、カード、テーブル、青い主ボタンによる一般的な管理画面。",
+    "palette": ["#FFFFFF", "#111827", "#2563EB"],
+    "materials": ["整然としたグリッド", "標準コンポーネント"],
+    "viewport": "空状態のカードと登録ボタンを中央に置く。",
+    "risk": "LWSらしい運用の安心感や軽快さを伝えにくい。",
+    "comp": ".impeccable/mocks/decision/dashboard-debug-room-canon.webp"
+  },
+  "steer": true
+}

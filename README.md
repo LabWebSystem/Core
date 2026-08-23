@@ -4,7 +4,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> 現在のLWSは v0.1.7 です。CLIとBackendによるアプリ管理の基盤を使えます。DashboardとTypeScript SDKは、まだ開発中です。
+> 現在のLWSは v0.1.7 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。
 
 ## できること
 
@@ -12,6 +12,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 - Docker Composeでアプリを起動・停止・更新する
 - `app-name.example.internal`の形でアプリごとのURLを公開する
 - アプリの設定値、secret、ログ、実行状態を管理する
+- `dashboard.<base-domain>`のDashboardから、アプリを日本語で登録・操作する
 - LWS本体を起動、停止、再構成、更新する
 
 ## はじめる
@@ -123,7 +124,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 |---|---|
 | `cmd/lwsctl/` | LWSを操作するCLI |
 | `backend/` | アプリ管理とDocker操作を行うBackend API |
-| `dashboard/` | Dashboardのコンテナ定義 |
+| `dashboard/` | アプリ管理DashboardのReact実装 |
 | `sdk/` | 外部アプリ向けTypeScript SDK |
 | `infrastructure/` | LWS本体のDocker Compose、DNS、Reverse Proxy設定 |
 | `packaging/` | `.deb`・`.rpm`パッケージ定義 |
@@ -132,7 +133,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 ## 注意点
 
 - 管理APIには、まだ認証・認可がありません。信頼できるLAN内だけで使ってください。
-- DashboardとTypeScript SDKは、実用機能の実装途中です。
+- TypeScript SDKは、実用機能の実装途中です。
 - LAN端末へLWSのDNSを配るDHCP・DNS設定は、利用するネットワーク側で行います。
 
 ## 関連資料

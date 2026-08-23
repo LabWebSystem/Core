@@ -184,6 +184,39 @@ func TestHTTPRejectsOrigin(t *testing.T) {
 	}
 }
 
+func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
+	s := &Server{AllowedHost: "api.example.internal", AllowedOrigin: "http://dashboard.example.internal"}
+	allowed := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
+	request.Host = "api.example.internal"
+	request.Header.Set("Origin", "http://dashboard.example.internal")
+	s.Handler().ServeHTTP(allowed, request)
+	if allowed.Code != http.StatusOK {
+		t.Fatalf("dashboard origin status=%d body=%s", allowed.Code, allowed.Body.String())
+	}
+	rejected := httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
+	request.Host = "api.example.internal"
+	request.Header.Set("Origin", "http://other.example.internal")
+	s.Handler().ServeHTTP(rejected, request)
+	if rejected.Code != http.StatusForbidden {
+		t.Fatalf("unexpected origin status=%d", rejected.Code)
+	}
+}
+
+func TestDerivedDashboardRoute(t *testing.T) {
+	hosts := GenerateHosts("example.internal", "192.0.2.1", nil)
+	if !strings.Contains(hosts, "192.0.2.1 dashboard.example.internal\n") {
+		t.Fatalf("dashboard host is missing: %s", hosts)
+	}
+	caddy := GenerateCaddyfile("example.internal", nil)
+	for _, want := range []string{"http://dashboard.example.internal", "handle /api/*", "reverse_proxy dashboard:80", "header_up Host api.example.internal"} {
+		if !strings.Contains(caddy, want) {
+			t.Fatalf("dashboard route is missing %q: %s", want, caddy)
+		}
+	}
+}
+
 func TestHTTPRejectsUnexpectedHost(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
 	r.Host = "bad.example.internal"

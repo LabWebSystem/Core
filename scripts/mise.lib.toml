@@ -17,8 +17,8 @@ dir = "sdk"
 run = ["npm test", "npm run build"]
 
 [test-dashboard]
-description = "Dashboardイメージをビルド検証"
-run = "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"
+description = "Dashboardのlint、test、build、イメージを検証"
+run = ["npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"]
 
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"

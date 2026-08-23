@@ -13,6 +13,8 @@
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
 - ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
 - ADR-010 | ACCEPTED | - | miseを品質ゲートの正本とする
+- ADR-011 | ACCEPTED | - | Dashboardはデバッグルームから段階的に洗練する
+- ADR-012 | ACCEPTED | - | DashboardをReact・Chakra UIの同一画面管理クライアントとして実装する
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -74,6 +76,9 @@
 - CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
 - CHG-060 | SHIPPED | - | 初回起動前のLWS更新を許可する
 - CHG-061 | SHIPPED | - | テスト用Dockerイメージを実行後に削除する
+- CHG-062 | SHIPPED | - | Impeccableデザインスキルをプロジェクトへ導入する
+- CHG-063 | SHIPPED | - | LWSのプロダクト文脈を定義する
+- CHG-064 | SHIPPED | - | Dashboardデバッグルームと公開経路を実装する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 
 ## backend
