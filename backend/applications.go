@@ -172,6 +172,12 @@ func operationID(r *http.Request) string {
 	p := strings.TrimPrefix(r.URL.Path, "/api/v1/operations/")
 	return strings.TrimSuffix(p, ":watch")
 }
+func operationResourceName(id string) string {
+	if id == "" {
+		return ""
+	}
+	return "operations/" + id
+}
 func appID(r *http.Request) string {
 	id := r.PathValue("application")
 	if id != "" {
@@ -191,8 +197,8 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	var id, sub, repo, ref, desired, observed, state, created, updated string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,desired_state,observed_state,registration_state,created_at,updated_at FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &created, &updated)
+	var id, sub, repo, ref, desired, observed, state, latestError, created, updated string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,desired_state,observed_state,registration_state,latest_error,created_at,updated_at FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &latestError, &created, &updated)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, 404, "NOT_FOUND", "アプリが見つかりません", "application")
 		return
@@ -222,7 +228,8 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		"createdAt":         created,
 		"updatedAt":         updated,
 		"reconciling":       activeOperation != "",
-		"latestOperation":   latestOperation,
+		"latestOperation":   operationResourceName(latestOperation),
+		"latestError":       latestError,
 		"etag":              etag,
 		"observedAt":        time.Now().UTC().Format(time.RFC3339Nano),
 	}
@@ -265,9 +272,12 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// requestId は再送識別子であり、実行内容の同一性には含めない。
+	requestID := p.RequestID
+	p.RequestID = ""
 	payload, _ := json.Marshal(p)
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(payload))
-	op, err := CreateOperationWithPayload(r.Context(), s.DB, appID(r), p.RequestID, "UPDATE", fingerprint, string(payload))
+	op, err := CreateOperationWithPayload(r.Context(), s.DB, appID(r), requestID, "UPDATE", fingerprint, string(payload))
 	if err != nil {
 		writeAPIError(w, 409, "CONFLICT", err.Error(), "")
 		return
@@ -373,7 +383,7 @@ func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var o Operation
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id,application_id,request_id,kind,state,error_message,created_at,updated_at FROM operations WHERE id=?`, operationID(r)).Scan(&o.ID, &o.ApplicationID, &o.RequestID, &o.Kind, &o.State, &o.ErrorMessage, &o.CreatedAt, &o.UpdatedAt)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,application_id,request_id,kind,state,error_message,phase,display_message,created_at,updated_at FROM operations WHERE id=?`, operationID(r)).Scan(&o.ID, &o.ApplicationID, &o.RequestID, &o.Kind, &o.State, &o.ErrorMessage, &o.Phase, &o.DisplayMessage, &o.CreatedAt, &o.UpdatedAt)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, 404, "NOT_FOUND", "Operationが見つかりません", "operation")
 		return
@@ -382,7 +392,7 @@ func (s *Server) getOperation(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 500, "DATABASE_ERROR", "Operationを取得できません", "")
 		return
 	}
-	writeJSON(w, 200, map[string]string{"name": "operations/" + o.ID, "kind": strings.ToLower(o.Kind), "state": strings.ToLower(o.State), "errorMessage": o.ErrorMessage, "createdAt": o.CreatedAt, "updatedAt": o.UpdatedAt})
+	writeJSON(w, 200, map[string]string{"name": "operations/" + o.ID, "kind": strings.ToLower(o.Kind), "state": strings.ToLower(o.State), "phase": o.Phase, "displayMessage": o.DisplayMessage, "errorMessage": o.ErrorMessage, "createdAt": o.CreatedAt, "updatedAt": o.UpdatedAt})
 }
 func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
 	if s.DB == nil {
@@ -399,8 +409,8 @@ func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
 	id := operationID(r)
 	sub := s.events.Subscribe(id)
 	defer sub.Close()
-	var state, message string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT lower(state),error_message FROM operations WHERE id=?`, id).Scan(&state, &message)
+	var state, phase, message string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT lower(state),phase,display_message FROM operations WHERE id=?`, id).Scan(&state, &phase, &message)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "Operationが見つかりません", "operation")
 		return
@@ -409,7 +419,7 @@ func (s *Server) watchOperation(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "Operationを取得できません", "")
 		return
 	}
-	s.writeEvent(w, f, event{ID: id + "-snapshot", Sequence: 0, Timestamp: time.Now().UTC(), Type: state, Data: map[string]string{"message": message}})
+	s.writeEvent(w, f, event{ID: id + "-snapshot", Sequence: 0, Timestamp: time.Now().UTC(), Type: state, Data: map[string]string{"message": message, "phase": phase}})
 	if state == "succeeded" || state == "failed" || state == "cancelled" {
 		return
 	}

@@ -3,9 +3,9 @@ import type { components } from "./schema";
 export type Application = components["schemas"]["Application"];
 export type Operation = components["schemas"]["OperationResource"];
 export type Configuration = components["schemas"]["ConfigurationResponse"];
-type LogEntry = components["schemas"]["LogEntry"];
+export type LogEntry = components["schemas"]["LogEntry"];
 type LogEntryList = components["schemas"]["LogEntryList"];
-type OperationEvent = { type: Operation["state"]; data?: { message?: string } };
+type OperationEvent = { type: Operation["state"]; data?: { message?: string; phase?: string } };
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -28,6 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const appId = (app: Application) => app.name.replace("applications/", "");
+const operationName = (name: string) => name.startsWith("operations/") ? name : `operations/${name}`;
 
 export const api = {
   list: async () => (await request<{ applications: Application[] }>("/applications")).applications,
@@ -45,13 +46,14 @@ export const api = {
     request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}:purge`, { method: "POST", body: JSON.stringify({ requestId: requestId(), confirm: true }) }),
   saveConfiguration: (app: Application, variables: Record<string, { value: string; secret: boolean }>) =>
     request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}/configuration`, { method: "PATCH", body: JSON.stringify({ variables, requestId: requestId() }) }),
-  operation: (name: string) => request<Operation>(`/${name}`),
-  watchOperation(name: string, onState: (operation: Pick<Operation, "name" | "state" | "errorMessage">) => void, onError: () => void) {
+  operation: (name: string) => request<Operation>(`/${operationName(name)}`),
+  watchOperation(name: string, onState: (operation: Pick<Operation, "name" | "state" | "phase" | "displayMessage">) => void, onError: () => void) {
+    name = operationName(name);
     const source = new EventSource(`/api/v1/${name}:watch`);
     let finished = false;
     const receive = (event: Event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as OperationEvent;
-      const operation = { name, state: payload.type, errorMessage: payload.data?.message ?? "" };
+      const operation = { name, state: payload.type, phase: payload.data?.phase ?? "", displayMessage: payload.data?.message ?? "" };
       onState(operation);
       if (["succeeded", "failed", "cancelled"].includes(operation.state)) {
         finished = true;
@@ -62,16 +64,17 @@ export const api = {
     source.onerror = () => { if (!finished) onError(); };
     return () => { finished = true; source.close(); };
   },
-  tailLogs(app: Application, onLine: (line: string) => void) {
+  tailLogs(app: Application, view: "task" | "application" | "related", service: string | undefined, onEntry: (entry: LogEntry) => void) {
     let closed = false;
     let source: EventSource | undefined;
-    const path = `/applications/${encodeURIComponent(appId(app))}/logEntries?view=application&limit=200`;
+    const serviceFilter = service ? `&service=${encodeURIComponent(service)}` : "";
+    const path = `/applications/${encodeURIComponent(appId(app))}/logEntries?view=${view}&limit=200${serviceFilter}`;
     void request<LogEntryList>(path).then((snapshot) => {
       if (closed) return;
-      snapshot.entries.forEach((entry) => onLine(entry.message));
+      snapshot.entries.forEach(onEntry);
       const after = snapshot.liveCursor ? `&after=${encodeURIComponent(snapshot.liveCursor)}` : "";
-      source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?view=application${after}`);
-      source.addEventListener("logEntry", (event) => onLine((JSON.parse((event as MessageEvent<string>).data) as LogEntry).message));
+      source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?view=${view}${serviceFilter}${after}`);
+      source.addEventListener("logEntry", (event) => onEntry(JSON.parse((event as MessageEvent<string>).data) as LogEntry));
     }).catch(() => undefined);
     return () => { closed = true; source?.close(); };
   },

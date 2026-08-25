@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,12 +21,12 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	fk, wal, err := sqlitePragmas(context.Background(), db)
-	if err != nil || !fk || !wal {
-		t.Fatalf("pragmas fk=%v wal=%v err=%v", fk, wal, err)
+	fk, wal, busyTimeout, err := sqlitePragmas(context.Background(), db)
+	if err != nil || !fk || !wal || busyTimeout != 5000 {
+		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 5 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 6 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -34,8 +35,49 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 5 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 6 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
+	}
+}
+
+func TestDBWaitsForShortConcurrentWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "db.sqlite")
+	db, err := OpenDB(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE write_test (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	blocker, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Close()
+	connection, err := blocker.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if _, err := connection.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, err := db.Exec(`INSERT INTO write_test(id) VALUES(1)`)
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		t.Fatalf("書込みが待機せず終了しました: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if _, err := connection.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-result; err != nil {
+		t.Fatalf("ロック解放後の書込みに失敗しました: %v", err)
 	}
 }
 
@@ -346,7 +388,7 @@ func TestHTTPRejectsInvalidRepositoryBeforePersistence(t *testing.T) {
 	}
 }
 
-func TestHTTPRejectsConcurrentApplicationOperation(t *testing.T) {
+func TestHTTPQueuesConcurrentApplicationOperation(t *testing.T) {
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +404,7 @@ func TestHTTPRejectsConcurrentApplicationOperation(t *testing.T) {
 	r.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(rr, r)
-	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "CONFLICT") {
+	if rr.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
@@ -521,8 +563,13 @@ func TestOperationRequestIDIdempotency(t *testing.T) {
 	if err != nil || a.ID != b.ID {
 		t.Fatal(a, b, err)
 	}
-	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440001", "STOP"); err == nil {
-		t.Fatal("同一appの競合Operationを受け付けました")
+	queued, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440001", "STOP")
+	if err != nil || queued.State != "QUEUED" {
+		t.Fatalf("同一appのOperationを待機登録できません: op=%+v err=%v", queued, err)
+	}
+	duplicate, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440003", "START")
+	if err != nil || duplicate.ID != a.ID {
+		t.Fatalf("同じ内容の再送が既存Operationへ収束しません: op=%+v err=%v", duplicate, err)
 	}
 	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('b','app-b','https://github.com/a/c','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
@@ -604,12 +651,60 @@ func TestWorkerSerializesAppsAndLimitsParallelism(t *testing.T) {
 	if maximum.Load() != 2 {
 		t.Fatalf("最大並列数=%d", maximum.Load())
 	}
-	serial := NewWorker(db, func(_ context.Context, _ Operation) error { return nil })
+	serialStarted := make(chan string, 2)
+	serialRelease := make(chan struct{})
+	serial := NewWorker(db, func(_ context.Context, op Operation) error {
+		serialStarted <- op.ID
+		<-serialRelease
+		return nil
+	})
 	if err := serial.Enqueue(Operation{ID: "4", ApplicationID: "same"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := serial.Enqueue(Operation{ID: "5", ApplicationID: "same"}); err == nil {
-		t.Fatal("同一appの競合workerを受け付けました")
+	if err := serial.Enqueue(Operation{ID: "5", ApplicationID: "same"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-serialStarted; got != "4" {
+		t.Fatalf("最初の待機順=%s", got)
+	}
+	select {
+	case got := <-serialStarted:
+		t.Fatalf("同一appのOperationが並列に開始されました: %s", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	serialRelease <- struct{}{}
+	if got := <-serialStarted; got != "5" {
+		t.Fatalf("2件目の待機順=%s", got)
+	}
+	serialRelease <- struct{}{}
+}
+
+func TestWorkerDoesNotRunRetransmittedOperationTwice(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	w := NewWorker(db, func(_ context.Context, _ Operation) error {
+		started <- struct{}{}
+		<-release
+		return nil
+	})
+	op := Operation{ID: "retransmitted", ApplicationID: "app", State: "QUEUED"}
+	if err := w.Enqueue(op); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := w.Enqueue(op); err != nil {
+		t.Fatal(err)
+	}
+	release <- struct{}{}
+	select {
+	case <-started:
+		t.Fatal("同じOperationが再実行されました")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 
@@ -685,7 +780,7 @@ func TestConfigurationRequestIDRejectsDifferentContentWithoutSideEffect(t *testi
 	}
 }
 
-func TestConfigurationConflictHasNoSideEffect(t *testing.T) {
+func TestConfigurationQueuesBehindExistingOperation(t *testing.T) {
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -701,12 +796,12 @@ func TestConfigurationConflictHasNoSideEffect(t *testing.T) {
 	r.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(rr, r)
-	if rr.Code != http.StatusConflict {
+	if rr.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
-	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM application_variables WHERE application_id='a'`).Scan(&count); err != nil || count != 0 {
-		t.Fatalf("競合要求で設定が保存されました: count=%d err=%v", count, err)
+	var state string
+	if err := db.QueryRow(`SELECT state FROM operations WHERE request_id='550e8400-e29b-41d4-a716-446655440097'`).Scan(&state); err != nil || state != "QUEUED" {
+		t.Fatalf("設定Operationが待機状態ではありません: state=%s err=%v", state, err)
 	}
 }
 
@@ -747,8 +842,36 @@ func TestGetApplicationRetainsLatestCompletedOperation(t *testing.T) {
 	}
 	rr := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications/a", nil))
-	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), op.ID) || strings.Contains(rr.Body.String(), `"reconciling":true`) {
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"latestOperation":"operations/`+op.ID+`"`) || strings.Contains(rr.Body.String(), `"reconciling":true`) {
 		t.Fatalf("完了済みOperationを復元できません: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestApplicationOperationIsHandedToWorker(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	run := make(chan Operation, 1)
+	s := NewServer(db, func(_ context.Context, op Operation) error { run <- op; return nil })
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications/a:start", strings.NewReader(`{"requestId":"550e8400-e29b-41d4-a716-446655440099"}`))
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	select {
+	case op := <-run:
+		if op.Kind != "START" || op.ApplicationID != "a" {
+			t.Fatalf("Operation=%+v", op)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Operationがworkerへ渡されませんでした")
 	}
 }
 
@@ -1417,6 +1540,14 @@ func (r *networkNotFoundRunner) Run(_ context.Context, name string, args ...stri
 func (r *errorRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	r.calls = append(r.calls, append([]string{name}, args...))
 	return r.output, fmt.Errorf("daemon failure")
+}
+
+func TestCloneReportsMissingRefWithoutGitOutput(t *testing.T) {
+	runner := &errorRunner{output: []byte("fatal: Remote branch missing-branch not found in upstream origin\n")}
+	err := CloneAndValidate(context.Background(), runner, "https://github.com/example/app", "missing-branch", filepath.Join(t.TempDir(), "source"))
+	if err == nil || err.Error() != "指定したブランチまたはタグがリポジトリに見つかりません" {
+		t.Fatalf("ブランチ不在の案内=%v", err)
+	}
 }
 
 type failingCommandRunner struct {

@@ -7,7 +7,7 @@ const apiMock = vi.hoisted(() => ({
   list: vi.fn(), get: vi.fn(), configuration: vi.fn(), create: vi.fn(), update: vi.fn(), action: vi.fn(), unregister: vi.fn(), purge: vi.fn(), saveConfiguration: vi.fn(), operation: vi.fn(), watchOperation: vi.fn(), tailLogs: vi.fn(),
 }));
 vi.mock("./api/client", () => ({ api: apiMock, ApiError: class ApiError extends Error {} }));
-import { App } from "./App";
+import { App, groupLogEntries } from "./App";
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,6 +32,22 @@ describe("Dashboard デバッグルーム", () => {
     fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repository"), { target: { value: "https://github.com/example/test" } });
     fireEvent.submit(screen.getByRole("button", { name: "検証して登録" }).closest("form")!);
     await waitFor(() => expect(apiMock.create.mock.calls[0]?.[0]).toEqual({ repositoryUrl: "https://github.com/example/test", ref: "main", subdomain: "test-app" }));
+  });
+
+  it("登録済みアプリがあっても登録画面を開ける", async () => {
+    apiMock.list.mockResolvedValue([{ name: "applications/test", subdomain: "test", repositoryUrl: "https://github.com/example/test", ref: "main", desiredState: "RUNNING", observedState: "RUNNING", registrationState: "ACTIVE", observedAt: "2026-08-23T00:00:00Z", reconciling: false, etag: "tag" }]);
+    renderApp();
+    await screen.findByText("完全削除");
+    fireEvent.click(screen.getByRole("button", { name: "登録する" }));
+    expect(await screen.findByText("台帳にアプリを登録する")).toBeTruthy();
+  });
+
+  it("連続したJSONログを一つの構造化ログにまとめる", () => {
+    const entries = ["{", `  "service": "web",`, `  "status": "ready"`, "}"].map((message, index) => ({ id: String(index), cursor: String(index), occurredAt: "2026-08-23T00:00:00Z", level: "info" as const, component: "application" as const, service: "web", containerName: "web-1", message: `[Compose検証] ${message}` }));
+    const grouped = groupLogEntries(entries);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0].json).toContain('"status": "ready"');
+    expect(grouped[0].lineCount).toBe(4);
   });
 
   it("完全削除は確認するまで API を呼ばない", async () => {

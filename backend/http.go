@@ -103,7 +103,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, desired_state, observed_state, registration_state, updated_at FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
+	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ一覧を取得できません", "")
 		return
@@ -111,8 +111,8 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, sub, repo, ref, desired, observed, state, updated string
-		if err := rows.Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &updated); err != nil {
+		var id, sub, repo, ref, desired, observed, state, latestError, updated string
+		if err := rows.Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &latestError, &updated); err != nil {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
@@ -129,7 +129,8 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref,
 			"desiredState": desired, "observedState": observed, "registrationState": state,
 			"observedAt": time.Now().UTC().Format(time.RFC3339Nano), "reconciling": activeOperation != "",
-			"latestOperation": latestOperation, "etag": fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed))),
+			"latestOperation": operationResourceName(latestOperation), "etag": fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed))),
+			"latestError": latestError,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})

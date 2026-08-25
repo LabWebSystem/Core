@@ -19,6 +19,13 @@ describe("Dashboard API client", () => {
     await expect(api.list()).rejects.toEqual(new ApiError("指定された値が不正です", 400));
   });
 
+  it("UUIDだけのOperation参照も正しいOperation APIへ正規化する", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "operations/test", kind: "start", state: "succeeded", createdAt: "2026-08-23T00:00:00Z", updatedAt: "2026-08-23T00:00:00Z" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await api.operation("test");
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/operations/test", expect.anything());
+  });
+
   it("OperationのカスタムSSEイベントを状態として受け取る", () => {
     class EventSourceMock {
       static instance: EventSourceMock;
@@ -34,8 +41,8 @@ describe("Dashboard API client", () => {
     api.watchOperation("operations/test", onState, vi.fn());
     EventSourceMock.instance.emit("running", { type: "running", data: { message: "Composeでアプリを起動しています" } });
     EventSourceMock.instance.emit("succeeded", { type: "succeeded", data: { message: "" } });
-    expect(onState).toHaveBeenNthCalledWith(1, { name: "operations/test", state: "running", errorMessage: "Composeでアプリを起動しています" });
-    expect(onState).toHaveBeenNthCalledWith(2, { name: "operations/test", state: "succeeded", errorMessage: "" });
+    expect(onState).toHaveBeenNthCalledWith(1, { name: "operations/test", state: "running", phase: "", displayMessage: "Composeでアプリを起動しています" });
+    expect(onState).toHaveBeenNthCalledWith(2, { name: "operations/test", state: "succeeded", phase: "", displayMessage: "" });
     expect(EventSourceMock.instance.close).toHaveBeenCalledTimes(1);
   });
 });

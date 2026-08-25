@@ -20,49 +20,72 @@ func SafeError(err error) string {
 }
 
 type Worker struct {
-	db     *sql.DB
-	slots  chan struct{}
-	mu     sync.Mutex
-	apps   map[string]chan struct{}
-	events *Events
-	logs   *LogStore
-	run    func(context.Context, Operation) error
+	db        *sql.DB
+	slots     chan struct{}
+	mu        sync.Mutex
+	queues    map[string][]Operation
+	running   map[string]bool
+	scheduled map[string]bool
+	events    *Events
+	logs      *LogStore
+	run       func(context.Context, Operation) error
 }
 
 func NewWorker(db *sql.DB, run func(context.Context, Operation) error) *Worker {
-	return &Worker{db: db, slots: make(chan struct{}, 2), apps: map[string]chan struct{}{}, events: NewEvents(), run: run}
+	return &Worker{db: db, slots: make(chan struct{}, 2), queues: map[string][]Operation{}, running: map[string]bool{}, scheduled: map[string]bool{}, events: NewEvents(), run: run}
 }
 func (w *Worker) Enqueue(op Operation) error {
-	w.mu.Lock()
-	lock := w.apps[op.ApplicationID]
-	if lock == nil {
-		lock = make(chan struct{}, 1)
-		w.apps[op.ApplicationID] = lock
+	if op.State != "" && op.State != "QUEUED" {
+		return nil
 	}
-	select {
-	case lock <- struct{}{}:
-	default:
+	w.mu.Lock()
+	if w.scheduled[op.ID] {
 		w.mu.Unlock()
-		return &ConflictError{Message: "同じアプリに未完了のOperationがあります"}
+		return nil
+	}
+	w.scheduled[op.ID] = true
+	w.queues[op.ApplicationID] = append(w.queues[op.ApplicationID], op)
+	if !w.running[op.ApplicationID] {
+		w.running[op.ApplicationID] = true
+		go w.executeApplication(op.ApplicationID)
 	}
 	w.mu.Unlock()
-	go w.execute(op, lock)
 	return nil
 }
-func (w *Worker) execute(op Operation, lock chan struct{}) {
-	defer func() { <-lock }()
+func (w *Worker) executeApplication(applicationID string) {
+	for {
+		w.mu.Lock()
+		queue := w.queues[applicationID]
+		if len(queue) == 0 {
+			delete(w.queues, applicationID)
+			delete(w.running, applicationID)
+			w.mu.Unlock()
+			return
+		}
+		op := queue[0]
+		w.queues[applicationID] = queue[1:]
+		w.mu.Unlock()
+		w.execute(op)
+	}
+}
+func (w *Worker) execute(op Operation) {
+	defer func() {
+		w.mu.Lock()
+		delete(w.scheduled, op.ID)
+		w.mu.Unlock()
+	}()
 	w.slots <- struct{}{}
 	defer func() { <-w.slots }()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
-	ctx = withOperationProgress(ctx, func(message string) {
-		w.events.Publish(op.ID, "running", map[string]string{"message": message})
+	ctx = withOperationProgress(ctx, func(phase, message string) {
+		_ = SetOperationProgress(ctx, w.db, op.ID, phase, message)
+		w.events.Publish(op.ID, "running", map[string]string{"message": message, "phase": phase})
 		w.appendLog(ctx, op, "operation", message, "info")
 	})
 	ctx = withOperationOutput(ctx, func(task, message, level string) { w.appendLog(ctx, op, task, message, level) })
 	_ = SetOperationState(ctx, w.db, op.ID, "RUNNING", "")
-	w.events.Publish(op.ID, "running", map[string]string{"message": "操作を開始しています"})
-	w.appendLog(ctx, op, "operation", "操作を開始しています", "info")
+	reportOperationPhase(ctx, "starting", "操作を開始しています")
 	err := error(nil)
 	if w.run != nil {
 		err = w.run(ctx, op)
@@ -73,15 +96,18 @@ func (w *Worker) execute(op Operation, lock chan struct{}) {
 		_, _ = w.db.ExecContext(ctx, `UPDATE applications SET observed_state='ERROR',latest_error=?,updated_at=datetime('now') WHERE id=?`, msg, op.ApplicationID)
 	}
 	_ = SetOperationState(ctx, w.db, op.ID, state, msg)
-	w.events.Publish(op.ID, stringsLower(state), map[string]string{"message": msg})
-	if msg == "" {
-		msg = "操作が完了しました"
+	display := "操作が完了しました"
+	if state == "FAILED" {
+		display = "操作に失敗しました"
+	} else if state == "CANCELLED" {
+		display = "操作を中止しました"
 	}
+	w.events.Publish(op.ID, stringsLower(state), map[string]string{"message": display, "phase": stringsLower(state)})
 	level := "info"
 	if state == "FAILED" {
 		level = "error"
 	}
-	w.appendLog(ctx, op, "operation", msg, level)
+	w.appendLog(ctx, op, "operation", display, level)
 }
 
 func (w *Worker) appendLog(ctx context.Context, op Operation, task, message, level string) {
@@ -96,6 +122,9 @@ func stringsLower(s string) string {
 	}
 	if s == "FAILED" {
 		return "failed"
+	}
+	if s == "CANCELLED" {
+		return "cancelled"
 	}
 	return "running"
 }

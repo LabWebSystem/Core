@@ -16,7 +16,14 @@ import (
 var migrations embed.FS
 
 func OpenDB(ctx context.Context, path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	// _pragma は接続プールが新しい接続を作るたびにも適用される。busy_timeout
+	// により、ログ収集とOperation処理の短い書込み競合を待機して解消する。
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	dsn := path + separator + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("データベースを開けません: %w", err)
 	}
@@ -83,12 +90,16 @@ func MarkUnfinishedOperations(ctx context.Context, db *sql.DB) error {
 	return err
 }
 
-func sqlitePragmas(ctx context.Context, db *sql.DB) (foreignKeys, wal bool, err error) {
+func sqlitePragmas(ctx context.Context, db *sql.DB) (foreignKeys, wal bool, busyTimeout int, err error) {
 	var fk, journal string
 	err = db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk)
 	if err != nil {
 		return
 	}
 	err = db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journal)
-	return fk == "1", strings.EqualFold(journal, "wal"), err
+	if err != nil {
+		return
+	}
+	err = db.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&busyTimeout)
+	return fk == "1", strings.EqualFold(journal, "wal"), busyTimeout, err
 }

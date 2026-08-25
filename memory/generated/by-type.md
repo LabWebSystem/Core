@@ -102,6 +102,11 @@
 - CHG-065 | SHIPPED | - | Dashboardのローカル結合確認環境を追加する
 - CHG-066 | SHIPPED | - | Dashboardの公開URLとOperation進行表示を修正する
 - CHG-067 | SHIPPED | - | Backend永続ログ収集・検索・SSE配信を実装する
+- CHG-068 | SHIPPED | - | Operation待機列とSQLite書込み待機を追加する
+- CHG-069 | SHIPPED | - | Backend正本のOperation進捗表示を追加する
+- CHG-070 | SHIPPED | - | Dashboardのアプリ運用ログ面を構造化する
+- CHG-071 | SHIPPED | - | 複数行JSONログをDashboardで構造化表示する
+- CHG-072 | SHIPPED | - | 登録失敗の原因をBackend正本から表示する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

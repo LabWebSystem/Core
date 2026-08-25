@@ -93,12 +93,20 @@ func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest 
 	if err := os.MkdirAll(filepath.Dir(tmp), 0700); err != nil {
 		return err
 	}
-	if _, err := runLogged(ctx, runner, "git取得", "git", "clone", "--no-tags", "--depth", "1", "--branch", ref, url, tmp); err != nil {
+	reportOperationPhase(ctx, "source_clone", "GitHubリポジトリを取得しています")
+	out, err := runLogged(ctx, runner, "git取得", "git", "clone", "--no-tags", "--depth", "1", "--branch", ref, url, tmp)
+	if err != nil {
+		output := strings.ToLower(string(out))
+		if strings.Contains(output, "remote branch") || strings.Contains(output, "remote ref") || strings.Contains(output, "couldn't find") {
+			return fmt.Errorf("指定したブランチまたはタグがリポジトリに見つかりません")
+		}
 		return fmt.Errorf("リポジトリ取得に失敗しました")
 	}
+	reportOperationPhase(ctx, "source_validate", "取得したファイルを検証しています")
 	if err := ValidateSourceTree(tmp); err != nil {
 		return err
 	}
+	reportOperationPhase(ctx, "manifest_validate", "アプリ定義を検証しています")
 	data, err := os.ReadFile(filepath.Join(tmp, "lws.manifest.yaml"))
 	if err != nil {
 		return fmt.Errorf("manifestが見つかりません")
@@ -106,6 +114,7 @@ func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest 
 	if _, err = ValidateManifest(data); err != nil {
 		return err
 	}
+	reportOperationPhase(ctx, "compose_validate", "Compose定義を検証しています")
 	compose, err := os.ReadFile(filepath.Join(tmp, "compose.yaml"))
 	if err != nil {
 		return fmt.Errorf("compose.yamlが見つかりません")
@@ -113,6 +122,7 @@ func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest 
 	if err = ValidateComposeSource(tmp, compose); err != nil {
 		return err
 	}
+	reportOperationPhase(ctx, "source_activate", "検証済みのアプリ定義を反映しています")
 	old := dest + ".old"
 	_ = os.RemoveAll(old)
 	if err = os.Rename(dest, old); err != nil && !os.IsNotExist(err) {

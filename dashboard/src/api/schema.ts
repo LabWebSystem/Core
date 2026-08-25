@@ -291,6 +291,8 @@ export interface components {
             kind: string;
             /** @enum {string} */
             state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            phase?: string;
+            displayMessage?: string;
             errorMessage?: string;
             /** Format: date-time */
             createdAt: string;
@@ -310,6 +312,7 @@ export interface components {
             observedAt: string;
             reconciling: boolean;
             latestOperation?: string;
+            latestError?: string;
             etag: string;
         };
         ApplicationList: {

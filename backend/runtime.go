@@ -117,7 +117,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return nil
 	case "CREATE", "SYNC":
-		reportOperationProgress(ctx, "GitHubリポジトリを取得しています")
+		reportOperationPhase(ctx, "source_prepare", "GitHubリポジトリの取得を準備しています")
 		if err := ValidateRef(ref); err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := CloneAndValidate(ctx, e.Runner, repo, ref, source); err != nil {
 			return err
 		}
-		reportOperationProgress(ctx, "アプリ定義を検証しています")
+		reportOperationPhase(ctx, "runtime_prepare", "アプリの実行設定を準備しています")
 		sourceSwapActive := true
 		metadataUpdated := false
 		defer func() {
@@ -165,11 +165,11 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			return err
 		}
 		metadataUpdated = true
-		reportOperationProgress(ctx, "Composeでアプリを起動しています")
+		reportOperationPhase(ctx, "compose_up", "Docker containerを作成しています")
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}
-		reportOperationProgress(ctx, "公開設定を更新しています")
+		reportOperationPhase(ctx, "publish", "公開設定を更新しています")
 		if err := e.syncDerived(ctx); err != nil {
 			return err
 		}
@@ -289,6 +289,7 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 		return fmt.Errorf("compose.yamlが見つかりません")
 	}
 	if len(action) > 0 && action[0] == "up" {
+		reportOperationPhase(ctx, "environment_prepare", "環境変数を準備しています")
 		manifestData, err := os.ReadFile(filepath.Join(source, "lws.manifest.yaml"))
 		if err != nil {
 			return fmt.Errorf("manifestが見つかりません")
@@ -300,6 +301,7 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 		if err := e.prepareEnvironment(ctx, compose, runtime); err != nil {
 			return err
 		}
+		reportOperationPhase(ctx, "compose_validate", "Compose設定を検証しています")
 		if err := e.validateEffectiveCompose(ctx, id, compose, "", runtime, manifest.Public.Service, manifest.Public.Port); err != nil {
 			return err
 		}
@@ -318,6 +320,7 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 		if err != nil {
 			return err
 		}
+		reportOperationPhase(ctx, "compose_validate", "公開用のCompose設定を検証しています")
 		if err := e.validateEffectiveCompose(ctx, id, compose, override, runtime, manifest.Public.Service, manifest.Public.Port); err != nil {
 			return err
 		}
@@ -332,9 +335,11 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 			return err
 		}
 		if action[0] == "up" {
+			reportOperationPhase(ctx, "network_prepare", "Docker networkを準備しています")
 			if err := e.Docker.EnsureNetwork(ctx, id); err != nil {
 				return err
 			}
+			reportOperationPhase(ctx, "proxy_connect", "公開ネットワークへ接続しています")
 			if err := e.Docker.EnsureCaddyConnected(ctx, id); err != nil {
 				return err
 			}
@@ -349,6 +354,11 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 	}
 	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override}
 	args = append(args, action...)
+	if len(action) > 0 && action[0] == "up" {
+		reportOperationPhase(ctx, "container_create", "Docker containerを作成しています")
+	} else {
+		reportOperationPhase(ctx, "compose_execute", "Docker Composeを実行しています")
+	}
 	if _, err := runLogged(ctx, e.Runner, "Compose実行", "docker", args...); err != nil {
 		return fmt.Errorf("Docker Compose操作に失敗しました")
 	}
