@@ -42,11 +42,21 @@ describe("Dashboard デバッグルーム", () => {
     expect(await screen.findByText("台帳にアプリを登録する")).toBeTruthy();
   });
 
+  it("登録解除済みアプリを表示し、再登録と完全削除を選べる", async () => {
+    apiMock.list.mockResolvedValue([{ name: "applications/test", subdomain: "test", repositoryUrl: "https://github.com/example/test", ref: "main", desiredState: "STOPPED", observedState: "STOPPED", registrationState: "UNREGISTERED", observedAt: "2026-08-23T00:00:00Z", reconciling: false, etag: "tag" }]);
+    renderApp();
+    expect((await screen.findAllByText("登録解除済み")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "再登録" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "完全削除" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "登録解除" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "同期" })).toBeNull();
+  });
+
   it("連続したJSONログを一つの構造化ログにまとめる", () => {
     const entries = ["{", `  "service": "web",`, `  "status": "ready"`, "}"].map((message, index) => ({ id: String(index), cursor: String(index), occurredAt: "2026-08-23T00:00:00Z", level: "info" as const, component: "application" as const, service: "web", containerName: "web-1", message: `[Compose検証] ${message}` }));
     const grouped = groupLogEntries(entries);
     expect(grouped).toHaveLength(1);
-    expect(grouped[0].json).toContain('"status": "ready"');
+    expect(grouped[0].json).toBe('{"service":"web","status":"ready"}');
     expect(grouped[0].lineCount).toBe(4);
   });
 
@@ -59,6 +69,16 @@ describe("Dashboard デバッグルーム", () => {
     expect(apiMock.purge).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "実行する" }));
     await waitFor(() => expect(apiMock.purge).toHaveBeenCalledTimes(1));
+  });
+
+  it("完全削除のバックグラウンド段階を表示する", async () => {
+    apiMock.list.mockResolvedValue([{ name: "applications/test", subdomain: "test", repositoryUrl: "https://github.com/example/test", ref: "main", desiredState: "STOPPED", observedState: "STOPPED", registrationState: "UNREGISTERED", observedAt: "2026-08-23T00:00:00Z", reconciling: false, latestOperation: "operation-purge", etag: "tag" }]);
+    apiMock.operation.mockResolvedValue({ name: "operations/operation-purge", kind: "purge", state: "running", phase: "runtime_prepare", displayMessage: "アプリのDocker volumeを削除しています", errorMessage: "", createdAt: "2026-08-23T00:00:00Z", updatedAt: "2026-08-23T00:01:00Z" });
+    renderApp();
+    expect(await screen.findByText("完全削除: 実行中")).toBeTruthy();
+    expect(screen.getByText("段階: 実行設定")).toBeTruthy();
+    expect(screen.getByText("アプリのDocker volumeを削除しています")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "完全削除" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("未完了の操作とアプリの実行状態を表示し、操作を無効化する", async () => {

@@ -80,6 +80,7 @@ func (s *LogStore) Append(ctx context.Context, entry StoredLogEntry) (StoredLogE
 	if !validLogComponent(entry.Component) {
 		return StoredLogEntry{}, errors.New("ログcomponentが不正です")
 	}
+	entry.Message = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(entry.Message)
 	if strings.TrimSpace(entry.Message) == "" {
 		return StoredLogEntry{}, errors.New("ログmessageが必要です")
 	}

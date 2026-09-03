@@ -69,6 +69,30 @@ func TestChunkRedactorNeverReturnsSplitSecret(t *testing.T) {
 	}
 }
 
+func TestLogStoreNormalizesMessagesToOneLine(t *testing.T) {
+	db, store := newLogStoreForTest(t)
+	defer db.Close()
+	entry, err := store.Append(context.Background(), StoredLogEntry{Component: "backend", Level: "info", ApplicationID: "app", Message: "{\n  \"status\": \"ready\"\r\n}"})
+	if err != nil || entry.Message != "{   \"status\": \"ready\" }" {
+		t.Fatalf("ログを1行化できません: entry=%q err=%v", entry.Message, err)
+	}
+}
+
+func TestClassifyLogLevelUsesMessageSeverity(t *testing.T) {
+	for _, test := range []struct {
+		message, fallback, want string
+	}{
+		{"nginx [error] failed", "info", "error"},
+		{"nginx [warn] retry", "info", "warn"},
+		{"nginx [notice] started", "error", "info"},
+		{"外部コマンドの出力", "info", "info"},
+	} {
+		if got := classifyLogLevel(test.message, test.fallback); got != test.want {
+			t.Fatalf("message=%q level=%q want=%q", test.message, got, test.want)
+		}
+	}
+}
+
 func TestLogStoreMasksConfiguredSecretBeforeDatabaseWrite(t *testing.T) {
 	db, store := newLogStoreForTest(t)
 	defer db.Close()

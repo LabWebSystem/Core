@@ -29,4 +29,7 @@
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
 - BUG-014 | VERIFIED | cli | 初回起動前にupdateを実行できない
 - BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る
+- BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
+- BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
+- BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

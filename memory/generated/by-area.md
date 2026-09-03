@@ -88,10 +88,18 @@
 - CHG-070 | SHIPPED | - | Dashboardのアプリ運用ログ面を構造化する
 - CHG-071 | SHIPPED | - | 複数行JSONログをDashboardで構造化表示する
 - CHG-072 | SHIPPED | - | 登録失敗の原因をBackend正本から表示する
+- CHG-073 | SHIPPED | - | 登録解除OperationをWorkerへ投入する
+- CHG-074 | SHIPPED | - | ログのseverity判定と条件付き表示を整理する
+- CHG-075 | SHIPPED | - | 登録解除済みアプリをDashboardに表示する
+- CHG-076 | SHIPPED | - | 完全削除の進捗とOperationを保持する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 
 ## backend
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
+
+## backend-operation
+- BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
+- BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
@@ -108,6 +116,9 @@
 ## installer
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-006 | VERIFIED | installer | アーキテクチャ名なしのRPMをインストーラーが見つけられない
+
+## logging
+- BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
 
 ## quality-gate
 - BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る

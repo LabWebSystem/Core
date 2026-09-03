@@ -199,7 +199,7 @@ func (m *RuntimeMonitor) startContainer(parent context.Context, value MonitoredC
 		defer stream.Close()
 		secrets := m.applicationSecrets(ctx, value.Labels[applicationIDLabel])
 		stdout := &runtimeLogWriter{monitor: m, context: ctx, entry: m.entryFor(value.Labels, value.Name, ""), level: "info", redactor: NewChunkRedactor(secrets)}
-		stderr := &runtimeLogWriter{monitor: m, context: ctx, entry: m.entryFor(value.Labels, value.Name, ""), level: "error", redactor: NewChunkRedactor(secrets)}
+		stderr := &runtimeLogWriter{monitor: m, context: ctx, entry: m.entryFor(value.Labels, value.Name, ""), level: "info", redactor: NewChunkRedactor(secrets)}
 		if value.TTY {
 			_, _ = io.Copy(stdout, stream)
 		} else {
@@ -306,7 +306,7 @@ func (w *runtimeLogWriter) write(message string) {
 		return
 	}
 	entry := w.entry
-	entry.Level = w.level
+	entry.Level = classifyLogLevel(message, w.level)
 	entry.Message = message
 	w.monitor.associateHost(w.context, &entry)
 	_, _ = w.monitor.Logs.Append(w.context, entry)

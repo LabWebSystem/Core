@@ -33,6 +33,9 @@
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
 - BUG-014 | VERIFIED | cli | 初回起動前にupdateを実行できない
 - BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る
+- BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
+- BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
+- BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -107,6 +110,10 @@
 - CHG-070 | SHIPPED | - | Dashboardのアプリ運用ログ面を構造化する
 - CHG-071 | SHIPPED | - | 複数行JSONログをDashboardで構造化表示する
 - CHG-072 | SHIPPED | - | 登録失敗の原因をBackend正本から表示する
+- CHG-073 | SHIPPED | - | 登録解除OperationをWorkerへ投入する
+- CHG-074 | SHIPPED | - | ログのseverity判定と条件付き表示を整理する
+- CHG-075 | SHIPPED | - | 登録解除済みアプリをDashboardに表示する
+- CHG-076 | SHIPPED | - | 完全削除の進捗とOperationを保持する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

@@ -53,7 +53,7 @@ func (d *DockerResources) DisconnectCaddy(ctx context.Context, app string) error
 	}
 	out, err := d.Runner.Run(ctx, "docker", "network", "disconnect", "-f", EdgeNetworkName(app), d.CaddyContainer)
 	message := strings.ToLower(string(out) + "\n" + errString(err))
-	if err != nil && !strings.Contains(message, "not connected") {
+	if err != nil && !strings.Contains(message, "not connected") && !strings.Contains(message, "not found") && !strings.Contains(message, "no such network") {
 		return fmt.Errorf("Caddyをedge networkから切断できません")
 	}
 	return nil
@@ -171,6 +171,10 @@ func (d *DockerResources) EnsureNetwork(ctx context.Context, app string) error {
 func (d *DockerResources) RemoveNetwork(ctx context.Context, app, name string) error {
 	r, err := d.inspect(ctx, "network", name)
 	if err != nil {
+		var notFound *dockerNotFoundError
+		if errors.As(err, &notFound) {
+			return nil
+		}
 		return err
 	}
 	if err = VerifyOwnership(r.Labels, d.InstallationID, app); err != nil {

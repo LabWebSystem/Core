@@ -5,6 +5,7 @@ export type Operation = components["schemas"]["OperationResource"];
 export type Configuration = components["schemas"]["ConfigurationResponse"];
 export type LogEntry = components["schemas"]["LogEntry"];
 type LogEntryList = components["schemas"]["LogEntryList"];
+export type LogQuery = { limit?: number; startAt?: string; endAt?: string };
 type OperationEvent = { type: Operation["state"]; data?: { message?: string; phase?: string } };
 
 export class ApiError extends Error {
@@ -64,16 +65,23 @@ export const api = {
     source.onerror = () => { if (!finished) onError(); };
     return () => { finished = true; source.close(); };
   },
-  tailLogs(app: Application, view: "task" | "application" | "related", service: string | undefined, onEntry: (entry: LogEntry) => void) {
+  tailLogs(app: Application, view: "task" | "application" | "related", service: string | undefined, query: LogQuery, onEntry: (entry: LogEntry) => void) {
     let closed = false;
     let source: EventSource | undefined;
-    const serviceFilter = service ? `&service=${encodeURIComponent(service)}` : "";
-    const path = `/applications/${encodeURIComponent(appId(app))}/logEntries?view=${view}&limit=200${serviceFilter}`;
+    const params = new URLSearchParams({ view });
+    if (service) params.set("service", service);
+    if (query.limit) params.set("limit", String(query.limit));
+    if (query.startAt) params.set("startAt", query.startAt);
+    if (query.endAt) params.set("endAt", query.endAt);
+    const path = `/applications/${encodeURIComponent(appId(app))}/logEntries?${params}`;
     void request<LogEntryList>(path).then((snapshot) => {
       if (closed) return;
       snapshot.entries.forEach(onEntry);
       const after = snapshot.liveCursor ? `&after=${encodeURIComponent(snapshot.liveCursor)}` : "";
-      source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?view=${view}${serviceFilter}${after}`);
+      const watchParams = new URLSearchParams({ view });
+      if (service) watchParams.set("service", service);
+      if (after) watchParams.set("after", snapshot.liveCursor);
+      source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?${watchParams}`);
       source.addEventListener("logEntry", (event) => onEntry(JSON.parse((event as MessageEvent<string>).data) as LogEntry));
     }).catch(() => undefined);
     return () => { closed = true; source?.close(); };

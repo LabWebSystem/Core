@@ -38,7 +38,7 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 - app-idはBackend発行UUID、subdomainは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開URLは`<subdomain>.<base-domain>`である。
 - `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
 - コンテナ、network、volumeの実在と状態はDockerから都度照会し、DBへ複製しない。
-- 登録状態は`ACTIVE`と`UNREGISTERED`。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。通常の一覧から除外し、開始・停止・同期・再構成を受け付けない。Docker resourceの実体と所有識別情報はlabelから照会し、DBへ複製しない。
+- 登録状態は`ACTIVE`と`UNREGISTERED`。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。一覧には表示し、再登録と完全削除だけを受け付け、開始・停止・同期・再構成は受け付けない。Docker resourceの実体と所有識別情報はlabelから照会し、DBへ複製しない。
 
 ## 3. API契約
 
@@ -69,6 +69,8 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 - 登録要求は`repositoryUrl`、`ref`、`subdomain`を含む。表示名と説明はmanifestから読む。
 - 長時間操作はOperationを返す。未完了Operationがあるapp-idへの新規変更は409で拒否する。
 - 登録解除はアプリcontainerとapp用edge networkだけを削除し、source、runtime、named volume、アプリ設定、UNREGISTEREDのDB記録を保持する。再登録は保持したsource・設定を使って復帰する。完全削除は`UNREGISTERED`かつ`confirm:true`の要求だけが実行でき、アプリデータ、source、runtime、所有確認済みvolumeを削除してからDB記録を物理削除する。途中失敗時は記録を保持する。
+
+完全削除はOperationの進捗を記録しながらアプリデータ、source、runtime、所有確認済みvolumeを削除し、完了ログとOperationを確定した後にアプリDB記録を物理削除する。削除中の失敗時は記録を保持する。
 
 ### 3.2 エラー
 

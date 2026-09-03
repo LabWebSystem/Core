@@ -234,7 +234,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		return nil
 	case "PURGE":
 		if state == "ACTIVE" {
-			reportOperationProgress(ctx, "登録を解除してから完全削除します")
+			reportOperationPhase(ctx, "unregister", "登録を解除してから完全削除します")
 			if err := e.Run(ctx, Operation{ApplicationID: op.ApplicationID, Kind: "UNREGISTER"}); err != nil {
 				return err
 			}
@@ -243,16 +243,18 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if state != "UNREGISTERED" {
 			return fmt.Errorf("登録解除済みアプリだけ完全削除できます")
 		}
+		reportOperationPhase(ctx, "volume_cleanup", "アプリのDocker volumeを削除しています")
 		if e.Docker != nil {
 			if err := e.Docker.RemoveOwnedVolumes(ctx, op.ApplicationID); err != nil {
 				return err
 			}
 		}
+		reportOperationPhase(ctx, "filesystem_cleanup", "アプリの作業領域を削除しています")
 		if err := os.RemoveAll(root); err != nil {
 			return err
 		}
-		_, err := e.DB.ExecContext(ctx, `DELETE FROM applications WHERE id=?`, op.ApplicationID)
-		return err
+		reportOperationPhase(ctx, "database_cleanup", "アプリの保存データを削除しました")
+		return nil
 	default:
 		return fmt.Errorf("未対応のOperationです: %s", op.Kind)
 	}
@@ -286,6 +288,16 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 	override := filepath.Join(runtime, "lws.override.yaml")
 	env := filepath.Join(runtime, "app.env")
 	if _, err := os.Stat(compose); err != nil {
+		// sourceが失われても、停止対象のcontainerがないことを所有確認できれば
+		// 登録解除・完全削除を冪等に完了できる。containerが残っている場合は
+		// Compose定義なしに削除せず、従来どおり失敗させる。
+		if len(action) > 0 && action[0] == "down" && e.Docker != nil {
+			if ownershipErr := e.Docker.VerifyProjectOwnership(ctx, id); ownershipErr != nil {
+				return ownershipErr
+			}
+			reportOperationPhase(ctx, "compose_execute", "Compose定義がないため実行環境を確認しました")
+			return nil
+		}
 		return fmt.Errorf("compose.yamlが見つかりません")
 	}
 	if len(action) > 0 && action[0] == "up" {

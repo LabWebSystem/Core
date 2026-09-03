@@ -48,24 +48,31 @@ func (r OSRunner) RunStreaming(ctx context.Context, name string, args []string, 
 func runLogged(ctx context.Context, runner CommandRunner, task, name string, args ...string) ([]byte, error) {
 	if streaming, ok := runner.(StreamingCommandRunner); ok {
 		var stdout, stderr bytes.Buffer
-		outWriter := &operationLineWriter{task: task, level: "info", report: func(message string) { reportOperationOutput(ctx, task, message, "info") }}
-		errWriter := &operationLineWriter{task: task, level: "error", report: func(message string) { reportOperationOutput(ctx, task, message, "error") }}
+		outWriter := &operationLineWriter{task: task, level: func(string) string { return "info" }, report: func(message, level string) { reportOperationOutput(ctx, task, message, level) }}
+		errWriter := &operationLineWriter{task: task, level: func(message string) string { return classifyLogLevel(message, "info") }, report: func(message, level string) { reportOperationOutput(ctx, task, message, level) }}
 		err := streaming.RunStreaming(ctx, name, args, io.MultiWriter(&stdout, outWriter), io.MultiWriter(&stderr, errWriter))
 		outWriter.Flush()
 		errWriter.Flush()
+		if err != nil {
+			reportOperationOutput(ctx, task, "外部コマンドが失敗しました", "error")
+		}
 		return append(stdout.Bytes(), stderr.Bytes()...), err
 	}
 	out, err := runner.Run(ctx, name, args...)
 	if len(out) > 0 {
 		reportOperationOutput(ctx, task, strings.TrimSpace(string(out)), "info")
 	}
+	if err != nil {
+		reportOperationOutput(ctx, task, "外部コマンドが失敗しました", "error")
+	}
 	return out, err
 }
 
 type operationLineWriter struct {
-	task, level string
-	pending     string
-	report      func(string)
+	task    string
+	level   func(string) string
+	pending string
+	report  func(string, string)
 }
 
 func (w *operationLineWriter) Write(data []byte) (int, error) {
@@ -75,15 +82,32 @@ func (w *operationLineWriter) Write(data []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		w.report(w.pending[:i])
+		message := w.pending[:i]
+		w.report(message, w.level(message))
 		w.pending = w.pending[i+1:]
 	}
 	return len(data), nil
 }
 func (w *operationLineWriter) Flush() {
 	if w.pending != "" {
-		w.report(w.pending)
+		w.report(w.pending, w.level(w.pending))
 		w.pending = ""
+	}
+}
+
+func classifyLogLevel(message, fallback string) string {
+	value := strings.ToLower(message)
+	switch {
+	case strings.Contains(value, "[emerg]") || strings.Contains(value, "[alert]") || strings.Contains(value, "[crit]") || strings.Contains(value, "[error]"):
+		return "error"
+	case strings.Contains(value, "[warn]") || strings.Contains(value, "[warning]"):
+		return "warn"
+	case strings.Contains(value, "[debug]"):
+		return "debug"
+	case strings.Contains(value, "[info]") || strings.Contains(value, "[notice]"):
+		return "info"
+	default:
+		return fallback
 	}
 }
 

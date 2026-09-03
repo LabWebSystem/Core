@@ -308,6 +308,13 @@ func (s *Server) deleteApplication(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if s.worker != nil {
+		if err := s.worker.Enqueue(op); err != nil {
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", err.Error())
+			writeAPIError(w, http.StatusConflict, "CONFLICT", err.Error(), "")
+			return
+		}
+	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
 }
 func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {

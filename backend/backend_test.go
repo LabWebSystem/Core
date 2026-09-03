@@ -100,6 +100,57 @@ func TestOpenAPIContractAndGeneratedRoutes(t *testing.T) {
 		t.Fatalf("generated route status=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestListApplicationsIncludesUnregisteredApplications(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, state := range []string{"ACTIVE", "UNREGISTERED"} {
+		_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	rr := httptest.NewRecorder()
+	(&Server{DB: db}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"registrationState":"ACTIVE"`) || !strings.Contains(rr.Body.String(), `"registrationState":"UNREGISTERED"`) {
+		t.Fatalf("登録解除済みアプリが一覧にありません: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestDetachPurgedApplicationKeepsOperationAndLogs(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	op, err := CreateOperation(context.Background(), db, "app", "550e8400-e29b-41d4-a716-446655440115", "PURGE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO log_entries(id,occurred_at,level,component,application_id,operation_id,message) VALUES ('log',datetime('now'),'info','backend','app',?,'[purge] 完了')`, op.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = detachPurgedApplication(context.Background(), db, op); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err = db.QueryRow(`SELECT COUNT(*) FROM applications WHERE id='app'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("アプリが削除されていません: count=%d err=%v", count, err)
+	}
+	var applicationID sql.NullString
+	if err = db.QueryRow(`SELECT application_id FROM operations WHERE id=?`, op.ID).Scan(&applicationID); err != nil || applicationID.Valid {
+		t.Fatalf("Operationを保持したまま切り離せていません: valid=%v err=%v", applicationID.Valid, err)
+	}
+	if err = db.QueryRow(`SELECT application_id FROM log_entries WHERE id='log'`).Scan(&applicationID); err != nil || applicationID.Valid {
+		t.Fatalf("ログを保持したまま切り離せていません: valid=%v err=%v", applicationID.Valid, err)
+	}
+}
 func TestValidateRepositoryURL(t *testing.T) {
 	for _, good := range []string{"https://github.com/a/b", "https://github.com/a/b.git"} {
 		if err := ValidateRepositoryURL(good); err != nil {
@@ -875,6 +926,34 @@ func TestApplicationOperationIsHandedToWorker(t *testing.T) {
 	}
 }
 
+func TestUnregisterApplicationIsHandedToWorker(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	run := make(chan Operation, 1)
+	s := NewServer(db, func(_ context.Context, op Operation) error { run <- op; return nil })
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/applications/a", strings.NewReader(`{"requestId":"550e8400-e29b-41d4-a716-446655440100"}`))
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	select {
+	case op := <-run:
+		if op.Kind != "UNREGISTER" || op.ApplicationID != "a" {
+			t.Fatalf("Operation=%+v", op)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("登録解除Operationがworkerへ渡されませんでした")
+	}
+}
+
 func TestDerivedConfigIsAtomic(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "hosts")
 	if err := WriteAtomic(p, []byte(GenerateHosts("example.internal", "192.0.2.1", []PublishedApplication{{Subdomain: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
@@ -1519,6 +1598,27 @@ func TestRuntimeUnregisterPreservesSourceAndRegisterRestoresIt(t *testing.T) {
 	}
 	if err := db.QueryRow(`SELECT registration_state FROM applications WHERE id='app-id'`).Scan(&state); err != nil || state != "ACTIVE" {
 		t.Fatalf("再登録状態=%q err=%v", state, err)
+	}
+}
+
+func TestRuntimeUnregisterSucceedsWhenSourceAndDockerResourcesAreAlreadyGone(t *testing.T) {
+	dir := t.TempDir()
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	runner := &dockerBoundaryRunner{}
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: &composeSuccessRunner{}, Docker: NewDockerResources(runner, "installation")}
+	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "UNREGISTER"}); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := db.QueryRow(`SELECT registration_state FROM applications WHERE id='app-id'`).Scan(&state); err != nil || state != "UNREGISTERED" {
+		t.Fatalf("登録解除状態=%q err=%v", state, err)
 	}
 }
 

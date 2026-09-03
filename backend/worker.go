@@ -90,6 +90,16 @@ func (w *Worker) execute(op Operation) {
 	if w.run != nil {
 		err = w.run(ctx, op)
 	}
+	if err == nil && op.Kind == "PURGE" {
+		if err = detachPurgedApplication(ctx, w.db, op); err != nil {
+			err = fmt.Errorf("完全削除のDB整理に失敗しました: %w", err)
+		}
+		// purge後もOperationと完了ログを参照できるよう、以降のログは
+		// application_idを持たないOperationログとして保存する。
+		if err == nil {
+			op.ApplicationID = ""
+		}
+	}
 	state, msg := "SUCCEEDED", ""
 	if err != nil {
 		state, msg = "FAILED", SafeError(err)
@@ -108,6 +118,24 @@ func (w *Worker) execute(op Operation) {
 		level = "error"
 	}
 	w.appendLog(ctx, op, "operation", display, level)
+}
+
+func detachPurgedApplication(ctx context.Context, db *sql.DB, op Operation) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE log_entries SET application_id=NULL WHERE operation_id=?`, op.ID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE operations SET application_id=NULL WHERE id=?`, op.ID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM applications WHERE id=?`, op.ApplicationID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (w *Worker) appendLog(ctx context.Context, op Operation, task, message, level string) {
