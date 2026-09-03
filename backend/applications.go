@@ -633,7 +633,14 @@ func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	if kind == "REGISTER" && registrationState != "UNREGISTERED" {
 		return Operation{}, errors.New("再登録は登録解除済みアプリだけに実行できます")
 	}
-	if kind != "REGISTER" && kind != "PURGE" && registrationState != "ACTIVE" && !(kind == "START" && registrationState == "CONFIGURING") {
+	if kind == "UNREGISTER" {
+		if registrationState != "ACTIVE" && registrationState != "CONFIGURING" {
+			return Operation{}, errors.New("登録済みまたは設定待ちアプリだけ登録解除できます")
+		}
+	} else if kind != "REGISTER" && kind != "PURGE" && registrationState != "ACTIVE" && !(kind == "START" && registrationState == "CONFIGURING") && !(kind == "SYNC" && registrationState == "CONFIGURING") && !(kind == "REBUILD" && registrationState == "CONFIGURING") {
+		if registrationState == "CONFIGURING" {
+			return Operation{}, errors.New("設定待ちアプリにはこの操作を実行できません。設定を保存してから開始してください")
+		}
 		return Operation{}, errors.New("登録解除済みアプリにはこの操作を実行できません")
 	}
 	var request struct {

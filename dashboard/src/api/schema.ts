@@ -307,7 +307,7 @@ export interface components {
             desiredState: string;
             observedState: string;
             /** @enum {string} */
-            registrationState: "ACTIVE" | "UNREGISTERED";
+            registrationState: "ACTIVE" | "CONFIGURING" | "UNREGISTERED";
             /** Format: date-time */
             observedAt: string;
             reconciling: boolean;

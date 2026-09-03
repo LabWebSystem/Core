@@ -28,6 +28,7 @@ import (
 // Defines values for ApplicationRegistrationState.
 const (
 	ACTIVE       ApplicationRegistrationState = "ACTIVE"
+	CONFIGURING  ApplicationRegistrationState = "CONFIGURING"
 	UNREGISTERED ApplicationRegistrationState = "UNREGISTERED"
 )
 
@@ -35,6 +36,8 @@ const (
 func (e ApplicationRegistrationState) Valid() bool {
 	switch e {
 	case ACTIVE:
+		return true
+	case CONFIGURING:
 		return true
 	case UNREGISTERED:
 		return true

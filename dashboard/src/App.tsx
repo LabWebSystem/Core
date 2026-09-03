@@ -46,6 +46,8 @@ const appId = (app: Application) => app.name.replace("applications/", "");
 const stateLabel = (app: Application) =>
   app.registrationState === "UNREGISTERED"
     ? "登録解除済み"
+    : app.registrationState === "CONFIGURING"
+      ? "設定待ち"
     : app.reconciling
       ? "処理中"
       : app.observedState === "RUNNING"
@@ -793,14 +795,16 @@ function AppWorkbench({
               <Play size={16} />
               開始
             </button>
-            <button
-              disabled={disabled}
-              title={actionTitle}
-              onClick={() => onAction("stop")}
-            >
-              <Square size={16} />
-              停止
-            </button>
+            {app.registrationState !== "CONFIGURING" && (
+              <button
+                disabled={disabled}
+                title={actionTitle}
+                onClick={() => onAction("stop")}
+              >
+                <Square size={16} />
+                停止
+              </button>
+            )}
             <button
               disabled={disabled}
               title={actionTitle}

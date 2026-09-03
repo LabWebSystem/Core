@@ -166,8 +166,10 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			return err
 		}
 		metadataUpdated = true
-		if op.Kind == "CREATE" {
-			if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='CONFIGURING',desired_state='STOPPED',observed_state='STOPPED',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
+		// 初回登録と、停止中アプリの再同期は、sourceを再取得した時点で
+		// 設定レイヤーへ戻す。device binding未設定のまま起動はしない。
+		if op.Kind == "CREATE" || (op.Kind == "SYNC" && desired != "RUNNING") {
+			if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='CONFIGURING',desired_state='STOPPED',observed_state='STOPPED',latest_error='',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
 				return err
 			}
 			reportOperationPhase(ctx, "configuration_required", "設定レイヤーで環境変数とデバイスを確認してください")
@@ -254,7 +256,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return nil
 	case "PURGE":
-		if state == "ACTIVE" {
+		if state == "ACTIVE" || state == "CONFIGURING" {
 			reportOperationPhase(ctx, "unregister", "登録を解除してから完全削除します")
 			if err := e.Run(ctx, Operation{ApplicationID: op.ApplicationID, Kind: "UNREGISTER"}); err != nil {
 				return err

@@ -162,7 +162,7 @@ components:
         ref: { type: string }
         desiredState: { type: string }
         observedState: { type: string }
-        registrationState: { type: string, enum: [ACTIVE, UNREGISTERED] }
+        registrationState: { type: string, enum: [ACTIVE, CONFIGURING, UNREGISTERED] }
         observedAt: { type: string, format: date-time }
         reconciling: { type: boolean }
         latestOperation: { type: string }

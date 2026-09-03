@@ -1565,7 +1565,7 @@ func TestPurgeRequiresConfirmationAndRejectsActiveApplication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, state := range []string{"ACTIVE", "UNREGISTERED"} {
+	for _, state := range []string{"ACTIVE", "CONFIGURING", "UNREGISTERED"} {
 		_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
 		if err != nil {
 			t.Fatal(err)
@@ -1578,6 +1578,7 @@ func TestPurgeRequiresConfirmationAndRejectsActiveApplication(t *testing.T) {
 	}{
 		{path: "/api/v1/applications/app-UNREGISTERED:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440000"}`, want: 400},
 		{path: "/api/v1/applications/app-ACTIVE:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440001","confirm":true}`, want: 202},
+		{path: "/api/v1/applications/app-CONFIGURING:purge", body: `{"requestId":"550e8400-e29b-41d4-a716-446655440002","confirm":true}`, want: 202},
 	} {
 		r := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
 		r.Header.Set("Content-Type", "application/json")
