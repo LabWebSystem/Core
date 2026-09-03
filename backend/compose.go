@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var forbiddenComposeKeys = map[string]string{"include": "外部Composeのincludeは許可されていません", "extends": "Composeのextendsは許可されていません", "env_file": "env_fileは許可されていません", "label_file": "label_fileは許可されていません", "volumes_from": "volumes_fromは許可されていません", "privileged": "privilegedは許可されていません", "devices": "deviceは許可されていません", "network_mode": "host networkは許可されていません", "pid": "host PIDは許可されていません", "ipc": "host IPCは許可されていません", "tmpfs": "tmpfsは許可されていません", "configs": "ファイル型configsは許可されていません", "secrets": "ファイル型secretsは許可されていません", "additional_contexts": "追加build contextは許可されていません"}
+var forbiddenComposeKeys = map[string]string{"include": "外部Composeのincludeは許可されていません", "extends": "Composeのextendsは許可されていません", "env_file": "env_fileは許可されていません", "label_file": "label_fileは許可されていません", "volumes_from": "volumes_fromは許可されていません", "privileged": "privilegedは許可されていません", "network_mode": "host networkは許可されていません", "pid": "host PIDは許可されていません", "ipc": "host IPCは許可されていません", "tmpfs": "tmpfsは許可されていません", "configs": "ファイル型configsは許可されていません", "secrets": "ファイル型secretsは許可されていません", "additional_contexts": "追加build contextは許可されていません"}
 
 func ValidateComposeSource(root string, data []byte) error {
 	var node yaml.Node
@@ -18,6 +18,9 @@ func ValidateComposeSource(root string, data []byte) error {
 		return NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
 	}
 	if err := walkCompose(node.Content, root); err != nil {
+		return err
+	}
+	if _, err := ComposeDeviceAttachments(data); err != nil {
 		return err
 	}
 	return nil
@@ -105,7 +108,7 @@ func validateEffectiveCompose(data []byte, publicService string, publicPort int,
 
 func validateEffectiveService(name string, service map[string]any) error {
 	field := "services." + name
-	for _, key := range []string{"privileged", "devices", "tmpfs", "network_mode", "pid", "ipc", "ports"} {
+	for _, key := range []string{"privileged", "tmpfs", "network_mode", "pid", "ipc", "ports"} {
 		value, exists := service[key]
 		if !exists {
 			continue
@@ -131,6 +134,63 @@ func validateEffectiveService(name string, service map[string]any) error {
 		}
 	}
 	return nil
+}
+
+// DeviceAttachment is the application-facing part of a normal Compose devices entry.
+// Source is deliberately only a hint; LWS resolves it to a registered pool device at runtime.
+type DeviceAttachment struct{ Service, Source, Target, Permissions string }
+
+func ComposeDeviceAttachments(data []byte) ([]DeviceAttachment, error) {
+	var model struct {
+		Services map[string]struct {
+			Devices []any `yaml:"devices"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	var result []DeviceAttachment
+	for service, definition := range model.Services {
+		for _, raw := range definition.Devices {
+			var source, target, permissions string
+			switch v := raw.(type) {
+			case string:
+				parts := strings.Split(v, ":")
+				if len(parts) < 2 || len(parts) > 3 {
+					return nil, NewValidationError("services."+service+".devices", "device指定が不正です", "INVALID_DEVICE")
+				}
+				source, target = parts[0], parts[1]
+				if len(parts) == 3 {
+					permissions = parts[2]
+				}
+			case map[string]any:
+				source, _ = v["source"].(string)
+				target, _ = v["target"].(string)
+				permissions, _ = v["permissions"].(string)
+			default:
+				return nil, NewValidationError("services."+service+".devices", "device指定が不正です", "INVALID_DEVICE")
+			}
+			if !strings.HasPrefix(source, "/dev/") || !strings.HasPrefix(target, "/dev/") || strings.Contains(source, "..") || strings.Contains(target, "..") {
+				return nil, NewValidationError("services."+service+".devices", "deviceは/dev配下の絶対pathで指定してください", "INVALID_DEVICE")
+			}
+			if permissions == "" {
+				permissions = "rwm"
+			}
+			for _, c := range permissions {
+				if !strings.ContainsRune("rwm", c) {
+					return nil, NewValidationError("services."+service+".devices", "device権限が不正です", "INVALID_DEVICE")
+				}
+			}
+			result = append(result, DeviceAttachment{service, source, target, permissions})
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Service == result[j].Service {
+			return result[i].Target < result[j].Target
+		}
+		return result[i].Service < result[j].Service
+	})
+	return result, nil
 }
 
 func rejectExternalResources(model map[string]any, ownedNetwork string) error {

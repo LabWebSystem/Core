@@ -342,7 +342,27 @@ export interface components {
             variables: {
                 name: string;
                 isSecret: boolean;
+                configured: boolean;
+                value?: string;
+                required: boolean;
+                hasDefault: boolean;
             }[];
+            volumes: {
+                name: string;
+            }[];
+            network: {
+                name: string;
+                purpose: string;
+            };
+            devices: {
+                service: string;
+                sourceHint: string;
+                targetPath: string;
+                permissions: string;
+                configured: boolean;
+                deviceId?: string;
+            }[];
+            ready: boolean;
         };
         CreateApplicationRequest: {
             /** Format: uri */
@@ -362,6 +382,11 @@ export interface components {
             variables: {
                 [key: string]: components["schemas"]["Variable"];
             };
+            deviceBindings?: {
+                service: string;
+                targetPath: string;
+                deviceId: string;
+            }[];
             /** Format: uuid */
             requestId: string;
         };
@@ -376,8 +401,9 @@ export interface components {
             confirm: true;
         };
         Variable: {
-            value: string;
+            value?: string;
             secret: boolean;
+            keep?: boolean;
         };
         Error: {
             error: Record<string, never>;

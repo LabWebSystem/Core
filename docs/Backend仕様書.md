@@ -38,7 +38,7 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 - app-idはBackend発行UUID、subdomainは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開URLは`<subdomain>.<base-domain>`である。
 - `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
 - コンテナ、network、volumeの実在と状態はDockerから都度照会し、DBへ複製しない。
-- 登録状態は`ACTIVE`と`UNREGISTERED`。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。一覧には表示し、再登録と完全削除だけを受け付け、開始・停止・同期・再構成は受け付けない。Docker resourceの実体と所有識別情報はlabelから照会し、DBへ複製しない。
+- 登録状態は`CONFIGURING`、`ACTIVE`、`UNREGISTERED`。初回登録はsourceとmanifestを検査して`CONFIGURING`へ遷移し、containerを起動しない。必須環境変数とCompose deviceのLWSデバイスbindingが設定済みの場合だけ開始して`ACTIVE`へ遷移する。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。
 
 ## 3. API契約
 
@@ -139,7 +139,7 @@ UIのINPは75パーセンタイル200ms以下とする。clone、build、起動�
 
 - URL、subdomain、manifest schema、変数名、path traversal、symlink、禁止Compose機能の拒否
 - manifest指定serviceの存在、source `.env`・`compose.override.yaml`非取込み、変数展開後の再検証
-- bind mount、匿名volume、host port、privileged、Docker socket、host network/PID/IPC、device、external resourceの拒否
+- bind mount、匿名volume、host port、privileged、Docker socket、host network/PID/IPC、external resourceの拒否。deviceはLWSデバイスプールに登録済みで接続中のものだけを実行時overrideへ解決する。
 - `PATH_OUTSIDE_PROJECT_ROOT`、`BIND_MOUNT_FORBIDDEN`、secret非表示、HTTP origin・content-type制約
 - named volumeの登録解除時保持、完全削除時の所有確認と削除済み記録の消去
 - 同名Compose serviceのalias分離、アプリ間通信拒否、Caddyだけのedge network接続

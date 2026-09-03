@@ -16,6 +16,7 @@
 - ADR-011 | ACCEPTED | - | Dashboardはデバッグルームから段階的に洗練する
 - ADR-012 | ACCEPTED | - | DashboardをReact・Chakra UIの同一画面管理クライアントとして実装する
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
+- ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 
 ## ACTIVE
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
@@ -98,6 +99,9 @@
 - CHG-074 | SHIPPED | - | ログのseverity判定と条件付き表示を整理する
 - CHG-075 | SHIPPED | - | 登録解除済みアプリをDashboardに表示する
 - CHG-076 | SHIPPED | - | 完全削除の進捗とOperationを保持する
+- CHG-077 | SHIPPED | - | アプリ資源と環境変数の管理情報をDashboardへ追加する
+- CHG-078 | SHIPPED | - | Compose検証JSONを一行でOperationログへ記録する
+- CHG-079 | SHIPPED | - | 設定レイヤーとリソースプールを追加する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

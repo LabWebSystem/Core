@@ -19,10 +19,11 @@ type RuntimeExecutor struct {
 	Derived        *DerivedManager
 	SecretKey      []byte
 	InstallationID string
+	DeviceScanner  DeviceScanner
 }
 
 func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
-	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}}
+	return &RuntimeExecutor{DB: db, Root: root, Runner: OSRunner{}, DeviceScanner: UdevDeviceScanner{Runner: OSRunner{}}}
 }
 
 // ReconcileActiveは、SQLiteの正本とDockerの動的なedge network接続を再調整します。
@@ -165,6 +166,17 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			return err
 		}
 		metadataUpdated = true
+		if op.Kind == "CREATE" {
+			if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='CONFIGURING',desired_state='STOPPED',observed_state='STOPPED',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
+				return err
+			}
+			reportOperationPhase(ctx, "configuration_required", "設定レイヤーで環境変数とデバイスを確認してください")
+			sourceSwapActive = false
+			return nil
+		}
+		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, "compose.yaml")); err != nil {
+			return err
+		}
 		reportOperationPhase(ctx, "compose_up", "Docker containerを作成しています")
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
@@ -179,10 +191,19 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		sourceSwapActive = false
 		return nil
 	case "START", "REBUILD":
+		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, "compose.yaml")); err != nil {
+			return err
+		}
+		if err := e.GenerateOverrideFromCompose(op.ApplicationID, previousService, filepath.Join(source, "compose.yaml"), filepath.Join(runtime, "lws.override.yaml")); err != nil {
+			return err
+		}
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}
 		if err := e.syncDerived(ctx); err != nil {
+			return err
+		}
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE' WHERE id=?`, op.ApplicationID); err != nil {
 			return err
 		}
 		return e.markApplicationState(ctx, op.ApplicationID, "RUNNING", "RUNNING", "")
@@ -258,6 +279,40 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 	default:
 		return fmt.Errorf("未対応のOperationです: %s", op.Kind)
 	}
+}
+
+func (e *RuntimeExecutor) ensureConfigurationReady(ctx context.Context, id, compose string) error {
+	if _, err := RefreshLWSDevices(ctx, e.DB, e.DeviceScanner); err != nil {
+		return fmt.Errorf("LWSデバイスの接続状態を確認できません: %w", err)
+	}
+	data, err := os.ReadFile(compose)
+	if err != nil {
+		return err
+	}
+	attachments, err := ComposeDeviceAttachments(data)
+	if err != nil {
+		return err
+	}
+	variables, err := ExtractComposeVariables(data)
+	if err != nil {
+		return err
+	}
+	for _, v := range variables {
+		if v.Required {
+			var count int
+			if err := e.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM application_variables WHERE application_id=? AND name=?`, id, v.Name).Scan(&count); err != nil || count == 0 {
+				return fmt.Errorf("必須環境変数%sを設定してください", v.Name)
+			}
+		}
+	}
+	for _, a := range attachments {
+		var path, status string
+		err := e.DB.QueryRowContext(ctx, `SELECT d.current_path,d.status FROM application_device_bindings b JOIN lws_devices d ON d.id=b.device_id WHERE b.application_id=? AND b.service=? AND b.target_path=?`, id, a.Service, a.Target).Scan(&path, &status)
+		if err != nil || status != "CONNECTED" || !strings.HasPrefix(path, "/dev/") {
+			return fmt.Errorf("%s のデバイス%sをLWSデバイスプールから割り当ててください", a.Service, a.Target)
+		}
+	}
+	return nil
 }
 
 func (e *RuntimeExecutor) restoreActive(ctx context.Context, id, source, runtime, desired string) {
@@ -453,7 +508,7 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	if override != "" {
 		args = []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override, "config", "--format", "json"}
 	}
-	out, err := runLogged(ctx, e.Runner, "Compose検証", "docker", args...)
+	out, err := runLoggedJSON(ctx, e.Runner, "Compose検証", "docker", args...)
 	if err != nil {
 		return fmt.Errorf("Compose設定の検証に失敗しました")
 	}
@@ -479,7 +534,46 @@ func (e *RuntimeExecutor) GenerateOverrideFromCompose(id, service, compose strin
 	if err != nil {
 		return err
 	}
-	return e.GenerateOverrideWithServicesAndVolumes(id, service, services, volumes, path)
+	if err := e.GenerateOverrideWithServicesAndVolumes(id, service, services, volumes, path); err != nil {
+		return err
+	}
+	attachments, err := ComposeDeviceAttachments(data)
+	if err != nil {
+		return err
+	}
+	if len(attachments) == 0 {
+		return nil
+	}
+	overrideData, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var model map[string]any
+	if err := json.Unmarshal(overrideData, &model); err != nil {
+		return err
+	}
+	serviceModels := model["services"].(map[string]any)
+	for _, a := range attachments {
+		var actual string
+		err := e.DB.QueryRow(`SELECT d.current_path FROM application_device_bindings b JOIN lws_devices d ON d.id=b.device_id WHERE b.application_id=? AND b.service=? AND b.target_path=?`, id, a.Service, a.Target).Scan(&actual)
+		if err == nil && strings.HasPrefix(actual, "/dev/") {
+			sm := serviceModels[a.Service].(map[string]any)
+			sm["devices"] = appendDevice(sm["devices"], actual+":"+a.Target+":"+a.Permissions)
+		}
+	}
+	encoded, err := json.Marshal(model)
+	if err != nil {
+		return err
+	}
+	return WriteAtomic(path, encoded, 0600)
+}
+
+func appendDevice(value any, entry string) []string {
+	result := []string{}
+	if items, ok := value.([]string); ok {
+		result = append(result, items...)
+	}
+	return append(result, entry)
 }
 
 func (e *RuntimeExecutor) GenerateOverrideWithVolumes(id, service string, volumes []string, path string) error {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -125,7 +124,7 @@ func waitFeatureOperation(t *testing.T, db *sql.DB, name string) string {
 func TestFTV1_020RegisterValidApp(t *testing.T) {
 	url := prepareFeatureRepository(t, "valid", "lws-valid")
 	runner := &featureRunner{}
-	db, executor, server := newFeatureServer(t, runner)
+	db, _, server := newFeatureServer(t, runner)
 
 	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","subdomain":"valid","requestId":"550e8400-e29b-41d4-a716-446655440201"}`, url))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
@@ -148,19 +147,11 @@ func TestFTV1_020RegisterValidApp(t *testing.T) {
 	if err := db.QueryRow(`SELECT registration_state,observed_state,manifest_name,manifest_service FROM applications WHERE subdomain='valid'`).Scan(&state, &observed, &name, &service); err != nil {
 		t.Fatal(err)
 	}
-	if state != "ACTIVE" || observed != "RUNNING" || name != "LWSテストアプリ" || service != "web" {
+	if state != "CONFIGURING" || observed != "STOPPED" || name != "LWSテストアプリ" || service != "web" {
 		t.Fatalf("登録後の状態が不正です: state=%s observed=%s name=%s service=%s", state, observed, name, service)
 	}
-	if !runner.hasDockerComposeUp() {
-		t.Fatal("登録後にDocker Compose upが実行されていません")
-	}
-	caddy, err := os.ReadFile(filepath.Join(executor.Derived.GeneratedDir, "Caddyfile"))
-	if err != nil || !strings.Contains(string(caddy), "valid.example.internal") {
-		t.Fatalf("Caddyfileが生成されていません: %v\n%s", err, caddy)
-	}
-	hosts, err := os.ReadFile(filepath.Join(executor.Derived.GeneratedDir, "hosts"))
-	if err != nil || !strings.Contains(string(hosts), "valid.example.internal") {
-		t.Fatalf("hostsが生成されていません: %v\n%s", err, hosts)
+	if runner.hasDockerComposeUp() {
+		t.Fatal("設定前の登録でDocker Compose upが実行されました")
 	}
 }
 

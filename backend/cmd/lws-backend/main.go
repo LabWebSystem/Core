@@ -86,6 +86,7 @@ func main() {
 	}
 	server := backend.NewServer(db, runtime.Run)
 	server.SecretKey = secretKey
+	server.AppsRoot = appsRoot
 	server.Logs.SecretKey = secretKey
 	server.AllowedHost = os.Getenv("LWS_ALLOWED_HOST")
 	if server.AllowedHost == "" {

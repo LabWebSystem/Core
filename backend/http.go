@@ -19,16 +19,18 @@ import (
 type Server struct {
 	DB            *sql.DB
 	SecretKey     []byte
+	AppsRoot      string
 	AllowedHost   string
 	AllowedOrigin string
 	Ready         func() bool
 	events        *Events
 	worker        *Worker
 	Logs          *LogStore
+	DeviceScanner DeviceScanner
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
-	s := &Server{DB: db, events: NewEvents(), Logs: NewLogStore(db)}
+	s := &Server{DB: db, events: NewEvents(), Logs: NewLogStore(db), DeviceScanner: UdevDeviceScanner{Runner: OSRunner{}}}
 	s.worker = NewWorker(db, run)
 	s.worker.events = s.events
 	s.worker.logs = s.Logs
@@ -69,6 +71,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
 	// custom methodとSSE tail routeはURL suffixを検査する既存dispatcherへ委譲する。
 	mux.HandleFunc("POST /api/v1/applications/", s.appOperation)
+	mux.HandleFunc("GET /api/v1/resource-pools", s.getResourcePools)
+	mux.HandleFunc("POST /api/v1/resource-pools/devices", s.createPoolDevice)
 	return requestBoundary(openAPIValidation(mux), s.AllowedHost, s.AllowedOrigin)
 }
 
@@ -103,7 +107,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','UNREGISTERED') ORDER BY subdomain`)
+	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ一覧を取得できません", "")
 		return

@@ -3,6 +3,7 @@ package backend
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -61,6 +62,24 @@ func runLogged(ctx context.Context, runner CommandRunner, task, name string, arg
 	out, err := runner.Run(ctx, name, args...)
 	if len(out) > 0 {
 		reportOperationOutput(ctx, task, strings.TrimSpace(string(out)), "info")
+	}
+	if err != nil {
+		reportOperationOutput(ctx, task, "外部コマンドが失敗しました", "error")
+	}
+	return out, err
+}
+
+// runLoggedJSONは、構造化された外部コマンド出力を1レコードの未整形JSONとして記録する。
+// Compose検証のJSONは行単位で記録すると、Dashboardで追跡しづらくなるためである。
+func runLoggedJSON(ctx context.Context, runner CommandRunner, task, name string, args ...string) ([]byte, error) {
+	out, err := runner.Run(ctx, name, args...)
+	if len(out) > 0 {
+		message := strings.TrimSpace(string(out))
+		var compact bytes.Buffer
+		if json.Compact(&compact, bytes.TrimSpace(out)) == nil {
+			message = compact.String()
+		}
+		reportOperationOutput(ctx, task, message, "info")
 	}
 	if err != nil {
 		reportOperationOutput(ctx, task, "外部コマンドが失敗しました", "error")

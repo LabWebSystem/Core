@@ -196,9 +196,46 @@ components:
         liveCursor: { type: string }
     ConfigurationResponse:
       type: object
-      required: [variables]
+      required: [variables, volumes, network, devices, ready]
       properties:
-        variables: { type: array, items: { type: object, required: [name, isSecret], properties: { name: { type: string }, isSecret: { type: boolean } } } }
+        variables:
+          type: array
+          items:
+            type: object
+            required: [name, isSecret, configured, required, hasDefault]
+            properties:
+              name: { type: string }
+              isSecret: { type: boolean }
+              configured: { type: boolean }
+              value: { type: string }
+              required: { type: boolean }
+              hasDefault: { type: boolean }
+        volumes:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string }
+        network:
+          type: object
+          required: [name, purpose]
+          properties:
+            name: { type: string }
+            purpose: { type: string }
+        devices:
+          type: array
+          items:
+            type: object
+            required: [service, sourceHint, targetPath, permissions, configured]
+            properties:
+              service: { type: string }
+              sourceHint: { type: string }
+              targetPath: { type: string }
+              permissions: { type: string }
+              configured: { type: boolean }
+              deviceId: { type: string }
+        ready: { type: boolean }
     CreateApplicationRequest:
       type: object
       required: [repositoryUrl, ref, subdomain, requestId]
@@ -219,6 +256,15 @@ components:
       required: [variables, requestId]
       properties:
         variables: { type: object, additionalProperties: { $ref: '#/components/schemas/Variable' } }
+        deviceBindings:
+          type: array
+          items:
+            type: object
+            required: [service, targetPath, deviceId]
+            properties:
+              service: { type: string }
+              targetPath: { type: string }
+              deviceId: { type: string }
         requestId: { type: string, format: uuid }
     ActionRequest:
       type: object
@@ -233,10 +279,11 @@ components:
         confirm: { type: boolean, const: true }
     Variable:
       type: object
-      required: [value, secret]
+      required: [secret]
       properties:
         value: { type: string }
         secret: { type: boolean }
+        keep: { type: boolean }
     Error:
       type: object
       required: [error]

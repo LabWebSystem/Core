@@ -19,6 +19,10 @@ services:
       - lws-backend-config:/etc/lws
       - lws-generated:/var/lib/lws/generated
       - /var/run/docker.sock:/var/run/docker.sock
+      # Backendはデバイスを割り当てず検出だけを行う。ホストのdevice nodeと
+      # udev databaseは読み取り専用で渡し、実際の割り当ては登録アプリへ行う。
+      - /dev:/dev:ro
+      - /run/udev:/run/udev:ro
     networks: [lws-internal]
     labels:
       com.labwebsystem.owner: lws

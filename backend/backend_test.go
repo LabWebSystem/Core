@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 6 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 7 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,7 +35,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 6 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 7 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -98,6 +98,57 @@ func TestOpenAPIContractAndGeneratedRoutes(t *testing.T) {
 	(&Server{DB: db}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications", nil))
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "applications") {
 		t.Fatalf("generated route status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type fixedDeviceScanner struct{ devices []PhysicalDevice }
+
+func (s fixedDeviceScanner) Scan(context.Context, bool) ([]PhysicalDevice, error) {
+	return s.devices, nil
+}
+
+func TestDevicePoolOnlyRegistersDetectedPhysicalDeviceAndRefreshesPath(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s := NewServer(db, func(context.Context, Operation) error { return nil })
+	s.DeviceScanner = fixedDeviceScanner{devices: []PhysicalDevice{{StableID: "reader-serial", CurrentPath: "/dev/hidraw2", Metadata: map[string]string{"model": "NFC"}}}}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/resource-pools/devices", strings.NewReader(`{"name":"card-reader","candidateStableId":"reader-serial"}`))
+	request.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, request)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("register status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	s.DeviceScanner = fixedDeviceScanner{devices: []PhysicalDevice{{StableID: "reader-serial", CurrentPath: "/dev/hidraw7", Metadata: map[string]string{"model": "NFC"}}}}
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/resource-pools", nil))
+	if rr.Code != 200 || !strings.Contains(rr.Body.String(), `"currentPath":"/dev/hidraw7"`) {
+		t.Fatalf("pool refresh=%d %s", rr.Code, rr.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/v1/resource-pools/devices", strings.NewReader(`{"name":"bad","candidateStableId":"missing"}`))
+	request.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, request)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("undetected device accepted: %d", rr.Code)
+	}
+}
+
+func TestRunLoggedJSONEmitsCompactJSONAsOneOperationLog(t *testing.T) {
+	var entries []struct{ task, message, level string }
+	ctx := withOperationOutput(context.Background(), func(task, message, level string) {
+		entries = append(entries, struct{ task, message, level string }{task, message, level})
+	})
+	formatted := []byte("{\n  \"image\": \"nginx\",\n  \"labels\": {\n    \"com.labwebsystem.owner\": \"lws\"\n  }\n}\n")
+	out, err := runLoggedJSON(ctx, &recordingRunner{output: formatted}, "Compose検証", "docker", "compose", "config", "--format", "json")
+	if err != nil || string(out) != string(formatted) {
+		t.Fatalf("Compose検証の出力が変化しました: out=%q err=%v", out, err)
+	}
+	if len(entries) != 1 || entries[0].task != "Compose検証" || entries[0].level != "info" || entries[0].message != `{"image":"nginx","labels":{"com.labwebsystem.owner":"lws"}}` || strings.Contains(entries[0].message, "\n") {
+		t.Fatalf("Compose JSONログが1行になっていません: %+v", entries)
 	}
 }
 
@@ -528,12 +579,11 @@ func TestRuntimeRestoresSourceWhenComposeValidationFails(t *testing.T) {
 	}
 	r := &cloneValidationRunner{}
 	e := &RuntimeExecutor{DB: db, Root: root, Runner: r}
-	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "CREATE"}); err == nil {
-		t.Fatal("forbidden Compose was accepted")
+	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "CREATE"}); err != nil {
+		t.Fatalf("normal Compose devices should be accepted: %v", err)
 	}
-	marker, err := os.ReadFile(filepath.Join(source, "marker"))
-	if err != nil || string(marker) != "old" {
-		t.Fatalf("old source was not restored: %q err=%v", marker, err)
+	if _, err := os.Stat(filepath.Join(source, "compose.yaml")); err != nil {
+		t.Fatalf("新しいsourceが確定されませんでした: %v", err)
 	}
 }
 
@@ -794,6 +844,60 @@ func TestSecretConfigurationIsEncryptedAndNeverReturned(t *testing.T) {
 	s.Handler().ServeHTTP(rr, r)
 	if strings.Contains(rr.Body.String(), "secret-value") {
 		t.Fatal("secret was returned")
+	}
+}
+
+func TestConfigurationReturnsComposeResourcesAndReplacesRemovedVariables(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	source := filepath.Join(root, "a", "source")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services:\n  web:\n    image: ${IMAGE:?IMAGEが必要}\n    environment:\n      PORT: ${PORT:-3000}\n    volumes:\n      - app-data:/data\nvolumes:\n  app-data: {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{DB: db, SecretKey: []byte("01234567890123456789012345678901"), AppsRoot: root}
+	patch := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPatch, "/api/v1/applications/a/configuration", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		server.Handler().ServeHTTP(rr, r)
+		return rr
+	}
+	if rr := patch(`{"variables":{"TOKEN":{"value":"secret-value","secret":true},"PORT":{"value":"8080","secret":false}},"requestId":"550e8400-e29b-41d4-a716-446655440111"}`); rr.Code != http.StatusAccepted {
+		t.Fatalf("initial status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if rr := patch(`{"variables":{"TOKEN":{"secret":true,"keep":true}},"requestId":"550e8400-e29b-41d4-a716-446655440112"}`); rr.Code != http.StatusAccepted {
+		t.Fatalf("replace status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM application_variables WHERE application_id='a' AND name='PORT'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("削除した変数が残っています: count=%d err=%v", count, err)
+	}
+	var encrypted []byte
+	if err := db.QueryRow(`SELECT value FROM application_variables WHERE application_id='a' AND name='TOKEN'`).Scan(&encrypted); err != nil {
+		t.Fatal(err)
+	}
+	if plain, err := Decrypt(server.SecretKey, encrypted); err != nil || string(plain) != "secret-value" {
+		t.Fatalf("secretが保持されませんでした: %q %v", plain, err)
+	}
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/applications/a/configuration", nil))
+	if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), "secret-value") {
+		t.Fatalf("設定取得が不正です: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	for _, expected := range []string{`"name":"IMAGE"`, `"name":"app-data"`, `"name":"lws-app-a-edge"`, `"devices":`, `"ready":`} {
+		if !strings.Contains(rr.Body.String(), expected) {
+			t.Fatalf("設定リソースが不足しています: %s", expected)
+		}
 	}
 }
 

@@ -20,6 +20,7 @@
 | 登録アプリ | アプリ自身のCompose構成で実行。Docker socketは使わない |
 
 - BackendだけがDocker socketを使う。登録アプリへのsocket mountを禁止する。
+- Backendは物理デバイスの検出だけのため、ホストの`/dev`と`/run/udev`をread-onlyでmountする。Backend自身へdeviceを割り当てず、実際のdevice割り当ては生成overrideを通じて登録アプリだけへ行う。
 - Backend、Caddy、CoreDNSの実行イメージは、同じLWS release versionに揃えたtagと固定digestを使う。`latest`は使わない。
 - Backendは`docker compose`と`git`を実行するため、distrolessイメージを使わない。
 - Backendはホストポートを公開せず、Caddy経由でだけ到達可能にする。CORSは許可しない。状態変更にはJSONの`Content-Type`と許可済み`Host`を要求し、`Origin` headerがある要求は許可済みoriginだけを受け付ける。
@@ -108,7 +109,7 @@ docker compose --project-name lws-app-<app-id> \
 - `docker compose config --format json`の前に、source treeのsymlink、`include`、`extends`、`env_file`、`label_file`、`volumes_from`、ファイル型`configs`/`secrets`、`build.additional_contexts`、リモートGit build contextを拒否する。
 - `build.context`と`build.dockerfile`は、実体パスがsource root配下の場合だけ許可する。絶対パス、root外へ解決される相対パス、external network、external volumeを拒否する。パスを丸めたりComposeを書き換えたりして受理しない。
 - 事前検査を通過したものだけを`docker compose config --format json`で正規化し、manifest指定serviceの存在を確認する。公開serviceやportは推測しない。
-- 実効Composeではbind mount、匿名volume、tmpfs、host port、host network/PID/IPC、privileged、device、Docker socket、named volume以外のmountを拒否する。
+- 実効Composeではbind mount、匿名volume、tmpfs、host port、host network/PID/IPC、privileged、Docker socket、named volume以外のmountを拒否する。`devices`は例外であり、Composeのcontainer側targetと権限を保ちつつ、LWSデバイスプールから解決した現在の`/dev` pathだけを生成overrideへ渡す。
 
 ## 7. ライフサイクルと禁止事項
 

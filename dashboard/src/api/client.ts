@@ -6,10 +6,34 @@ export type Configuration = components["schemas"]["ConfigurationResponse"];
 export type LogEntry = components["schemas"]["LogEntry"];
 type LogEntryList = components["schemas"]["LogEntryList"];
 export type LogQuery = { limit?: number; startAt?: string; endAt?: string };
-type OperationEvent = { type: Operation["state"]; data?: { message?: string; phase?: string } };
+export type ResourcePools = {
+  devices: {
+    id: string;
+    name: string;
+    stableId: string;
+    currentPath: string;
+    status: string;
+  }[];
+  physicalDevices: {
+    stableId: string;
+    currentPath: string;
+    name: string;
+    category: "user" | "system";
+    metadata: Record<string, string>;
+  }[];
+  volumes: { name: string; applicationName: string; status: string }[];
+  networks: { name: string; applicationName: string; status: string }[];
+};
+type OperationEvent = {
+  type: Operation["state"];
+  data?: { message?: string; phase?: string };
+};
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
   }
 }
@@ -22,50 +46,143 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new ApiError(body?.error?.message ?? "操作を完了できませんでした", response.status);
+    const body = (await response.json().catch(() => null)) as {
+      error?: { message?: string };
+    } | null;
+    throw new ApiError(
+      body?.error?.message ?? "操作を完了できませんでした",
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }
 
 const appId = (app: Application) => app.name.replace("applications/", "");
-const operationName = (name: string) => name.startsWith("operations/") ? name : `operations/${name}`;
+const operationName = (name: string) =>
+  name.startsWith("operations/") ? name : `operations/${name}`;
 
 export const api = {
-  list: async () => (await request<{ applications: Application[] }>("/applications")).applications,
-  get: (id: string) => request<Application>(`/applications/${encodeURIComponent(id)}`),
-  configuration: (id: string) => request<Configuration>(`/applications/${encodeURIComponent(id)}/configuration`),
+  list: async () =>
+    (await request<{ applications: Application[] }>("/applications"))
+      .applications,
+  get: (id: string) =>
+    request<Application>(`/applications/${encodeURIComponent(id)}`),
+  configuration: (id: string) =>
+    request<Configuration>(
+      `/applications/${encodeURIComponent(id)}/configuration`,
+    ),
+  resourcePools: (includeSystem = false) =>
+    request<ResourcePools>(
+      `/resource-pools${includeSystem ? "?includeSystem=true" : ""}`,
+    ),
   create: (input: { repositoryUrl: string; ref: string; subdomain: string }) =>
-    request<{ name: string }>("/applications", { method: "POST", body: JSON.stringify({ ...input, requestId: requestId() }) }),
+    request<{ name: string }>("/applications", {
+      method: "POST",
+      body: JSON.stringify({ ...input, requestId: requestId() }),
+    }),
   update: (app: Application, input: { ref?: string; subdomain?: string }) =>
-    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}`, { method: "PATCH", body: JSON.stringify({ ...input, requestId: requestId() }) }),
-  action: (app: Application, action: "start" | "stop" | "sync" | "rebuild" | "register") =>
-    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}:${action}`, { method: "POST", body: JSON.stringify({ requestId: requestId() }) }),
+    request<{ name: string }>(
+      `/applications/${encodeURIComponent(appId(app))}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ ...input, requestId: requestId() }),
+      },
+    ),
+  action: (
+    app: Application,
+    action: "start" | "stop" | "sync" | "rebuild" | "register",
+  ) =>
+    request<{ name: string }>(
+      `/applications/${encodeURIComponent(appId(app))}:${action}`,
+      { method: "POST", body: JSON.stringify({ requestId: requestId() }) },
+    ),
   unregister: (app: Application) =>
-    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}`, { method: "DELETE", body: JSON.stringify({ requestId: requestId() }) }),
+    request<{ name: string }>(
+      `/applications/${encodeURIComponent(appId(app))}`,
+      { method: "DELETE", body: JSON.stringify({ requestId: requestId() }) },
+    ),
   purge: (app: Application) =>
-    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}:purge`, { method: "POST", body: JSON.stringify({ requestId: requestId(), confirm: true }) }),
-  saveConfiguration: (app: Application, variables: Record<string, { value: string; secret: boolean }>) =>
-    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}/configuration`, { method: "PATCH", body: JSON.stringify({ variables, requestId: requestId() }) }),
+    request<{ name: string }>(
+      `/applications/${encodeURIComponent(appId(app))}:purge`,
+      {
+        method: "POST",
+        body: JSON.stringify({ requestId: requestId(), confirm: true }),
+      },
+    ),
+  saveConfiguration: (
+    app: Application,
+    variables: Record<
+      string,
+      { value?: string; secret: boolean; keep?: boolean }
+    >,
+    deviceBindings: { service: string; targetPath: string; deviceId: string }[],
+  ) =>
+    request<{ name: string }>(
+      `/applications/${encodeURIComponent(appId(app))}/configuration`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          variables,
+          deviceBindings,
+          requestId: requestId(),
+        }),
+      },
+    ),
+  createPoolDevice: (name: string, candidateStableId: string) =>
+    request<{ id: string }>("/resource-pools/devices", {
+      method: "POST",
+      body: JSON.stringify({ name, candidateStableId }),
+    }),
   operation: (name: string) => request<Operation>(`/${operationName(name)}`),
-  watchOperation(name: string, onState: (operation: Pick<Operation, "name" | "state" | "phase" | "displayMessage">) => void, onError: () => void) {
+  watchOperation(
+    name: string,
+    onState: (
+      operation: Pick<Operation, "name" | "state" | "phase" | "displayMessage">,
+    ) => void,
+    onError: () => void,
+  ) {
     name = operationName(name);
     const source = new EventSource(`/api/v1/${name}:watch`);
     let finished = false;
     const receive = (event: Event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as OperationEvent;
-      const operation = { name, state: payload.type, phase: payload.data?.phase ?? "", displayMessage: payload.data?.message ?? "" };
+      const payload = JSON.parse(
+        (event as MessageEvent<string>).data,
+      ) as OperationEvent;
+      const operation = {
+        name,
+        state: payload.type,
+        phase: payload.data?.phase ?? "",
+        displayMessage: payload.data?.message ?? "",
+      };
       onState(operation);
       if (["succeeded", "failed", "cancelled"].includes(operation.state)) {
         finished = true;
         source.close();
       }
     };
-    for (const state of ["queued", "running", "succeeded", "failed", "cancelled"] as const) source.addEventListener(state, receive);
-    source.onerror = () => { if (!finished) onError(); };
-    return () => { finished = true; source.close(); };
+    for (const state of [
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "cancelled",
+    ] as const)
+      source.addEventListener(state, receive);
+    source.onerror = () => {
+      if (!finished) onError();
+    };
+    return () => {
+      finished = true;
+      source.close();
+    };
   },
-  tailLogs(app: Application, view: "task" | "application" | "related", service: string | undefined, query: LogQuery, onEntry: (entry: LogEntry) => void) {
+  tailLogs(
+    app: Application,
+    view: "task" | "application" | "related",
+    service: string | undefined,
+    query: LogQuery,
+    onEntry: (entry: LogEntry) => void,
+  ) {
     let closed = false;
     let source: EventSource | undefined;
     const params = new URLSearchParams({ view });
@@ -74,16 +191,27 @@ export const api = {
     if (query.startAt) params.set("startAt", query.startAt);
     if (query.endAt) params.set("endAt", query.endAt);
     const path = `/applications/${encodeURIComponent(appId(app))}/logEntries?${params}`;
-    void request<LogEntryList>(path).then((snapshot) => {
-      if (closed) return;
-      snapshot.entries.forEach(onEntry);
-      const after = snapshot.liveCursor ? `&after=${encodeURIComponent(snapshot.liveCursor)}` : "";
-      const watchParams = new URLSearchParams({ view });
-      if (service) watchParams.set("service", service);
-      if (after) watchParams.set("after", snapshot.liveCursor);
-      source = new EventSource(`/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?${watchParams}`);
-      source.addEventListener("logEntry", (event) => onEntry(JSON.parse((event as MessageEvent<string>).data) as LogEntry));
-    }).catch(() => undefined);
-    return () => { closed = true; source?.close(); };
+    void request<LogEntryList>(path)
+      .then((snapshot) => {
+        if (closed) return;
+        snapshot.entries.forEach(onEntry);
+        const after = snapshot.liveCursor
+          ? `&after=${encodeURIComponent(snapshot.liveCursor)}`
+          : "";
+        const watchParams = new URLSearchParams({ view });
+        if (service) watchParams.set("service", service);
+        if (after) watchParams.set("after", snapshot.liveCursor);
+        source = new EventSource(
+          `/api/v1/applications/${encodeURIComponent(appId(app))}/logEntries:watch?${watchParams}`,
+        );
+        source.addEventListener("logEntry", (event) =>
+          onEntry(JSON.parse((event as MessageEvent<string>).data) as LogEntry),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      closed = true;
+      source?.close();
+    };
   },
 };

@@ -8,10 +8,22 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+type configurationVariableValue struct {
+	name   string
+	value  any
+	secret bool
+	keep   bool
+}
 
 func (s *Server) applicationRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/applications/{application}", s.getApplication)
@@ -21,6 +33,102 @@ func (s *Server) applicationRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/applications/{application}/configuration", s.getConfiguration)
 	m.HandleFunc("PATCH /api/v1/applications/{application}/configuration", s.patchConfiguration)
 	m.HandleFunc("GET /api/v1/operations/", s.operationRoute)
+}
+
+// resourcePoolRoutes intentionally expose only LWS-owned resources.  Compose source paths
+// are never accepted as an allocation; device creation must select a detected candidate.
+func (s *Server) resourcePoolRoutes(m *http.ServeMux) {
+	m.HandleFunc("GET /api/v1/resource-pools", s.getResourcePools)
+	m.HandleFunc("POST /api/v1/resource-pools/devices", s.createPoolDevice)
+}
+
+func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		writeAPIError(w, 503, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
+		return
+	}
+	_, _ = s.refreshLWSDevices(r.Context())
+	includeSystem := r.URL.Query().Get("includeSystem") == "true"
+	candidates := []PhysicalDevice{}
+	if s.DeviceScanner != nil {
+		candidates, _ = s.DeviceScanner.Scan(r.Context(), includeSystem)
+	}
+	devices := []map[string]any{}
+	rows, err := s.DB.QueryContext(r.Context(), `SELECT id,name,stable_id,current_path,status,metadata FROM lws_devices ORDER BY name`)
+	if err != nil {
+		writeAPIError(w, 500, "DATABASE_ERROR", "デバイスプールを取得できません", "")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, name, stable, path, status, metadata string
+		if rows.Scan(&id, &name, &stable, &path, &status, &metadata) == nil {
+			devices = append(devices, map[string]any{"id": id, "name": name, "stableId": stable, "currentPath": path, "status": strings.ToLower(status), "metadata": json.RawMessage(metadata)})
+		}
+	}
+	volumes, networks := []map[string]any{}, []map[string]any{}
+	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
+	if err == nil {
+		defer apps.Close()
+		for apps.Next() {
+			var id, sub string
+			if apps.Scan(&id, &sub) != nil {
+				continue
+			}
+			if s.AppsRoot != "" {
+				if data, e := os.ReadFile(filepath.Join(s.AppsRoot, id, "source", "compose.yaml")); e == nil {
+					if names, e := NamedVolumeNames(data); e == nil {
+						for _, n := range names {
+							volumes = append(volumes, map[string]any{"name": n, "application": "applications/" + id, "applicationName": sub, "status": "managed"})
+						}
+					}
+				}
+			}
+			networks = append(networks, map[string]any{"name": EdgeNetworkName(id), "application": "applications/" + id, "applicationName": sub, "status": "managed"})
+		}
+	}
+	writeJSON(w, 200, map[string]any{"devices": devices, "physicalDevices": candidates, "volumes": volumes, "networks": networks})
+}
+
+func (s *Server) refreshLWSDevices(ctx context.Context) ([]PhysicalDevice, error) {
+	return RefreshLWSDevices(ctx, s.DB, s.DeviceScanner)
+}
+
+func (s *Server) createPoolDevice(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil || !requireJSON(w, r) {
+		return
+	}
+	var req struct {
+		Name              string `json:"name"`
+		CandidateStableID string `json:"candidateStableId"`
+	}
+	if json.NewDecoder(r.Body).Decode(&req) != nil || strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.CandidateStableID) == "" || s.DeviceScanner == nil {
+		writeAPIError(w, 400, "INVALID_ARGUMENT", "デバイス名と検出済み物理デバイスの選択が必要です", "body")
+		return
+	}
+	candidates, err := s.DeviceScanner.Scan(r.Context(), true)
+	if err != nil {
+		writeAPIError(w, 503, "DEVICE_SCAN_FAILED", "物理デバイスを検出できません", "candidateStableId")
+		return
+	}
+	var selected *PhysicalDevice
+	for i := range candidates {
+		if candidates[i].StableID == req.CandidateStableID {
+			selected = &candidates[i]
+			break
+		}
+	}
+	if selected == nil {
+		writeAPIError(w, 400, "DEVICE_NOT_FOUND", "選択された物理デバイスは現在接続されていません", "candidateStableId")
+		return
+	}
+	id := "device-" + uuid.NewString()
+	metadata, _ := json.Marshal(selected.Metadata)
+	if _, err := s.DB.ExecContext(r.Context(), `INSERT INTO lws_devices(id,name,stable_id,current_path,status,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,datetime('now'),datetime('now'))`, id, req.Name, selected.StableID, selected.CurrentPath, "CONNECTED", metadata); err != nil {
+		writeAPIError(w, 409, "CONFLICT", "このデバイス名または安定識別子は既に登録されています", "name")
+		return
+	}
+	writeJSON(w, 201, map[string]string{"id": id})
 }
 func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 	if s.DB == nil {
@@ -35,20 +143,105 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリを確認できません", "")
 		return
 	}
-	rows, err := s.DB.QueryContext(r.Context(), `SELECT name,is_secret FROM application_variables WHERE application_id=?`, appID(r))
+	rows, err := s.DB.QueryContext(r.Context(), `SELECT name,value,is_secret FROM application_variables WHERE application_id=?`, appID(r))
 	if err != nil {
 		writeAPIError(w, 500, "DATABASE_ERROR", "設定を取得できません", "")
 		return
 	}
 	defer rows.Close()
+	configured := map[string]bool{}
 	v := []map[string]any{}
 	for rows.Next() {
 		var n string
+		var value []byte
 		var secret int
-		_ = rows.Scan(&n, &secret)
-		v = append(v, map[string]any{"name": n, "isSecret": secret != 0})
+		_ = rows.Scan(&n, &value, &secret)
+		configured[n] = true
+		item := map[string]any{"name": n, "isSecret": secret != 0, "configured": true, "required": false, "hasDefault": false}
+		if secret == 0 {
+			item["value"] = string(value)
+		}
+		v = append(v, item)
 	}
-	writeJSON(w, 200, map[string]any{"variables": v})
+	volumes := []map[string]any{}
+	attachments := []DeviceAttachment{}
+	bindings := map[string]map[string]any{}
+	if rows, err := s.DB.QueryContext(r.Context(), `SELECT service,target_path,device_id FROM application_device_bindings WHERE application_id=?`, appID(r)); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var service, target, id string
+			if rows.Scan(&service, &target, &id) == nil {
+				bindings[service+"\x00"+target] = map[string]any{"deviceId": id}
+			}
+		}
+	}
+	if s.AppsRoot != "" {
+		compose, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "source", "compose.yaml"))
+		if err == nil {
+			if variables, err := ExtractComposeVariables(compose); err == nil {
+				for _, variable := range variables {
+					if configured[variable.Name] {
+						for _, item := range v {
+							if item["name"] == variable.Name {
+								item["required"] = variable.Required
+								item["hasDefault"] = variable.HasDefault
+							}
+						}
+						continue
+					}
+					v = append(v, map[string]any{"name": variable.Name, "isSecret": false, "configured": false, "required": variable.Required, "hasDefault": variable.HasDefault})
+				}
+			}
+			if names, err := NamedVolumeNames(compose); err == nil {
+				for _, name := range names {
+					volumes = append(volumes, map[string]any{"name": name})
+				}
+			}
+			attachments, _ = ComposeDeviceAttachments(compose)
+		}
+	}
+	sort.Slice(v, func(i, j int) bool { return v[i]["name"].(string) < v[j]["name"].(string) })
+	writeJSON(w, 200, map[string]any{
+		"variables": v,
+		"volumes":   volumes,
+		"network":   map[string]any{"name": EdgeNetworkName(appID(r)), "purpose": "公開サービスとLWSのReverse Proxyだけを接続"},
+		"devices": func() []map[string]any {
+			result := []map[string]any{}
+			for _, a := range attachments {
+				item := map[string]any{"service": a.Service, "sourceHint": a.Source, "targetPath": a.Target, "permissions": a.Permissions, "configured": false}
+				if b, ok := bindings[a.Service+"\x00"+a.Target]; ok {
+					item["configured"] = true
+					item["deviceId"] = b["deviceId"]
+				}
+				result = append(result, item)
+			}
+			return result
+		}(),
+		"deviceAccess": map[string]any{"allowed": len(attachments) > 0, "message": func() string {
+			if len(attachments) == 0 {
+				return "Composeはデバイスを要求していません"
+			}
+			return "ComposeのデバイスはLWSデバイスプールから設定します"
+		}()},
+		"ready": configurationReady(v, attachments, bindings),
+	})
+}
+
+func configurationReady(vars []map[string]any, devices []DeviceAttachment, bindings map[string]map[string]any) bool {
+	for _, v := range vars {
+		if required, _ := v["required"].(bool); required {
+			configured, _ := v["configured"].(bool)
+			if !configured {
+				return false
+			}
+		}
+	}
+	for _, d := range devices {
+		if _, ok := bindings[d.Service+"\x00"+d.Target]; !ok {
+			return false
+		}
+	}
+	return true
 }
 func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 	if s.DB == nil || s.DB.Ping() != nil {
@@ -63,8 +256,14 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		Variables map[string]struct {
 			Value  string `json:"value"`
 			Secret bool   `json:"secret"`
+			Keep   bool   `json:"keep"`
 		} `json:"variables"`
-		RequestID string `json:"requestId"`
+		RequestID      string `json:"requestId"`
+		DeviceBindings []struct {
+			Service    string `json:"service"`
+			TargetPath string `json:"targetPath"`
+			DeviceID   string `json:"deviceId"`
+		} `json:"deviceBindings"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "JSONが不正です", "body")
@@ -74,16 +273,43 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
-	type variableValue struct {
-		name   string
-		value  any
-		secret bool
+	prepared := make([]configurationVariableValue, 0, len(req.Variables))
+	if s.AppsRoot != "" {
+		data, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "source", "compose.yaml"))
+		if err == nil {
+			attachments, _ := ComposeDeviceAttachments(data)
+			wanted := map[string]bool{}
+			for _, a := range attachments {
+				wanted[a.Service+"\x00"+a.Target] = true
+			}
+			seen := map[string]bool{}
+			for _, b := range req.DeviceBindings {
+				key := b.Service + "\x00" + b.TargetPath
+				if !wanted[key] || seen[key] || b.DeviceID == "" {
+					writeAPIError(w, 400, "INVALID_ARGUMENT", "Composeのdevice割り当てが不正です", "deviceBindings")
+					return
+				}
+				seen[key] = true
+				var status string
+				if err := s.DB.QueryRowContext(r.Context(), `SELECT status FROM lws_devices WHERE id=?`, b.DeviceID).Scan(&status); err != nil || status != "CONNECTED" {
+					writeAPIError(w, 400, "DEVICE_UNAVAILABLE", "選択されたLWSデバイスは接続されていません", "deviceBindings")
+					return
+				}
+			}
+		}
 	}
-	prepared := make([]variableValue, 0, len(req.Variables))
 	for n, v := range req.Variables {
 		if err := ValidateVariableName(n); err != nil {
 			writeValidationError(w, err)
 			return
+		}
+		if v.Keep {
+			if !v.Secret {
+				writeAPIError(w, 400, "INVALID_ARGUMENT", "secret以外の環境変数は保持指定できません", n)
+				return
+			}
+			prepared = append(prepared, configurationVariableValue{name: n, secret: true, keep: true})
+			continue
 		}
 		if v.Value == "" {
 			writeAPIError(w, 400, "INVALID_ARGUMENT", "環境変数の値が必要です", n)
@@ -106,7 +332,7 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		prepared = append(prepared, variableValue{name: n, value: stored, secret: v.Secret})
+		prepared = append(prepared, configurationVariableValue{name: n, value: stored, secret: v.Secret})
 	}
 	payload, _ := json.Marshal(req.Variables)
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(payload))
@@ -136,11 +362,43 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, variable := range prepared {
+		if variable.keep {
+			var exists int
+			if err := tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM application_variables WHERE application_id=? AND name=? AND is_secret=1)`, appID(r), variable.name).Scan(&exists); err != nil || exists == 0 {
+				_ = tx.Rollback()
+				_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "secretの状態が変更されています")
+				writeAPIError(w, http.StatusConflict, "CONFLICT", "secretの状態が変更されています。設定を読み込み直してください", variable.name)
+				return
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(r.Context(), `INSERT INTO application_variables(application_id,name,value,is_secret,updated_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(application_id,name) DO UPDATE SET value=excluded.value,is_secret=excluded.is_secret,updated_at=excluded.updated_at`, appID(r), variable.name, variable.value, variable.secret); err != nil {
 			_ = tx.Rollback()
 			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "設定を保存できません")
 			writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
 			return
+		}
+	}
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM application_variables WHERE application_id=? AND name NOT IN (SELECT value FROM json_each(?))`, appID(r), variableNamesJSON(prepared)); err != nil {
+		_ = tx.Rollback()
+		_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "設定を保存できません")
+		writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
+		return
+	}
+	// Omitted bindings mean that this is an environment-only save.  They must not
+	// silently detach hardware selected in an earlier settings update.
+	if req.DeviceBindings != nil {
+		if _, err := tx.ExecContext(r.Context(), `DELETE FROM application_device_bindings WHERE application_id=?`, appID(r)); err != nil {
+			_ = tx.Rollback()
+			writeAPIError(w, 500, "DATABASE_ERROR", "デバイス設定を保存できません", "")
+			return
+		}
+		for _, b := range req.DeviceBindings {
+			if _, err := tx.ExecContext(r.Context(), `INSERT INTO application_device_bindings(application_id,service,target_path,device_id) VALUES(?,?,?,?)`, appID(r), b.Service, b.TargetPath, b.DeviceID); err != nil {
+				_ = tx.Rollback()
+				writeAPIError(w, 500, "DATABASE_ERROR", "デバイス設定を保存できません", "")
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -156,6 +414,15 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 202, map[string]string{"name": "operations/" + op.ID})
+}
+
+func variableNamesJSON(variables []configurationVariableValue) string {
+	names := make([]string, 0, len(variables))
+	for _, variable := range variables {
+		names = append(names, variable.name)
+	}
+	data, _ := json.Marshal(names)
+	return string(data)
 }
 func (s *Server) operationRoute(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(r.URL.Path, ":watch") {
@@ -366,7 +633,7 @@ func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	if kind == "REGISTER" && registrationState != "UNREGISTERED" {
 		return Operation{}, errors.New("再登録は登録解除済みアプリだけに実行できます")
 	}
-	if kind != "REGISTER" && kind != "PURGE" && registrationState != "ACTIVE" {
+	if kind != "REGISTER" && kind != "PURGE" && registrationState != "ACTIVE" && !(kind == "START" && registrationState == "CONFIGURING") {
 		return Operation{}, errors.New("登録解除済みアプリにはこの操作を実行できません")
 	}
 	var request struct {
