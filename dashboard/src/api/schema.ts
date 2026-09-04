@@ -36,6 +36,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resource-pools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listResourcePools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resource-pools/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPoolDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications": {
         parameters: {
             query?: never;
@@ -362,6 +394,10 @@ export interface components {
                 configured: boolean;
                 deviceId?: string;
             }[];
+            deviceAccess: {
+                allowed: boolean;
+                message: string;
+            };
             ready: boolean;
         };
         CreateApplicationRequest: {
@@ -399,6 +435,45 @@ export interface components {
             requestId: string;
             /** @constant */
             confirm: true;
+        };
+        ResourcePools: {
+            devices: components["schemas"]["PoolDevice"][];
+            physicalDevices: components["schemas"]["PhysicalDeviceResource"][];
+            volumes: components["schemas"]["PoolResource"][];
+            networks: components["schemas"]["PoolResource"][];
+        };
+        PoolDevice: {
+            id: string;
+            name: string;
+            stableId: string;
+            currentPath: string;
+            status: string;
+            metadata: {
+                [key: string]: string;
+            };
+        };
+        PhysicalDeviceResource: {
+            stableId: string;
+            currentPath: string;
+            name: string;
+            /** @enum {string} */
+            category: "user" | "system";
+            metadata: {
+                [key: string]: string;
+            };
+        };
+        PoolResource: {
+            name: string;
+            application: string;
+            applicationName: string;
+            status: string;
+        };
+        CreatePoolDeviceRequest: {
+            name: string;
+            candidateStableId: string;
+        };
+        PoolDeviceReference: {
+            id: string;
         };
         Variable: {
             value?: string;
@@ -457,6 +532,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listResourcePools: {
+        parameters: {
+            query?: {
+                includeSystem?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description LWSリソースプール */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourcePools"];
+                };
+            };
+        };
+    };
+    createPoolDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePoolDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description デバイス登録完了 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolDeviceReference"];
+                };
             };
         };
     };

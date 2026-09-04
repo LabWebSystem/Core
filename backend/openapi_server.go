@@ -67,6 +67,12 @@ func (a generatedAPI) HealthReady(w http.ResponseWriter, _ *http.Request) {
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
 }
+func (a generatedAPI) ListResourcePools(w http.ResponseWriter, r *http.Request, _ ListResourcePoolsParams) {
+	a.server.getResourcePools(w, r)
+}
+func (a generatedAPI) CreatePoolDevice(w http.ResponseWriter, r *http.Request) {
+	a.server.createPoolDevice(w, r)
+}
 func (a generatedAPI) GetOperation(w http.ResponseWriter, r *http.Request, operation string) {
 	a.server.getOperation(w, withOperationPath(r, operation))
 }

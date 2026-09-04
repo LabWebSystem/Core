@@ -6,24 +6,7 @@ export type Configuration = components["schemas"]["ConfigurationResponse"];
 export type LogEntry = components["schemas"]["LogEntry"];
 type LogEntryList = components["schemas"]["LogEntryList"];
 export type LogQuery = { limit?: number; startAt?: string; endAt?: string };
-export type ResourcePools = {
-  devices: {
-    id: string;
-    name: string;
-    stableId: string;
-    currentPath: string;
-    status: string;
-  }[];
-  physicalDevices: {
-    stableId: string;
-    currentPath: string;
-    name: string;
-    category: "user" | "system";
-    metadata: Record<string, string>;
-  }[];
-  volumes: { name: string; applicationName: string; status: string }[];
-  networks: { name: string; applicationName: string; status: string }[];
-};
+export type ResourcePools = components["schemas"]["ResourcePools"];
 type OperationEvent = {
   type: Operation["state"];
   data?: { message?: string; phase?: string };

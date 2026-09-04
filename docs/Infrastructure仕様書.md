@@ -109,6 +109,7 @@ docker compose --project-name lws-app-<app-id> \
 - `docker compose config --format json`の前に、source treeのsymlink、`include`、`extends`、`env_file`、`label_file`、`volumes_from`、ファイル型`configs`/`secrets`、`build.additional_contexts`、リモートGit build contextを拒否する。
 - `build.context`と`build.dockerfile`は、実体パスがsource root配下の場合だけ許可する。絶対パス、root外へ解決される相対パス、external network、external volumeを拒否する。パスを丸めたりComposeを書き換えたりして受理しない。
 - 事前検査を通過したものだけを`docker compose config --format json`で正規化し、manifest指定serviceの存在を確認する。公開serviceやportは推測しない。
+- 初回登録はsourceとmanifestの検証後に`CONFIGURING`へ遷移し、containerを起動しない。Dashboardまたは設定APIで必須環境変数とdevice bindingを保存した後の開始操作だけがComposeを起動する。
 - 実効Composeではbind mount、匿名volume、tmpfs、host port、host network/PID/IPC、privileged、Docker socket、named volume以外のmountを拒否する。`devices`は例外であり、Composeのcontainer側targetと権限を保ちつつ、LWSデバイスプールから解決した現在の`/dev` pathだけを生成overrideへ渡す。
 
 ## 7. ライフサイクルと禁止事項

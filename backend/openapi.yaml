@@ -17,6 +17,26 @@ paths:
       responses:
         '200': { description: 利用可能 }
         '503': { description: 利用不可 }
+  /resource-pools:
+    get:
+      operationId: listResourcePools
+      parameters:
+        - name: includeSystem
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { description: LWSリソースプール, content: { application/json: { schema: { $ref: '#/components/schemas/ResourcePools' } } } }
+  /resource-pools/devices:
+    post:
+      operationId: createPoolDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePoolDeviceRequest' }
+      responses:
+        '201': { description: デバイス登録完了, content: { application/json: { schema: { $ref: '#/components/schemas/PoolDeviceReference' } } } }
   /applications:
     get:
       operationId: listApplications
@@ -196,7 +216,7 @@ components:
         liveCursor: { type: string }
     ConfigurationResponse:
       type: object
-      required: [variables, volumes, network, devices, ready]
+      required: [variables, volumes, network, devices, deviceAccess, ready]
       properties:
         variables:
           type: array
@@ -235,6 +255,12 @@ components:
               permissions: { type: string }
               configured: { type: boolean }
               deviceId: { type: string }
+        deviceAccess:
+          type: object
+          required: [allowed, message]
+          properties:
+            allowed: { type: boolean }
+            message: { type: string }
         ready: { type: boolean }
     CreateApplicationRequest:
       type: object
@@ -277,6 +303,52 @@ components:
       properties:
         requestId: { type: string, format: uuid }
         confirm: { type: boolean, const: true }
+    ResourcePools:
+      type: object
+      required: [devices, physicalDevices, volumes, networks]
+      properties:
+        devices: { type: array, items: { $ref: '#/components/schemas/PoolDevice' } }
+        physicalDevices: { type: array, items: { $ref: '#/components/schemas/PhysicalDeviceResource' } }
+        volumes: { type: array, items: { $ref: '#/components/schemas/PoolResource' } }
+        networks: { type: array, items: { $ref: '#/components/schemas/PoolResource' } }
+    PoolDevice:
+      type: object
+      required: [id, name, stableId, currentPath, status, metadata]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        stableId: { type: string }
+        currentPath: { type: string }
+        status: { type: string }
+        metadata: { type: object, additionalProperties: { type: string } }
+    PhysicalDeviceResource:
+      type: object
+      required: [stableId, currentPath, name, category, metadata]
+      properties:
+        stableId: { type: string }
+        currentPath: { type: string }
+        name: { type: string }
+        category: { type: string, enum: [user, system] }
+        metadata: { type: object, additionalProperties: { type: string } }
+    PoolResource:
+      type: object
+      required: [name, application, applicationName, status]
+      properties:
+        name: { type: string }
+        application: { type: string }
+        applicationName: { type: string }
+        status: { type: string }
+    CreatePoolDeviceRequest:
+      type: object
+      required: [name, candidateStableId]
+      properties:
+        name: { type: string, minLength: 1 }
+        candidateStableId: { type: string, minLength: 1 }
+    PoolDeviceReference:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
     Variable:
       type: object
       required: [secret]

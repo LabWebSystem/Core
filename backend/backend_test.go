@@ -86,7 +86,7 @@ func TestOpenAPIContractAndGeneratedRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.OpenAPI != "3.1.0" || spec.Paths == nil || spec.Paths.Find("/applications") == nil {
+	if spec.OpenAPI != "3.1.0" || spec.Paths == nil || spec.Paths.Find("/applications") == nil || spec.Paths.Find("/resource-pools") == nil || spec.Paths.Find("/resource-pools/devices") == nil {
 		t.Fatalf("invalid generated OpenAPI contract: version=%s", spec.OpenAPI)
 	}
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))

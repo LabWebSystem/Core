@@ -48,6 +48,8 @@ func (s *Server) Handler() http.Handler {
 	// patternとして受け付けないため、生成wrapperの通常routeと分離する。
 	mux.HandleFunc("GET /api/v1/health/live", wrapper.HealthLive)
 	mux.HandleFunc("GET /api/v1/health/ready", wrapper.HealthReady)
+	mux.HandleFunc("GET /api/v1/resource-pools", wrapper.ListResourcePools)
+	mux.HandleFunc("POST /api/v1/resource-pools/devices", wrapper.CreatePoolDevice)
 	mux.HandleFunc("GET /api/v1/applications", wrapper.ListApplications)
 	mux.HandleFunc("POST /api/v1/applications", wrapper.CreateApplication)
 	mux.HandleFunc("DELETE /api/v1/applications/{application}", wrapper.UnregisterApplication)
@@ -71,8 +73,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
 	// custom methodとSSE tail routeはURL suffixを検査する既存dispatcherへ委譲する。
 	mux.HandleFunc("POST /api/v1/applications/", s.appOperation)
-	mux.HandleFunc("GET /api/v1/resource-pools", s.getResourcePools)
-	mux.HandleFunc("POST /api/v1/resource-pools/devices", s.createPoolDevice)
 	return requestBoundary(openAPIValidation(mux), s.AllowedHost, s.AllowedOrigin)
 }
 
