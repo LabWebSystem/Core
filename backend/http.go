@@ -107,7 +107,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
+	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, compose_file, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ一覧を取得できません", "")
 		return
@@ -115,8 +115,8 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, sub, repo, ref, desired, observed, state, latestError, updated string
-		if err := rows.Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &latestError, &updated); err != nil {
+		var id, sub, repo, ref, composeFile, desired, observed, state, latestError, updated string
+		if err := rows.Scan(&id, &sub, &repo, &ref, &composeFile, &desired, &observed, &state, &latestError, &updated); err != nil {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
@@ -130,7 +130,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 			return
 		}
 		items = append(items, map[string]any{
-			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref,
+			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "composeFile": composeFile,
 			"desiredState": desired, "observedState": observed, "registrationState": state,
 			"observedAt": time.Now().UTC().Format(time.RFC3339Nano), "reconciling": activeOperation != "",
 			"latestOperation": operationResourceName(latestOperation), "etag": fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed))),
@@ -153,6 +153,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		RepositoryURL string `json:"repositoryUrl"`
 		Ref           string `json:"ref"`
 		Subdomain     string `json:"subdomain"`
+		ComposeFile   string `json:"composeFile"`
 		RequestID     string `json:"requestId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -161,6 +162,11 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := ValidateRepositoryURL(req.RepositoryURL); err != nil {
 		writeValidationError(w, err)
+		return
+	}
+	req.RepositoryURL, req.Ref = RepositoryURLAndRef(req.RepositoryURL, req.Ref)
+	if req.ComposeFile != "" && !containsComposeFile(req.ComposeFile) {
+		writeAPIError(w, 400, "INVALID_ARGUMENT", "Composeファイル名が不正です", "composeFile")
 		return
 	}
 	if err := ValidateSubdomain(req.Subdomain); err != nil {
@@ -179,7 +185,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
-	fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(req.RepositoryURL+"\n"+req.Ref+"\n"+req.Subdomain)))
+	fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(req.RepositoryURL+"\n"+req.Ref+"\n"+req.Subdomain+"\n"+req.ComposeFile)))
 	var existingID, existingKind, existingFingerprint string
 	err := s.DB.QueryRowContext(r.Context(), `SELECT id,kind,request_fingerprint FROM operations WHERE request_id=?`, req.RequestID).Scan(&existingID, &existingKind, &existingFingerprint)
 	if err == nil {
@@ -201,7 +207,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ登録を開始できません", "")
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(), `INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES(?,?,?,?,datetime('now'),datetime('now'))`, id, req.Subdomain, req.RepositoryURL, req.Ref); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `INSERT INTO applications(id,subdomain,repository_url,git_ref,compose_file,created_at,updated_at) VALUES(?,?,?,?,?,datetime('now'),datetime('now'))`, id, req.Subdomain, req.RepositoryURL, req.Ref, req.ComposeFile); err != nil {
 		_ = tx.Rollback()
 		writeAPIError(w, 409, "ALREADY_EXISTS", "同じsubdomainのアプリが既に存在します", "subdomain")
 		return

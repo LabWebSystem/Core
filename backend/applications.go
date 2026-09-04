@@ -176,7 +176,9 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if s.AppsRoot != "" {
-		compose, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "source", "compose.yaml"))
+		composeFile := "compose.yaml"
+		_ = s.DB.QueryRow(`SELECT compose_file FROM applications WHERE id=?`, appID(r)).Scan(&composeFile)
+		compose, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "source", composeFile))
 		if err == nil {
 			if variables, err := ExtractComposeVariables(compose); err == nil {
 				for _, variable := range variables {
@@ -185,11 +187,18 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 							if item["name"] == variable.Name {
 								item["required"] = variable.Required
 								item["hasDefault"] = variable.HasDefault
+								if variable.HasDefault {
+									item["defaultValue"] = variable.Default
+								}
 							}
 						}
 						continue
 					}
-					v = append(v, map[string]any{"name": variable.Name, "isSecret": false, "configured": false, "required": variable.Required, "hasDefault": variable.HasDefault})
+					item := map[string]any{"name": variable.Name, "isSecret": false, "configured": false, "required": variable.Required, "hasDefault": variable.HasDefault}
+					if variable.HasDefault {
+						item["defaultValue"] = variable.Default
+					}
+					v = append(v, item)
 				}
 			}
 			if names, err := NamedVolumeNames(compose); err == nil {

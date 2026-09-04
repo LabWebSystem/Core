@@ -440,11 +440,39 @@ function RegisterForm({
     repositoryUrl: string;
     ref: string;
     subdomain: string;
+    composeFile?: string;
   }) => void;
 }) {
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [ref, setRef] = useState("main");
   const [subdomain, setSubdomain] = useState("test-app");
+  const [composeFile, setComposeFile] = useState("compose.yaml");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [composeFiles, setComposeFiles] = useState<string[]>([]);
+  const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const repositoryReady = /^https:\/\/github\.com\/[^/]+\/[^/]+/.test(repositoryUrl);
+  useEffect(() => {
+    const match = repositoryUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/(.*))?\/?$/);
+    if (!match) { setBranches([]); setComposeFiles([]); setLookupState("idle"); return; }
+    const [, owner, name, urlRef] = match;
+    if (urlRef) setRef(decodeURIComponent(urlRef));
+    setLookupState("loading");
+    let active = true;
+    void Promise.all([
+      fetch(`https://api.github.com/repos/${owner}/${name}/branches?per_page=100`).then((r) => r.ok ? r.json() : []),
+      fetch(`https://api.github.com/repos/${owner}/${name}/contents?ref=${encodeURIComponent(urlRef || ref)}`).then((r) => r.ok ? r.json() : []),
+    ]).then(([branchData, fileData]) => {
+      if (!active) return;
+      const nextBranches = Array.isArray(branchData) ? branchData.map((item: { name: string }) => item.name) : [];
+      const names = Array.isArray(fileData) ? fileData.map((item: { name: string }) => item.name).filter((name: string) => ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].includes(name)) : [];
+      setBranches(nextBranches);
+      setComposeFiles(names);
+      setSubdomain(name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 62) || "app");
+      if (names.length && !names.includes(composeFile)) setComposeFile(names[0]);
+      setLookupState("ready");
+    }).catch(() => { if (active) setLookupState("error"); });
+    return () => { active = false; };
+  }, [repositoryUrl]);
   return (
     <section className="empty-workbench">
       <div className="empty-icon">
@@ -459,7 +487,7 @@ function RegisterForm({
         className="register-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit({ repositoryUrl, ref, subdomain });
+          onSubmit({ repositoryUrl, ref, subdomain, ...(composeFile !== "compose.yaml" ? { composeFile } : {}) });
         }}
       >
         <label>
@@ -475,11 +503,7 @@ function RegisterForm({
         <div className="form-row">
           <label>
             ブランチまたはタグ
-            <input
-              required
-              value={ref}
-              onChange={(e) => setRef(e.target.value)}
-            />
+            {branches.length ? <select value={ref} onChange={(e) => setRef(e.target.value)}>{branches.map((branch) => <option key={branch}>{branch}</option>)}</select> : <input required value={ref} onChange={(e) => setRef(e.target.value)} />}
           </label>
           <label>
             公開名
@@ -491,6 +515,15 @@ function RegisterForm({
             />
           </label>
         </div>
+        <label>
+          使用するComposeファイル
+          {repositoryReady ? <select value={composeFile} onChange={(e) => setComposeFile(e.target.value)} disabled={lookupState === "loading"}>
+            {(composeFiles.length ? composeFiles : ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]).map((file) => <option key={file}>{file}</option>)}
+          </select> : <input value={composeFile} readOnly aria-label="使用するComposeファイル" />}
+          <small className="field-hint">優先順位: compose.yaml → compose.yml → docker-compose.yaml → docker-compose.yml</small>
+        </label>
+        {lookupState === "loading" && <p className="field-hint">リポジトリを確認しています…</p>}
+        {lookupState === "error" && <p className="field-hint error-text">リポジトリ情報を取得できません。URLと公開設定を確認してください。</p>}
         <button className="primary" disabled={busy}>
           {busy ? (
             <LoaderCircle className="spin" size={18} />
@@ -712,7 +745,7 @@ function AppWorkbench({
       .filter((item) => !removed.includes(item.name))
       .map((item) => ({
         ...item,
-        value: values[item.name]?.value ?? item.value ?? "",
+        value: values[item.name]?.value ?? item.value ?? item.defaultValue ?? "",
         edited: Boolean(values[item.name]),
       })),
     ...(newName
@@ -860,6 +893,10 @@ function AppWorkbench({
         <div>
           <span>参照</span>
           <code>{app.ref}</code>
+        </div>
+        <div>
+          <span>Composeファイル</span>
+          <code>{app.composeFile ?? "compose.yaml"}</code>
         </div>
         <div>
           <span>実行状態</span>

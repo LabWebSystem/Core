@@ -333,6 +333,8 @@ export interface components {
         };
         Application: {
             name: string;
+            /** @enum {string} */
+            composeFile?: "compose.yaml" | "compose.yml" | "docker-compose.yaml" | "docker-compose.yml";
             subdomain: string;
             repositoryUrl: string;
             ref: string;
@@ -376,6 +378,7 @@ export interface components {
                 isSecret: boolean;
                 configured: boolean;
                 value?: string;
+                defaultValue?: string;
                 required: boolean;
                 hasDefault: boolean;
             }[];
@@ -405,6 +408,8 @@ export interface components {
             repositoryUrl: string;
             ref: string;
             subdomain: string;
+            /** @enum {string} */
+            composeFile?: "compose.yaml" | "compose.yml" | "docker-compose.yaml" | "docker-compose.yml";
             /** Format: uuid */
             requestId: string;
         };
@@ -477,6 +482,7 @@ export interface components {
         };
         Variable: {
             value?: string;
+            defaultValue?: string;
             secret: boolean;
             keep?: boolean;
         };

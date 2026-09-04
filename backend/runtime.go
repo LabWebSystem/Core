@@ -62,9 +62,9 @@ func (e *RuntimeExecutor) ReconcileStartup(ctx context.Context) error {
 }
 
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
-	var repo, ref, state, desired, previousName, previousDescription, previousRevision, previousService string
+	var repo, ref, state, desired, previousName, previousDescription, previousRevision, previousService, composeFile string
 	var previousPort int
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &desired, &previousName, &previousDescription, &previousRevision, &previousService, &previousPort); err != nil {
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port,compose_file FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &desired, &previousName, &previousDescription, &previousRevision, &previousService, &previousPort, &composeFile); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
 	}
 	root := filepath.Join(e.Root, op.ApplicationID)
@@ -125,9 +125,21 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := ValidateRepositoryURL(repo); err != nil {
 			return err
 		}
-		if err := CloneAndValidate(ctx, e.Runner, repo, ref, source); err != nil {
+		requestedCompose := composeFile
+		if op.Payload != "" {
+			var p struct {
+				ComposeFile string `json:"composeFile"`
+			}
+			_ = json.Unmarshal([]byte(op.Payload), &p)
+			if p.ComposeFile != "" {
+				requestedCompose = p.ComposeFile
+			}
+		}
+		selectedCompose, err := CloneAndValidateWithCompose(ctx, e.Runner, repo, ref, requestedCompose, source)
+		if err != nil {
 			return err
 		}
+		composeFile = selectedCompose
 		reportOperationPhase(ctx, "runtime_prepare", "アプリの実行設定を準備しています")
 		sourceSwapActive := true
 		metadataUpdated := false
@@ -159,10 +171,11 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err != nil {
 			return err
 		}
-		if err := e.GenerateOverrideFromCompose(op.ApplicationID, manifest.Public.Service, filepath.Join(source, "compose.yaml"), filepath.Join(runtime, "lws.override.yaml")); err != nil {
+		composePath := filepath.Join(source, composeFile)
+		if err := e.GenerateOverrideFromCompose(op.ApplicationID, manifest.Public.Service, composePath, filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
-		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, manifest.Public.Service, manifest.Public.Port, op.ApplicationID); err != nil {
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,compose_file=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, manifest.Public.Service, manifest.Public.Port, composeFile, op.ApplicationID); err != nil {
 			return err
 		}
 		metadataUpdated = true
@@ -176,7 +189,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			sourceSwapActive = false
 			return nil
 		}
-		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, "compose.yaml")); err != nil {
+		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, composeFile)); err != nil {
 			return err
 		}
 		reportOperationPhase(ctx, "compose_up", "Docker containerを作成しています")
@@ -193,10 +206,10 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		sourceSwapActive = false
 		return nil
 	case "START", "REBUILD":
-		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, "compose.yaml")); err != nil {
+		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, composeFile)); err != nil {
 			return err
 		}
-		if err := e.GenerateOverrideFromCompose(op.ApplicationID, previousService, filepath.Join(source, "compose.yaml"), filepath.Join(runtime, "lws.override.yaml")); err != nil {
+		if err := e.GenerateOverrideFromCompose(op.ApplicationID, previousService, filepath.Join(source, composeFile), filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {

@@ -58,7 +58,7 @@ export const api = {
     request<ResourcePools>(
       `/resource-pools${includeSystem ? "?includeSystem=true" : ""}`,
     ),
-  create: (input: { repositoryUrl: string; ref: string; subdomain: string }) =>
+  create: (input: { repositoryUrl: string; ref: string; subdomain: string; composeFile?: string }) =>
     request<{ name: string }>("/applications", {
       method: "POST",
       body: JSON.stringify({ ...input, requestId: requestId() }),

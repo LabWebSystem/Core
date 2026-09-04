@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 7 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 8 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,7 +35,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 7 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 8 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }

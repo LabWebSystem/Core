@@ -177,6 +177,7 @@ components:
       required: [name, subdomain, repositoryUrl, ref, desiredState, observedState, registrationState, observedAt, reconciling, etag]
       properties:
         name: { type: string, pattern: '^applications/.+$' }
+        composeFile: { type: string, enum: [compose.yaml, compose.yml, docker-compose.yaml, docker-compose.yml] }
         subdomain: { type: string }
         repositoryUrl: { type: string }
         ref: { type: string }
@@ -228,6 +229,7 @@ components:
               isSecret: { type: boolean }
               configured: { type: boolean }
               value: { type: string }
+              defaultValue: { type: string }
               required: { type: boolean }
               hasDefault: { type: boolean }
         volumes:
@@ -269,6 +271,7 @@ components:
         repositoryUrl: { type: string, format: uri }
         ref: { type: string, minLength: 1 }
         subdomain: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
+        composeFile: { type: string, enum: [compose.yaml, compose.yml, docker-compose.yaml, docker-compose.yml] }
         requestId: { type: string, format: uuid }
     UpdateApplicationRequest:
       type: object
@@ -354,6 +357,7 @@ components:
       required: [secret]
       properties:
         value: { type: string }
+        defaultValue: { type: string }
         secret: { type: boolean }
         keep: { type: boolean }
     Error:
