@@ -55,7 +55,12 @@ func (s UdevDeviceScanner) Scan(ctx context.Context, includeSystem bool) ([]Phys
 		}
 	}
 	result := []PhysicalDevice{}
+	seenPaths := map[string]struct{}{}
 	for _, path := range paths {
+		if _, seen := seenPaths[path]; seen {
+			continue
+		}
+		seenPaths[path] = struct{}{}
 		out, err := s.Runner.Run(ctx, "udevadm", "info", "--query=property", "--name="+path)
 		if err != nil {
 			continue
@@ -77,6 +82,9 @@ func (s UdevDeviceScanner) Scan(ctx context.Context, includeSystem bool) ([]Phys
 		stable := properties["ID_SERIAL_SHORT"]
 		if stable == "" {
 			stable = properties["ID_SERIAL"]
+		}
+		if stable == "noserial" || stable == "no_serial" || stable == "unknown" || stable == "UNKNOWN" {
+			stable = ""
 		}
 		if stable != "" {
 			stable = "usb:" + stable

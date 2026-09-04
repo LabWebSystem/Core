@@ -520,14 +520,11 @@ function ResourcePoolView({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showSystem, setShowSystem] = useState(false);
-  const systemPools = useQuery({
-    queryKey: ["resource-pools", "system"],
-    queryFn: () => api.resourcePools(true),
-    enabled: showSystem,
+  const visiblePools = useQuery({
+    queryKey: ["resource-pools", showSystem],
+    queryFn: () => api.resourcePools(showSystem),
   });
-  const candidates = showSystem
-    ? (systemPools.data?.physicalDevices ?? pools?.physicalDevices ?? [])
-    : (pools?.physicalDevices ?? []);
+  const candidates = visiblePools.data?.physicalDevices ?? [];
   if (loading)
     return (
       <section className="empty-workbench">
@@ -588,7 +585,10 @@ function ResourcePoolView({
           >
             <option value="">検出済みデバイスを選択</option>
             {candidates.map((item) => (
-              <option key={item.stableId} value={item.stableId}>
+              <option
+                key={`${item.stableId}:${item.currentPath}`}
+                value={item.stableId}
+              >
                 {item.name} · {item.currentPath}
                 {item.metadata.identity === "usb topology"
                   ? "（serialなし）"
@@ -623,7 +623,12 @@ function ResourcePoolView({
         {saveError && <p className="settings-note">{saveError}</p>}
         <button
           className="retry-button"
-          onClick={() => setShowSystem((current) => !current)}
+          onClick={() => {
+            const next = !showSystem;
+            setShowSystem(next);
+            setCandidate("");
+            if (!next) void retry();
+          }}
         >
           {showSystem ? "ユーザーデバイスだけを表示" : "システムデバイスを表示"}
         </button>
