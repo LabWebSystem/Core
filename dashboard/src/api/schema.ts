@@ -472,6 +472,8 @@ export interface components {
             application: string;
             applicationName: string;
             status: string;
+            /** @enum {string} */
+            kind?: "edge" | "compose";
         };
         CreatePoolDeviceRequest: {
             name: string;

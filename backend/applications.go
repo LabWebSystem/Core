@@ -67,24 +67,29 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	volumes, networks := []map[string]any{}, []map[string]any{}
-	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
+	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain,compose_file FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
 	if err == nil {
 		defer apps.Close()
 		for apps.Next() {
-			var id, sub string
-			if apps.Scan(&id, &sub) != nil {
+			var id, sub, composeFile string
+			if apps.Scan(&id, &sub, &composeFile) != nil {
 				continue
 			}
 			if s.AppsRoot != "" {
-				if data, e := os.ReadFile(filepath.Join(s.AppsRoot, id, "source", "compose.yaml")); e == nil {
+				if data, e := os.ReadFile(filepath.Join(s.AppsRoot, id, "source", composeFile)); e == nil {
 					if names, e := NamedVolumeNames(data); e == nil {
 						for _, n := range names {
 							volumes = append(volumes, map[string]any{"name": n, "application": "applications/" + id, "applicationName": sub, "status": "managed"})
 						}
 					}
+					if names, e := ComposeNetworkNames(data, ProjectName(id)); e == nil {
+						for _, name := range names {
+							networks = append(networks, map[string]any{"name": name, "application": "applications/" + id, "applicationName": sub, "status": "managed", "kind": "compose"})
+						}
+					}
 				}
 			}
-			networks = append(networks, map[string]any{"name": EdgeNetworkName(id), "application": "applications/" + id, "applicationName": sub, "status": "managed"})
+			networks = append(networks, map[string]any{"name": EdgeNetworkName(id), "application": "applications/" + id, "applicationName": sub, "status": "managed", "kind": "edge"})
 		}
 	}
 	writeJSON(w, 200, map[string]any{"devices": devices, "physicalDevices": candidates, "volumes": volumes, "networks": networks})

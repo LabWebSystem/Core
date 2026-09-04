@@ -479,6 +479,14 @@ input:focus {
 .pool-row small {
   overflow-wrap: anywhere;
 }
+.pool-kind {
+  display: inline-block;
+  min-width: 4.5rem;
+  margin-right: 8px;
+  color: #286653;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
 .device-register {
   display: grid;
   grid-template-columns: minmax(140px, 0.7fr) minmax(220px, 1.3fr) auto;

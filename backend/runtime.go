@@ -354,7 +354,11 @@ func (e *RuntimeExecutor) markApplicationState(ctx context.Context, id, desired,
 	return err
 }
 func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime string, action ...string) (runErr error) {
-	compose := filepath.Join(source, "compose.yaml")
+	composeFile := "compose.yaml"
+	if err := e.DB.QueryRow(`SELECT compose_file FROM applications WHERE id=?`, id).Scan(&composeFile); err != nil || !containsComposeFile(composeFile) {
+		composeFile = "compose.yaml"
+	}
+	compose := filepath.Join(source, composeFile)
 	override := filepath.Join(runtime, "lws.override.yaml")
 	env := filepath.Join(runtime, "app.env")
 	if _, err := os.Stat(compose); err != nil {
@@ -368,7 +372,7 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 			reportOperationPhase(ctx, "compose_execute", "Compose定義がないため実行環境を確認しました")
 			return nil
 		}
-		return fmt.Errorf("compose.yamlが見つかりません")
+		return fmt.Errorf("%sが見つかりません", composeFile)
 	}
 	if len(action) > 0 && action[0] == "up" {
 		reportOperationPhase(ctx, "environment_prepare", "環境変数を準備しています")
@@ -568,6 +572,15 @@ func (e *RuntimeExecutor) GenerateOverrideFromCompose(id, service, compose strin
 		return err
 	}
 	serviceModels := model["services"].(map[string]any)
+	if networks, err := ComposeServiceNetworkNames(data, service); err == nil {
+		publicModel := serviceModels[service].(map[string]any)
+		publicNetworks := map[string]any{}
+		for _, network := range networks {
+			publicNetworks[network] = map[string]any{}
+		}
+		publicNetworks["lws-edge"] = map[string]any{"aliases": []string{"lws-" + id}}
+		publicModel["networks"] = publicNetworks
+	}
 	for _, a := range attachments {
 		var actual string
 		err := e.DB.QueryRow(`SELECT d.current_path FROM application_device_bindings b JOIN lws_devices d ON d.id=b.device_id WHERE b.application_id=? AND b.service=? AND b.target_path=?`, id, a.Service, a.Target).Scan(&actual)

@@ -582,7 +582,7 @@ function ResourcePoolView({
     {
       title: "Network",
       rows: pools?.networks ?? [],
-      note: "アプリごとのedge network。公開経路を分離します。",
+      note: "edge networkとCompose本来のネットワークを分けて表示します。",
     },
     {
       title: "Device",
@@ -679,10 +679,11 @@ function ResourcePoolView({
           <p className="settings-note">{group.note}</p>
           <div className="pool-list">
             {group.rows.length ? (
-              group.rows.map((row, index) => (
-                <div className="pool-row" key={`${group.title}-${index}`}>
+              (group.title === "Network" ? ["edge", "compose"] : [undefined]).flatMap((kind) => group.rows.filter((row) => (!("kind" in row) ? kind === undefined : row.kind === kind) || kind === undefined).map((row, index) => (
+                <div className="pool-row" key={`${group.title}-${kind ?? "all"}-${index}`}>
                   <code>{"name" in row ? row.name : ""}</code>
                   <span>
+                    {group.title === "Network" && <b className="pool-kind">{"kind" in row && row.kind === "edge" ? "edge" : "Compose"}</b>}
                     {"applicationName" in row
                       ? row.applicationName
                       : "currentPath" in row
@@ -691,7 +692,7 @@ function ResourcePoolView({
                   </span>
                   {"stableId" in row && <small>{row.stableId}</small>}
                 </div>
-              ))
+              )))
             ) : (
               <p className="settings-note">
                 登録済みの{group.title}はありません。

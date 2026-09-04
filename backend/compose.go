@@ -283,6 +283,66 @@ func ComposeServiceNames(data []byte) ([]string, error) {
 	return names, nil
 }
 
+// ComposeServiceNetworkNames returns the networks already used by a service.
+// The generated public-network override must keep these connections so that
+// internal service discovery (for example web -> api) continues to work.
+func ComposeServiceNetworkNames(data []byte, service string) ([]string, error) {
+	var model struct {
+		Services map[string]struct {
+			Networks any `yaml:"networks"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	item, ok := model.Services[service]
+	if !ok {
+		return nil, NewValidationError("services."+service, "公開serviceがComposeにありません", "INVALID_COMPOSE")
+	}
+	names := []string{}
+	switch networks := item.Networks.(type) {
+	case map[string]any:
+		for name := range networks {
+			names = append(names, name)
+		}
+	case []any:
+		for _, value := range networks {
+			if name, ok := value.(string); ok {
+				names = append(names, name)
+			}
+		}
+	default:
+		// Compose creates the implicit default network when none is declared.
+		names = append(names, "default")
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func ComposeNetworkNames(data []byte, project string) ([]string, error) {
+	var model struct {
+		Networks map[string]struct {
+			Name string `yaml:"name"`
+		} `yaml:"networks"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	if len(model.Networks) == 0 {
+		return []string{project + "_default"}, nil
+	}
+	names := make([]string, 0, len(model.Networks))
+	for key, network := range model.Networks {
+		if network.Name != "" {
+			names = append(names, network.Name)
+		} else {
+			names = append(names, project+"_"+key)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
 func ComposeError(err error) string {
 	if err == nil {
 		return ""

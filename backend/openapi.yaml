@@ -341,6 +341,7 @@ components:
         application: { type: string }
         applicationName: { type: string }
         status: { type: string }
+        kind: { type: string, enum: [edge, compose] }
     CreatePoolDeviceRequest:
       type: object
       required: [name, candidateStableId]
