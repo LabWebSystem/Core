@@ -37,6 +37,8 @@
 - BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
 - BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
 - BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
+- BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
+- BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -119,6 +121,9 @@
 - CHG-078 | SHIPPED | - | Compose検証JSONを一行でOperationログへ記録する
 - CHG-079 | SHIPPED | - | 設定レイヤーとリソースプールを追加する
 - CHG-080 | SHIPPED | - | 登録アプリのhost bind mount変換を廃止する
+- CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
+- CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
+- CHG-083 | SHIPPED | Backend / Runtime | 公開serviceの既存networkを引き継ぐ
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

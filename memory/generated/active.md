@@ -33,4 +33,6 @@
 - BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
 - BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
 - BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
+- BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
+- BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

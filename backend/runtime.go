@@ -264,10 +264,18 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}
-		if err := e.syncDerived(ctx); err != nil {
-			return err
+		// CONFIGURINGからの初回起動では、公開設定の再生成前にACTIVEへ遷移
+		// させる必要がある。DerivedManagerはACTIVEアプリだけを公開する。
+		wasActive := state == "ACTIVE"
+		if !wasActive {
+			if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
+				return err
+			}
 		}
-		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE' WHERE id=?`, op.ApplicationID); err != nil {
+		if err := e.syncDerived(ctx); err != nil {
+			if !wasActive {
+				_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET registration_state=?,updated_at=datetime('now') WHERE id=?`, state, op.ApplicationID)
+			}
 			return err
 		}
 		return e.markApplicationState(ctx, op.ApplicationID, "RUNNING", "RUNNING", "")
@@ -724,6 +732,11 @@ func (e *RuntimeExecutor) GenerateOverrideFromComposes(id, service, compose stri
 		}
 		attachments = append(attachments, found...)
 	}
+	// 公開serviceがoverride側にのみ定義される場合でも、元のdefault
+	// networkを維持して内部serviceへ接続できるようにする。
+	if err := e.preservePublicServiceNetworks(id, service, composeSources, path); err != nil {
+		return err
+	}
 	if len(attachments) > 0 {
 		overrideData, err := os.ReadFile(path)
 		if err != nil {
@@ -734,15 +747,6 @@ func (e *RuntimeExecutor) GenerateOverrideFromComposes(id, service, compose stri
 			return err
 		}
 		serviceModels := model["services"].(map[string]any)
-		if networks, err := ComposeServiceNetworkNames(data, service); err == nil {
-			publicModel := serviceModels[service].(map[string]any)
-			publicNetworks := map[string]any{}
-			for _, network := range networks {
-				publicNetworks[network] = map[string]any{}
-			}
-			publicNetworks["lws-edge"] = map[string]any{"aliases": []string{"lws-" + id}}
-			publicModel["networks"] = publicNetworks
-		}
 		for _, a := range attachments {
 			var actual string
 			err := e.DB.QueryRow(`SELECT d.current_path FROM application_device_bindings b JOIN lws_devices d ON d.id=b.device_id WHERE b.application_id=? AND b.service=? AND b.target_path=?`, id, a.Service, a.Target).Scan(&actual)
@@ -760,6 +764,40 @@ func (e *RuntimeExecutor) GenerateOverrideFromComposes(id, service, compose stri
 		}
 	}
 	return e.addHostPortsToOverride(interfaces, path)
+}
+
+func (e *RuntimeExecutor) preservePublicServiceNetworks(id, service string, sources []ComposeSource, path string) error {
+	networks, err := ComposeServiceNetworkNamesFromSources(sources, service)
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var model map[string]any
+	if err := json.Unmarshal(data, &model); err != nil {
+		return err
+	}
+	serviceModels, ok := model["services"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("生成overrideのservicesが不正です")
+	}
+	publicModel, ok := serviceModels[service].(map[string]any)
+	if !ok {
+		return fmt.Errorf("公開serviceがComposeにありません")
+	}
+	publicNetworks := map[string]any{}
+	for _, network := range networks {
+		publicNetworks[network] = map[string]any{}
+	}
+	publicNetworks["lws-edge"] = map[string]any{"aliases": []string{"lws-" + id}}
+	publicModel["networks"] = publicNetworks
+	encoded, err := json.Marshal(model)
+	if err != nil {
+		return err
+	}
+	return WriteAtomic(path, encoded, 0600)
 }
 
 func (e *RuntimeExecutor) addHostPortsToOverride(interfaces []WebInterface, path string) error {

@@ -1358,6 +1358,20 @@ func TestGeneratedOverrideLabelsAllComposeServices(t *testing.T) {
 	}
 }
 
+func TestComposeServiceNetworkNamesFromSourcesKeepsOverrideDefault(t *testing.T) {
+	sources := []ComposeSource{
+		{Data: []byte("services:\n  api:\n    image: example\n")},
+		{Data: []byte("services:\n  vite:\n    image: example\n")},
+	}
+	names, err := ComposeServiceNetworkNamesFromSources(sources, "vite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 || names[0] != "default" {
+		t.Fatalf("暗黙のdefault networkを保持できません: %#v", names)
+	}
+}
+
 func TestGeneratedOverrideConvertsHostPortsToExpose(t *testing.T) {
 	dir := t.TempDir()
 	base := filepath.Join(dir, "compose.yaml")
@@ -1383,6 +1397,9 @@ func TestGeneratedOverrideConvertsHostPortsToExpose(t *testing.T) {
 	}
 	if !strings.Contains(text, "expose:") || !strings.Contains(text, "- \"4000\"") {
 		t.Fatalf("viteのexposeが不正です: %s", text)
+	}
+	if !strings.Contains(text, "default:") {
+		t.Fatalf("公開serviceのdefault networkを保持していません: %s", text)
 	}
 }
 

@@ -97,7 +97,15 @@
 - CHG-078 | SHIPPED | - | Compose検証JSONを一行でOperationログへ記録する
 - CHG-079 | SHIPPED | - | 設定レイヤーとリソースプールを追加する
 - CHG-080 | SHIPPED | - | 登録アプリのhost bind mount変換を廃止する
+- CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
+- CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
+
+## Backend / Docker Compose
+- BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
+
+## Backend / Runtime
+- CHG-083 | SHIPPED | Backend / Runtime | 公開serviceの既存networkを引き継ぐ
 
 ## backend
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
@@ -105,6 +113,9 @@
 ## backend-operation
 - BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
 - BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
+
+## backend-runtime
+- BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

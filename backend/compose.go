@@ -530,6 +530,17 @@ func ComposeServiceNetworkNames(data []byte, service string) ([]string, error) {
 	return names, nil
 }
 
+// ComposeServiceNetworkNamesFromSources resolves a service's networks from
+// the last Compose source that defines it, preserving override semantics.
+func ComposeServiceNetworkNamesFromSources(sources []ComposeSource, service string) ([]string, error) {
+	for i := len(sources) - 1; i >= 0; i-- {
+		if names, err := ComposeServiceNetworkNames(sources[i].Data, service); err == nil {
+			return names, nil
+		}
+	}
+	return nil, NewValidationError("services."+service, "公開serviceがComposeにありません", "INVALID_COMPOSE")
+}
+
 func ComposeNetworkNames(data []byte, project string) ([]string, error) {
 	var model struct {
 		Networks map[string]struct {
