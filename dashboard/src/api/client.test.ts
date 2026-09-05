@@ -5,22 +5,64 @@ describe("Dashboard API client", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("登録要求に UUID の requestId を付ける", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "operations/one" }), { status: 202 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ name: "operations/one" }), { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
-    await api.create({ repositoryUrl: "https://github.com/example/app", ref: "main", subdomain: "test" });
+    await api.create({
+      repositoryUrl: "https://github.com/example/app",
+      ref: "main",
+      subdomain: "test",
+    });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
     expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/);
     expect(body.subdomain).toBe("test");
   });
 
+  it("OpenAPI契約のCompose選択項目を登録要求へ含める", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ name: "operations/one" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await api.create({
+      repositoryUrl: "https://github.com/example/app/tree/dev/new-arch",
+      ref: "dev/new-arch",
+      subdomain: "test",
+      composeFile: "compose.dev.yaml",
+      overrideFiles: ["compose.local.yaml"],
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.composeFile).toBe("compose.dev.yaml");
+    expect(body.overrideFiles).toEqual(["compose.local.yaml"]);
+  });
+
   it("API の日本語エラーをそのまま利用する", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "指定された値が不正です" } }), { status: 400 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: "指定された値が不正です" } }), {
+          status: 400,
+        }),
+      ),
+    );
     await expect(api.list()).rejects.toEqual(new ApiError("指定された値が不正です", 400));
   });
 
   it("UUIDだけのOperation参照も正しいOperation APIへ正規化する", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "operations/test", kind: "start", state: "succeeded", createdAt: "2026-08-23T00:00:00Z", updatedAt: "2026-08-23T00:00:00Z" }), { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "operations/test",
+          kind: "start",
+          state: "succeeded",
+          createdAt: "2026-08-23T00:00:00Z",
+          updatedAt: "2026-08-23T00:00:00Z",
+        }),
+        { status: 200 },
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
     await api.operation("test");
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/operations/test", expect.anything());
@@ -32,17 +74,36 @@ describe("Dashboard API client", () => {
       listeners = new Map<string, (event: Event) => void>();
       onerror: (() => void) | null = null;
       close = vi.fn();
-      constructor() { EventSourceMock.instance = this; }
-      addEventListener(type: string, listener: (event: Event) => void) { this.listeners.set(type, listener); }
-      emit(type: string, data: unknown) { this.listeners.get(type)?.(new MessageEvent("message", { data: JSON.stringify(data) })); }
+      constructor() {
+        EventSourceMock.instance = this;
+      }
+      addEventListener(type: string, listener: (event: Event) => void) {
+        this.listeners.set(type, listener);
+      }
+      emit(type: string, data: unknown) {
+        this.listeners.get(type)?.(new MessageEvent("message", { data: JSON.stringify(data) }));
+      }
     }
     vi.stubGlobal("EventSource", EventSourceMock);
     const onState = vi.fn();
     api.watchOperation("operations/test", onState, vi.fn());
-    EventSourceMock.instance.emit("running", { type: "running", data: { message: "Composeでアプリを起動しています" } });
+    EventSourceMock.instance.emit("running", {
+      type: "running",
+      data: { message: "Composeでアプリを起動しています" },
+    });
     EventSourceMock.instance.emit("succeeded", { type: "succeeded", data: { message: "" } });
-    expect(onState).toHaveBeenNthCalledWith(1, { name: "operations/test", state: "running", phase: "", displayMessage: "Composeでアプリを起動しています" });
-    expect(onState).toHaveBeenNthCalledWith(2, { name: "operations/test", state: "succeeded", phase: "", displayMessage: "" });
+    expect(onState).toHaveBeenNthCalledWith(1, {
+      name: "operations/test",
+      state: "running",
+      phase: "",
+      displayMessage: "Composeでアプリを起動しています",
+    });
+    expect(onState).toHaveBeenNthCalledWith(2, {
+      name: "operations/test",
+      state: "succeeded",
+      phase: "",
+      displayMessage: "",
+    });
     expect(EventSourceMock.instance.close).toHaveBeenCalledTimes(1);
   });
 });

@@ -102,6 +102,11 @@
 - CHG-077 | SHIPPED | - | アプリ資源と環境変数の管理情報をDashboardへ追加する
 - CHG-078 | SHIPPED | - | Compose検証JSONを一行でOperationログへ記録する
 - CHG-079 | SHIPPED | - | 設定レイヤーとリソースプールを追加する
+- CHG-080 | SHIPPED | - | 登録アプリのhost bind mount変換を廃止する
+- CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
+- CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
+- CHG-083 | SHIPPED | Backend / Runtime | 公開serviceの既存networkを引き継ぐ
+- CHG-084 | SHIPPED | Backend / Runtime / Dashboard | アプリのリビルドをイメージ更新から強制再作成まで一貫させる
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
@@ -125,3 +130,6 @@
 - BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る
 - BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
 - BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
+- BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
+- BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
+- BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない

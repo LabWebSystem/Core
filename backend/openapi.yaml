@@ -17,6 +17,34 @@ paths:
       responses:
         '200': { description: 利用可能 }
         '503': { description: 利用不可 }
+  /resource-pools:
+    get:
+      operationId: listResourcePools
+      parameters:
+        - name: includeSystem
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { description: LWSリソースプール, content: { application/json: { schema: { $ref: '#/components/schemas/ResourcePools' } } } }
+  /resource-pools/devices:
+    post:
+      operationId: createPoolDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePoolDeviceRequest' }
+      responses:
+        '201': { description: デバイス登録完了, content: { application/json: { schema: { $ref: '#/components/schemas/PoolDeviceReference' } } } }
+  /resource-pools/volumes/{volume}:
+    parameters: [{ name: volume, in: path, required: true, schema: { type: string, minLength: 1 } }]
+    delete:
+      operationId: deleteResourcePoolVolume
+      responses:
+        '200': { description: Volume削除完了, content: { application/json: { schema: { $ref: '#/components/schemas/PoolDeviceReference' } } } }
+        '409': { description: 使用中または削除できないVolume }
+        '404': { description: 未検出 }
   /applications:
     get:
       operationId: listApplications
@@ -157,6 +185,8 @@ components:
       required: [name, subdomain, repositoryUrl, ref, desiredState, observedState, registrationState, observedAt, reconciling, etag]
       properties:
         name: { type: string, pattern: '^applications/.+$' }
+        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
+        overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
         subdomain: { type: string }
         repositoryUrl: { type: string }
         ref: { type: string }
@@ -196,7 +226,7 @@ components:
         liveCursor: { type: string }
     ConfigurationResponse:
       type: object
-      required: [variables, volumes, network, devices, ready]
+      required: [variables, volumes, network, devices, deviceAccess, ready, lwsOverrideCompose, effectiveCompose, webInterfaces, manifestPublicService, manifestPublicPort, publicService, publicPort]
       properties:
         variables:
           type: array
@@ -208,6 +238,7 @@ components:
               isSecret: { type: boolean }
               configured: { type: boolean }
               value: { type: string }
+              defaultValue: { type: string }
               required: { type: boolean }
               hasDefault: { type: boolean }
         volumes:
@@ -235,7 +266,27 @@ components:
               permissions: { type: string }
               configured: { type: boolean }
               deviceId: { type: string }
+        deviceAccess:
+          type: object
+          required: [allowed, message]
+          properties:
+            allowed: { type: boolean }
+            message: { type: string }
         ready: { type: boolean }
+        lwsOverrideCompose: { type: string }
+        effectiveCompose: { type: string }
+        webInterfaces:
+          type: array
+          items:
+            type: object
+            required: [service, port]
+            properties:
+              service: { type: string }
+              port: { type: integer, minimum: 1, maximum: 65535 }
+        manifestPublicService: { type: string }
+        manifestPublicPort: { type: integer, minimum: 1, maximum: 65535 }
+        publicService: { type: string }
+        publicPort: { type: integer, minimum: 1, maximum: 65535 }
     CreateApplicationRequest:
       type: object
       required: [repositoryUrl, ref, subdomain, requestId]
@@ -243,6 +294,8 @@ components:
         repositoryUrl: { type: string, format: uri }
         ref: { type: string, minLength: 1 }
         subdomain: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
+        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
+        overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
         requestId: { type: string, format: uuid }
     UpdateApplicationRequest:
       type: object
@@ -265,6 +318,8 @@ components:
               service: { type: string }
               targetPath: { type: string }
               deviceId: { type: string }
+        publicService: { type: string }
+        publicPort: { type: integer, minimum: 1, maximum: 65535 }
         requestId: { type: string, format: uuid }
     ActionRequest:
       type: object
@@ -277,11 +332,61 @@ components:
       properties:
         requestId: { type: string, format: uuid }
         confirm: { type: boolean, const: true }
+    ResourcePools:
+      type: object
+      required: [devices, physicalDevices, volumes, networks]
+      properties:
+        devices: { type: array, items: { $ref: '#/components/schemas/PoolDevice' } }
+        physicalDevices: { type: array, items: { $ref: '#/components/schemas/PhysicalDeviceResource' } }
+        volumes: { type: array, items: { $ref: '#/components/schemas/PoolResource' } }
+        networks: { type: array, items: { $ref: '#/components/schemas/PoolResource' } }
+    PoolDevice:
+      type: object
+      required: [id, name, stableId, currentPath, status, metadata]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        stableId: { type: string }
+        currentPath: { type: string }
+        status: { type: string }
+        metadata: { type: object, additionalProperties: { type: string } }
+    PhysicalDeviceResource:
+      type: object
+      required: [stableId, currentPath, name, category, metadata]
+      properties:
+        stableId: { type: string }
+        currentPath: { type: string }
+        name: { type: string }
+        category: { type: string, enum: [user, system] }
+        metadata: { type: object, additionalProperties: { type: string } }
+    PoolResource:
+      type: object
+      required: [name, application, applicationName, status]
+      properties:
+        name: { type: string }
+        application: { type: string }
+        applicationName: { type: string }
+        status: { type: string }
+        inUse: { type: boolean }
+        deletable: { type: boolean }
+        kind: { type: string, enum: [edge, compose] }
+    CreatePoolDeviceRequest:
+      type: object
+      required: [name, candidateStableId]
+      properties:
+        name: { type: string, minLength: 1 }
+        candidateStableId: { type: string, minLength: 1 }
+    PoolDeviceReference:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
     Variable:
       type: object
       required: [secret]
       properties:
         value: { type: string }
+        defaultValue: { type: string }
         secret: { type: boolean }
         keep: { type: boolean }
     Error:

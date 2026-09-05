@@ -31,6 +31,7 @@ dashboard/node_modules/
 dashboard/tsconfig.tsbuildinfo
 .package-work/
 sdk/dist/
+.lws-dashboard-dev/
 
 # Editor/IDE
 # .idea/

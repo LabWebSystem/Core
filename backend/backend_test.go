@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 7 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,7 +35,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 7 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -86,7 +86,7 @@ func TestOpenAPIContractAndGeneratedRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.OpenAPI != "3.1.0" || spec.Paths == nil || spec.Paths.Find("/applications") == nil {
+	if spec.OpenAPI != "3.1.0" || spec.Paths == nil || spec.Paths.Find("/applications") == nil || spec.Paths.Find("/resource-pools") == nil || spec.Paths.Find("/resource-pools/devices") == nil {
 		t.Fatalf("invalid generated OpenAPI contract: version=%s", spec.OpenAPI)
 	}
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
@@ -643,6 +643,32 @@ func TestEffectiveComposeAllowsNamedVolumeButRejectsBindMount(t *testing.T) {
 		if err := ValidateEffectiveCompose([]byte(bad), "web", 3000); err == nil {
 			t.Fatalf("forbidden effective compose accepted: %s", bad)
 		}
+	}
+}
+
+func TestComposeSourceAllowsOnlyNamedVolumes(t *testing.T) {
+	named := []byte("services:\n  api:\n    volumes:\n      - app-data:/data:rw\n    develop:\n      watch:\n        - action: sync\n          path: ./src\n          target: /app/src\nvolumes:\n  app-data: {}\n")
+	if err := ValidateComposeSource("/tmp/project", named); err != nil {
+		t.Fatalf("名前付きVolumeを拒否しました: %v", err)
+	}
+	for _, source := range [][]byte{
+		[]byte("services:\n  api:\n    volumes:\n      - ./data:/data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - /host/data:/data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - /data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - type: bind\n        source: ./data\n        target: /data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - type: volume\n        target: /data\n"),
+	} {
+		err := ValidateComposeSource("/tmp/project", source)
+		if err == nil || !strings.Contains(err.Error(), "bind mount") {
+			t.Fatalf("bindまたは匿名Volumeを拒否できません: %s (%v)", source, err)
+		}
+	}
+}
+
+func TestComposeSourceRejectsWatchPathOutsideProject(t *testing.T) {
+	err := ValidateComposeSource("/tmp/project", []byte("services:\n  api:\n    develop:\n      watch:\n        - action: sync\n          path: ../source\n          target: /app/src\n"))
+	if err == nil || !strings.Contains(err.Error(), "Compose Watch") {
+		t.Fatalf("root外のCompose Watch pathを拒否できません: %v", err)
 	}
 }
 
@@ -1262,6 +1288,57 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 	}
 }
 
+func TestRuntimeRebuildPullsBuildsAndRecreatesContainers(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "app-id")
+	source := filepath.Join(root, "source")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "runtime"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services:\n  web:\n    image: example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "lws.manifest.yaml"), []byte("apiVersion: lws/v1\nmetadata:\n  name: App\n  description: test\npublic:\n  service: web\n  port: 3000\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,public_service,public_port,desired_state,observed_state,registration_state,compose_file,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','web',3000,'web',3000,'RUNNING','RUNNING','ACTIVE','compose.yaml',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingRunner{output: []byte(`{"services":{"web":{"image":"example"}}}`)}
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: runner}
+	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "REBUILD"}); err != nil {
+		t.Fatal(err)
+	}
+	var composeCalls []string
+	for _, call := range runner.calls {
+		if len(call) > 1 && call[0] == "docker" && call[1] == "compose" {
+			composeCalls = append(composeCalls, strings.Join(call, " "))
+		}
+	}
+	var pull, build, up int = -1, -1, -1
+	for i, call := range composeCalls {
+		switch {
+		case strings.HasSuffix(call, " pull"):
+			pull = i
+		case strings.HasSuffix(call, " build --pull"):
+			build = i
+		case strings.HasSuffix(call, " up -d --force-recreate --remove-orphans"):
+			up = i
+		}
+	}
+	if pull < 0 || build < 0 || up < 0 || !(pull < build && build < up) {
+		t.Fatalf("リビルドのCompose実行順が不正です: %v", composeCalls)
+	}
+}
+
 func TestOSRunnerUsesArgvAndTimeout(t *testing.T) {
 	started := time.Now()
 	_, err := (OSRunner{Timeout: 25 * time.Millisecond}).Run(context.Background(), "sleep", "1")
@@ -1329,6 +1406,51 @@ func TestGeneratedOverrideLabelsAllComposeServices(t *testing.T) {
 	text := string(data)
 	if !strings.Contains(text, `"worker"`) || strings.Count(text, "com.labwebsystem.app-id") != 2 {
 		t.Fatalf("全serviceに所有labelがありません: %s", text)
+	}
+}
+
+func TestComposeServiceNetworkNamesFromSourcesKeepsOverrideDefault(t *testing.T) {
+	sources := []ComposeSource{
+		{Data: []byte("services:\n  api:\n    image: example\n")},
+		{Data: []byte("services:\n  vite:\n    image: example\n")},
+	}
+	names, err := ComposeServiceNetworkNamesFromSources(sources, "vite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 || names[0] != "default" {
+		t.Fatalf("暗黙のdefault networkを保持できません: %#v", names)
+	}
+}
+
+func TestGeneratedOverrideConvertsHostPortsToExpose(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "compose.yaml")
+	dev := filepath.Join(dir, "compose.dev.yaml")
+	path := filepath.Join(dir, "lws.override.yaml")
+	if err := os.WriteFile(base, []byte("services:\n  web:\n    image: example\n    ports: [\"80:80\"]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dev, []byte("services:\n  vite:\n    image: example\n    ports:\n      - \"4000:4000\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	e := &RuntimeExecutor{InstallationID: "installation"}
+	if err := e.GenerateOverrideFromComposes("app-id", "web", base, []string{dev}, path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "ports: !reset []") {
+		t.Fatalf("host portをresetしていません: %s", text)
+	}
+	if !strings.Contains(text, "expose:") || !strings.Contains(text, "- \"4000\"") {
+		t.Fatalf("viteのexposeが不正です: %s", text)
+	}
+	if !strings.Contains(text, "default:") {
+		t.Fatalf("公開serviceのdefault networkを保持していません: %s", text)
 	}
 }
 

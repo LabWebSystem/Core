@@ -4,7 +4,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> 現在のLWSは v0.1.7 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。
+> 現在のLWSは v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。
 
 ## できること
 
@@ -12,6 +12,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 - Docker Composeでアプリを起動・停止・更新する
 - `app-name.example.internal`の形でアプリごとのURLを公開する
 - アプリの設定値、secret、ログ、実行状態を管理する
+- アプリごとの名前付きVolume、edge Network、デバイス割り当てを設定する
 - `dashboard.<base-domain>`のDashboardから、アプリを日本語で登録・操作する
 - LWS本体を起動、停止、再構成、更新する
 
@@ -68,7 +69,7 @@ reserve.example.internal
 sudo lwsctl down --purge
 ```
 
-詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)を参照してください。
+詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
 
 ## アプリを公開する
 
@@ -91,7 +92,25 @@ public:
   port: 3000
 ```
 
-LWSはリポジトリを取得して内容を確認し、問題がなければアプリを起動します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)を参照してください。
+LWSはリポジトリを取得して内容を確認します。登録直後は`CONFIGURING`（設定待ち）となり、Dashboardで環境変数とデバイス割り当てを確認してから開始します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+
+### Backend APIの概要
+
+APIのベースパスは`/api/v1`です。変更操作はすぐに`Operation`を返し、進捗は`GET /operations/{operation}`またはSSEの`GET /operations/{operation}:watch`で確認します。
+
+主なリソースと操作は次のとおりです。
+
+| メソッド | パス | 内容 |
+| --- | --- | --- |
+| `GET` / `POST` | `/applications` | アプリ一覧、アプリ登録 |
+| `GET` / `PATCH` / `DELETE` | `/applications/{application}` | 取得、更新、登録解除 |
+| `POST` | `/applications/{application}:start`、`:stop`、`:sync`、`:rebuild`、`:register`、`:purge` | アプリ操作 |
+| `GET` / `PATCH` | `/applications/{application}/configuration` | 環境変数・デバイス設定 |
+| `GET` | `/resource-pools` | Volume、Network、デバイス候補・登録済みデバイス |
+| `POST` | `/resource-pools/devices` | 物理デバイスをLWSプールへ登録 |
+| `GET` | `/applications/{application}/logEntries` | 永続ログ取得 |
+
+登録直後のアプリは自動起動せず、設定完了後に`:start`を実行します。完全削除は`confirm:true`を付けた`:purge`で行います。
 
 ## 開発
 
@@ -164,7 +183,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 
 ## 関連資料
 
-- [利用マニュアル](docs/LWS%20v0.1.7利用マニュアル.md)
+- [利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)
 - [設計概要](docs/LabWebSystem設計概要.md)
 - [Infrastructure仕様書](docs/Infrastructure仕様書.md)
 - [Backend仕様書](docs/Backend仕様書.md)

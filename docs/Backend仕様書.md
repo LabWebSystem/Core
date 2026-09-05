@@ -63,12 +63,14 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | `GET` / `PATCH` | `/applications/{application}/configuration` | 変数定義・設定状況、値の更新。secret値は返さない |
 | `POST` | `/applications/{application}:register`、`:start`、`:stop`、`:sync`、`:rebuild` | アプリ操作（Operationを返す） |
 | `GET` | `/operations/{operation}`、`/operations/{operation}:watch` | Operation取得、SSEによる状態配信 |
+| `GET` | `/resource-pools` | 名前付きVolume、アプリ専用Network、検出済み物理デバイス、登録済みLWSデバイスの取得。`includeSystem=true`でシステムデバイスを含める |
+| `POST` | `/resource-pools/devices` | 検出済み物理デバイスをLWSデバイスプールへ登録 |
 | `GET` | `/applications/{application}/logEntries` | 永続ログの取得。`view=task|application|related`、service、期間、cursor、limitで絞り込む |
 | `GET` | `/applications/{application}/logEntries:watch` | cursorから再開できるSSEによる永続ログ配信 |
 
 - 登録要求は`repositoryUrl`、`ref`、`subdomain`を含む。表示名と説明はmanifestから読む。
 - 長時間操作はOperationを返す。未完了Operationがあるapp-idへの新規変更は409で拒否する。
-- 登録解除はアプリcontainerとapp用edge networkだけを削除し、source、runtime、named volume、アプリ設定、UNREGISTEREDのDB記録を保持する。再登録は保持したsource・設定を使って復帰する。完全削除は`UNREGISTERED`かつ`confirm:true`の要求だけが実行でき、アプリデータ、source、runtime、所有確認済みvolumeを削除してからDB記録を物理削除する。途中失敗時は記録を保持する。
+- 登録解除はアプリcontainerとapp用edge networkだけを削除し、source、runtime、named volume、アプリ設定、UNREGISTEREDのDB記録を保持する。再登録は保持したsource・設定を使って復帰する。完全削除は`UNREGISTERED`または`CONFIGURING`で`confirm:true`の要求だけが実行でき、アプリデータ、source、runtime、所有確認済みvolumeを削除してからDB記録を物理削除する。CONFIGURINGからは先に登録解除する。途中失敗時は記録を保持する。
 
 完全削除はOperationの進捗を記録しながらアプリデータ、source、runtime、所有確認済みvolumeを削除し、完了ログとOperationを確定した後にアプリDB記録を物理削除する。削除中の失敗時は記録を保持する。
 
@@ -131,7 +133,7 @@ UIのINPは75パーセンタイル200ms以下とする。clone、build、起動�
 
 - Operation状態は`queued`、`running`、`succeeded`、`failed`、`cancelled`。Backend再起動時の未完了Operationは`failed`へ整理する。
 - project名は`lws-app-<app-id>`で固定する。操作前にCompose project label、LWS所有label、installation ID、app-idを確認する。
-- 登録解除はアプリを停止してからCaddyをedge networkから切断し、所有確認済みedge networkを削除した後にDBを`UNREGISTERED`へ確定する。source、runtime、named volume、アプリ設定は削除しない。DB確定前の失敗ではACTIVE状態と公開経路を補償復元する。完全削除は`UNREGISTERED`なアプリだけが対象で、APIは`confirm:true`を必須とする。
+- 登録解除はアプリを停止してからCaddyをedge networkから切断し、所有確認済みedge networkを削除した後にDBを`UNREGISTERED`へ確定する。source、runtime、named volume、アプリ設定は削除しない。DB確定前の失敗ではACTIVE状態と公開経路を補償復元する。完全削除は`UNREGISTERED`または`CONFIGURING`のアプリを対象にでき、APIは`confirm:true`を必須とする。`CONFIGURING`からの完全削除は内部的に登録解除を経由する。
 - Docker呼出しにはtimeoutを設定し、出力からsecretを除去して短い日本語のOperation結果へ残す。未検証値をshell文字列、Docker引数、path、label、override YAMLへ直接展開しない。
 - `docker compose down --volumes`、`docker system prune`、`docker volume prune`を通常操作で使わない。
 

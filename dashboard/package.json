@@ -8,6 +8,8 @@
     "build": "npm run generate:api && npm run build:static",
     "build:static": "tsc -b && vite build",
     "generate:api": "openapi-typescript ../backend/openapi.yaml -o src/api/schema.ts",
+    "format": "biome format . --write",
+    "format:check": "biome format .",
     "lint": "tsc -b --pretty false",
     "test": "vitest run"
   },
@@ -20,6 +22,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

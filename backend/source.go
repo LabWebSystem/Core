@@ -130,52 +130,103 @@ func classifyLogLevel(message, fallback string) string {
 	}
 }
 
+var composeFilePriority = []string{"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
+
 func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest string) error {
+	_, err := CloneAndValidateWithCompose(ctx, runner, url, ref, "", dest)
+	return err
+}
+
+func CloneAndValidateWithCompose(ctx context.Context, runner CommandRunner, url, ref, requestedCompose, dest string) (string, error) {
+	return CloneAndValidateWithOverrides(ctx, runner, url, ref, requestedCompose, nil, dest)
+}
+
+func CloneAndValidateWithOverrides(ctx context.Context, runner CommandRunner, url, ref, requestedCompose string, requestedOverrides []string, dest string) (string, error) {
+	url, ref = RepositoryURLAndRef(url, ref)
 	tmp := dest + ".tmp"
 	_ = os.RemoveAll(tmp)
 	if err := os.MkdirAll(filepath.Dir(tmp), 0700); err != nil {
-		return err
+		return "", err
 	}
 	reportOperationPhase(ctx, "source_clone", "GitHubリポジトリを取得しています")
 	out, err := runLogged(ctx, runner, "git取得", "git", "clone", "--no-tags", "--depth", "1", "--branch", ref, url, tmp)
 	if err != nil {
 		output := strings.ToLower(string(out))
 		if strings.Contains(output, "remote branch") || strings.Contains(output, "remote ref") || strings.Contains(output, "couldn't find") {
-			return fmt.Errorf("指定したブランチまたはタグがリポジトリに見つかりません")
+			return "", fmt.Errorf("指定したブランチまたはタグがリポジトリに見つかりません")
 		}
-		return fmt.Errorf("リポジトリ取得に失敗しました")
+		return "", fmt.Errorf("リポジトリ取得に失敗しました")
 	}
 	reportOperationPhase(ctx, "source_validate", "取得したファイルを検証しています")
 	if err := ValidateSourceTree(tmp); err != nil {
-		return err
+		return "", err
 	}
 	reportOperationPhase(ctx, "manifest_validate", "アプリ定義を検証しています")
 	data, err := os.ReadFile(filepath.Join(tmp, "lws.manifest.yaml"))
 	if err != nil {
-		return fmt.Errorf("manifestが見つかりません")
+		return "", fmt.Errorf("manifestが見つかりません")
 	}
 	if _, err = ValidateManifest(data); err != nil {
-		return err
+		return "", err
 	}
 	reportOperationPhase(ctx, "compose_validate", "Compose定義を検証しています")
-	compose, err := os.ReadFile(filepath.Join(tmp, "compose.yaml"))
+	composeFile := requestedCompose
+	if composeFile == "" {
+		for _, candidate := range composeFilePriority {
+			if _, e := os.Stat(filepath.Join(tmp, candidate)); e == nil {
+				composeFile = candidate
+				break
+			}
+		}
+	}
+	if !containsComposeFile(composeFile) {
+		return "", fmt.Errorf("使用できるComposeファイルが見つかりません")
+	}
+	compose, err := os.ReadFile(filepath.Join(tmp, composeFile))
 	if err != nil {
-		return fmt.Errorf("compose.yamlが見つかりません")
+		return "", fmt.Errorf("指定したComposeファイルが見つかりません")
 	}
 	if err = ValidateComposeSource(tmp, compose); err != nil {
-		return err
+		return "", err
+	}
+	for _, override := range requestedOverrides {
+		if !validComposeFilename(override) {
+			return "", fmt.Errorf("override Composeファイル名が不正です")
+		}
+		data, readErr := os.ReadFile(filepath.Join(tmp, override))
+		if readErr != nil {
+			return "", fmt.Errorf("指定したoverride Composeファイルが見つかりません")
+		}
+		if readErr = ValidateComposeSource(tmp, data); readErr != nil {
+			return "", readErr
+		}
 	}
 	reportOperationPhase(ctx, "source_activate", "検証済みのアプリ定義を反映しています")
 	old := dest + ".old"
 	_ = os.RemoveAll(old)
 	if err = os.Rename(dest, old); err != nil && !os.IsNotExist(err) {
-		return err
+		return "", err
 	}
 	if err = os.Rename(tmp, dest); err != nil {
 		_ = os.Rename(old, dest)
-		return err
+		return "", err
 	}
-	return nil
+	return composeFile, nil
+}
+
+func validComposeFilename(value string) bool {
+	if value == "" || filepath.Base(value) != value || strings.ContainsAny(value, "\\\x00\r\n") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(value))
+	return ext == ".yaml" || ext == ".yml"
+}
+
+func containsComposeFile(value string) bool {
+	if !validComposeFilename(value) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(value), "compose")
 }
 
 func FinalizeSourceSwap(dest string) error {

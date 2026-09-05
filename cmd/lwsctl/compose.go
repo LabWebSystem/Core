@@ -103,6 +103,7 @@ func (a *application) composeCommand(arguments ...string) (*exec.Cmd, error) {
 	if a.publicAddress != "" {
 		command.Env = setEnvironment(command.Env, "LWS_PUBLIC_ADDRESS", a.publicAddress)
 	}
+	command.Env = setEnvironment(command.Env, "LWS_STATE_DIR", a.paths.stateDir)
 	command.Env = setEnvironment(command.Env, "LWS_CADDY_CONTAINER", a.paths.project+"-caddy-1")
 	command.Env = setEnvironment(command.Env, "LWS_COREDNS_CONTAINER", a.paths.project+"-coredns-1")
 	return command, nil
