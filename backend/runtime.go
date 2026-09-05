@@ -261,7 +261,21 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
 			return err
 		}
-		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+		if op.Kind == "REBUILD" {
+			reportOperationPhase(ctx, "image_pull", "Docker imageを取得しています")
+			if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "pull"); err != nil {
+				return err
+			}
+			reportOperationPhase(ctx, "image_build", "Docker imageをビルドしています")
+			if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "build", "--pull"); err != nil {
+				return err
+			}
+		}
+		upArgs := []string{"up", "-d"}
+		if op.Kind == "REBUILD" {
+			upArgs = append(upArgs, "--force-recreate", "--remove-orphans")
+		}
+		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, upArgs...); err != nil {
 			return err
 		}
 		// CONFIGURINGからの初回起動では、公開設定の再生成前にACTIVEへ遷移

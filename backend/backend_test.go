@@ -1288,6 +1288,57 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 	}
 }
 
+func TestRuntimeRebuildPullsBuildsAndRecreatesContainers(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "app-id")
+	source := filepath.Join(root, "source")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "runtime"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "compose.yaml"), []byte("services:\n  web:\n    image: example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "lws.manifest.yaml"), []byte("apiVersion: lws/v1\nmetadata:\n  name: App\n  description: test\npublic:\n  service: web\n  port: 3000\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDB(context.Background(), filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,public_service,public_port,desired_state,observed_state,registration_state,compose_file,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','web',3000,'web',3000,'RUNNING','RUNNING','ACTIVE','compose.yaml',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingRunner{output: []byte(`{"services":{"web":{"image":"example"}}}`)}
+	e := &RuntimeExecutor{DB: db, Root: dir, Runner: runner}
+	if err := e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "REBUILD"}); err != nil {
+		t.Fatal(err)
+	}
+	var composeCalls []string
+	for _, call := range runner.calls {
+		if len(call) > 1 && call[0] == "docker" && call[1] == "compose" {
+			composeCalls = append(composeCalls, strings.Join(call, " "))
+		}
+	}
+	var pull, build, up int = -1, -1, -1
+	for i, call := range composeCalls {
+		switch {
+		case strings.HasSuffix(call, " pull"):
+			pull = i
+		case strings.HasSuffix(call, " build --pull"):
+			build = i
+		case strings.HasSuffix(call, " up -d --force-recreate --remove-orphans"):
+			up = i
+		}
+	}
+	if pull < 0 || build < 0 || up < 0 || !(pull < build && build < up) {
+		t.Fatalf("リビルドのCompose実行順が不正です: %v", composeCalls)
+	}
+}
+
 func TestOSRunnerUsesArgvAndTimeout(t *testing.T) {
 	started := time.Now()
 	_, err := (OSRunner{Timeout: 25 * time.Millisecond}).Run(context.Background(), "sleep", "1")

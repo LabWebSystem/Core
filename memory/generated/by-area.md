@@ -107,6 +107,9 @@
 ## Backend / Runtime
 - CHG-083 | SHIPPED | Backend / Runtime | 公開serviceの既存networkを引き継ぐ
 
+## Backend / Runtime / Dashboard
+- CHG-084 | SHIPPED | Backend / Runtime / Dashboard | アプリのリビルドをイメージ更新から強制再作成まで一貫させる
+
 ## backend
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う
 
@@ -116,6 +119,7 @@
 
 ## backend-runtime
 - BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
+- BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない
 
 ## cli
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない

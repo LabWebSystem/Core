@@ -91,7 +91,7 @@ const operationLabel = (kind?: string) =>
     start: "開始",
     stop: "停止",
     sync: "同期",
-    rebuild: "再構成",
+    rebuild: "リビルド",
     unregister: "登録解除",
     register: "再登録",
     purge: "完全削除",
@@ -101,6 +101,8 @@ const phaseLabel = (phase?: string) =>
     starting: "開始",
     source_prepare: "source準備",
     runtime_prepare: "実行設定",
+    image_pull: "イメージ取得",
+    image_build: "イメージビルド",
     compose_up: "Compose起動",
     publish: "公開設定",
     unregister: "登録解除",
@@ -987,7 +989,7 @@ function AppWorkbench({
             </button>
             <button disabled={disabled} title={actionTitle} onClick={() => onAction("rebuild")}>
               <Settings2 size={16} />
-              再構成
+              リビルド
             </button>
             <button
               disabled={disabled}
@@ -1068,7 +1070,7 @@ function AppWorkbench({
               <small>
                 {resourceError
                   ? "設定を取得できません。再試行してください。"
-                  : "停止・再構成・登録解除でも保持され、完全削除時だけ削除されます。"}
+                  : "停止・リビルド・登録解除でも保持され、完全削除時だけ削除されます。"}
               </small>
             </div>
           </article>

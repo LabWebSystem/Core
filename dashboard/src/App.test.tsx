@@ -226,7 +226,7 @@ describe("Dashboard デバッグルーム", () => {
       updatedAt: "2026-08-23T00:01:00Z",
     });
     renderApp();
-    await screen.findByText("再構成: 実行中");
+    await screen.findByText("リビルド: 実行中");
     expect(screen.getByText("実行状態").nextElementSibling?.textContent).toContain("異常");
     expect(screen.getByRole("button", { name: "開始" }).hasAttribute("disabled")).toBe(true);
   });
