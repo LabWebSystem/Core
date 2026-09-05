@@ -257,6 +257,18 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			interfaces, _ = ComposeWebInterfaces(sources)
+			if manifestService != "" && manifestPort > 0 && ComposeHasService(sources, manifestService) {
+				found := false
+				for _, iface := range interfaces {
+					if iface.Service == manifestService && iface.Port == manifestPort {
+						found = true
+						break
+					}
+				}
+				if !found {
+					interfaces = append([]WebInterface{{Service: manifestService, Port: manifestPort}}, interfaces...)
+				}
+			}
 		}
 	}
 	if publicService == "" {
@@ -391,6 +403,12 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 				valid = true
 				break
 			}
+		}
+		if !valid {
+			var manifestService string
+			var manifestPort int
+			_ = s.DB.QueryRowContext(r.Context(), `SELECT manifest_service,manifest_port FROM applications WHERE id=?`, appID(r)).Scan(&manifestService, &manifestPort)
+			valid = req.PublicService == manifestService && req.PublicPort == manifestPort && ComposeHasService(sources, manifestService)
 		}
 		if !valid {
 			writeAPIError(w, 400, "INVALID_ARGUMENT", "公開WebインターフェースがComposeに存在しません", "publicService")

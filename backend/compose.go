@@ -62,6 +62,20 @@ type WebInterface struct {
 	Port    int
 }
 
+func ComposeHasService(sources []ComposeSource, name string) bool {
+	for _, source := range sources {
+		var model struct {
+			Services map[string]any `yaml:"services"`
+		}
+		if yaml.Unmarshal(source.Data, &model) == nil {
+			if _, ok := model.Services[name]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func ComposeWebInterfaces(sources []ComposeSource) ([]WebInterface, error) {
 	seen := map[string]bool{}
 	result := []WebInterface{}
