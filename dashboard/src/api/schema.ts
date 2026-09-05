@@ -68,6 +68,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resource-pools/volumes/{volume}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                volume: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteResourcePoolVolume"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications": {
         parameters: {
             query?: never;
@@ -484,6 +502,8 @@ export interface components {
             application: string;
             applicationName: string;
             status: string;
+            inUse?: boolean;
+            deletable?: boolean;
             /** @enum {string} */
             kind?: "edge" | "compose";
         };
@@ -598,6 +618,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PoolDeviceReference"];
                 };
+            };
+        };
+    };
+    deleteResourcePoolVolume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                volume: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Volume削除完了 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolDeviceReference"];
+                };
+            };
+            /** @description 未検出 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 使用中または削除できないVolume */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

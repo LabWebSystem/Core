@@ -344,6 +344,7 @@ export function App() {
               loading={pools.isLoading}
               error={pools.isError}
               retry={() => void pools.refetch()}
+              onConfirm={(label, execute, detail) => setPending({ label, execute, detail })}
             />
           ) : selected ? (
             <AppWorkbench
@@ -658,17 +659,20 @@ function ResourcePoolView({
   loading,
   error,
   retry,
+  onConfirm,
 }: {
   pools?: ResourcePools;
   loading: boolean;
   error: boolean;
   retry: () => void;
+  onConfirm: (label: string, execute: () => Promise<{ name: string }>, detail?: string) => void;
 }) {
   const [deviceName, setDeviceName] = useState("");
   const [candidate, setCandidate] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showSystem, setShowSystem] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const visiblePools = useQuery({
     queryKey: ["resource-pools", showSystem],
     queryFn: () => api.resourcePools(showSystem),
@@ -805,6 +809,44 @@ function ResourcePoolView({
                             ? `${row.status} · ${row.currentPath || "未接続"}`
                             : "managed"}
                       </span>
+                      {group.title === "Volume" && "deletable" in row && (
+                        <span className="pool-status">
+                          <b className={row.inUse ? "is-used" : "is-free"}>
+                            {row.inUse ? "使用中" : "未使用"}
+                          </b>
+                          <button
+                            className="pool-delete"
+                            disabled={!row.deletable}
+                            title={row.inUse ? "使用中のVolumeは削除できません" : "Volumeを削除"}
+                            onClick={() => {
+                              setDeleteError("");
+                              onConfirm(
+                                "Volumeを削除しますか？",
+                                () =>
+                                  api
+                                    .deleteResourcePoolVolume(row.name)
+                                    .then(() => ({ name: row.name }))
+                                    .then((result) => {
+                                      void visiblePools.refetch();
+                                      return result;
+                                    })
+                                    .catch((error) => {
+                                      setDeleteError(
+                                        error instanceof ApiError
+                                          ? error.message
+                                          : "Volumeを削除できません",
+                                      );
+                                      throw error;
+                                    }),
+                                `対象: ${row.name}\n${row.inUse ? "現在使用中のため削除できません。" : "未使用のLWS管理Volumeです。"}`,
+                              );
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            削除
+                          </button>
+                        </span>
+                      )}
                       {"stableId" in row && <small>{row.stableId}</small>}
                     </div>
                   )),
@@ -813,6 +855,7 @@ function ResourcePoolView({
               <p className="settings-note">登録済みの{group.title}はありません。</p>
             )}
           </div>
+          {deleteError && <p className="settings-note error-note">{deleteError}</p>}
         </section>
       ))}
     </section>

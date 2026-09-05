@@ -27,6 +27,7 @@ type Server struct {
 	worker        *Worker
 	Logs          *LogStore
 	DeviceScanner DeviceScanner
+	Docker        *DockerResources
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
@@ -50,6 +51,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/health/ready", wrapper.HealthReady)
 	mux.HandleFunc("GET /api/v1/resource-pools", wrapper.ListResourcePools)
 	mux.HandleFunc("POST /api/v1/resource-pools/devices", wrapper.CreatePoolDevice)
+	mux.HandleFunc("DELETE /api/v1/resource-pools/volumes/{volume}", wrapper.DeleteResourcePoolVolume)
 	mux.HandleFunc("GET /api/v1/applications", wrapper.ListApplications)
 	mux.HandleFunc("POST /api/v1/applications", wrapper.CreateApplication)
 	mux.HandleFunc("DELETE /api/v1/applications/{application}", wrapper.UnregisterApplication)

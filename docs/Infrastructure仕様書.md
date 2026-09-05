@@ -35,7 +35,7 @@
 | アプリ | `/var/lib/lws/apps/<app-id>/source/`、`runtime/` | 取得済みsourceと生成した`lws.override.yaml`、`app.env` |
 | 生成物 | `/var/lib/lws/generated/Caddyfile`、`hosts` | SQLiteから生成する派生物 |
 
-- アプリ永続データはhost bind mountではなくDocker named volumeだけに置く。
+- アプリの永続データはhost bind mountではなくDocker named volumeだけに置く。BackendのDBや設定もNamed Volumeに保持し、Backendが取得したComposeのbuild contextとbind mount元に使う`apps/`だけをホストの状態ディレクトリからBackendへbind mountする。
 - 通常の`lwsctl down`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl down --purge`は確認後、LWSの全アプリと本体を停止し、現在のinstallation IDとLWS所有labelで識別できるcontainer、network、named volume、設定、状態を完全削除する。別のDockerシステムの資源は削除しない。パッケージの削除はAPT / DNFへ委譲する。
 
 ## 4. ネットワーク、DNS、Reverse Proxy

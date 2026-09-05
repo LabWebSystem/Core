@@ -79,7 +79,8 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 				if data, e := os.ReadFile(filepath.Join(s.AppsRoot, id, "source", composeFile)); e == nil {
 					if names, e := managedComposeVolumeNames(id, s.AppsRoot, data, overrideFilesJSON); e == nil {
 						for _, n := range names {
-							volumes = append(volumes, map[string]any{"name": n, "application": "applications/" + id, "applicationName": sub, "status": "managed"})
+							inUse, status, deletable := s.volumeState(r.Context(), n)
+							volumes = append(volumes, map[string]any{"name": n, "application": "applications/" + id, "applicationName": sub, "status": status, "inUse": inUse, "deletable": deletable})
 						}
 					}
 					if names, e := ComposeNetworkNames(data, ProjectName(id)); e == nil {
@@ -93,6 +94,45 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"devices": devices, "physicalDevices": candidates, "volumes": volumes, "networks": networks})
+}
+
+func (s *Server) volumeState(ctx context.Context, name string) (bool, string, bool) {
+	if s.Docker == nil {
+		return true, "使用状況を確認できません", false
+	}
+	inUse, err := s.Docker.VolumeInUse(ctx, name)
+	if err != nil {
+		return true, "使用状況を確認できません", false
+	}
+	if inUse {
+		return true, "使用中", false
+	}
+	return false, "未使用", true
+}
+
+func (s *Server) deleteResourcePoolVolume(w http.ResponseWriter, r *http.Request, volume string) {
+	if s.Docker == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "RESOURCE_UNAVAILABLE", "Volumeを削除できる状態ではありません", "")
+		return
+	}
+	inUse, err := s.Docker.VolumeInUse(r.Context(), volume)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "VOLUME_USAGE_UNKNOWN", "Volumeの使用状況を確認できません", "volume")
+		return
+	}
+	if inUse {
+		writeAPIError(w, http.StatusConflict, "VOLUME_IN_USE", "使用中のVolumeは削除できません", "volume")
+		return
+	}
+	if err := s.Docker.RemoveOwnedVolume(r.Context(), volume); err != nil {
+		if strings.Contains(err.Error(), "見つかりません") {
+			writeAPIError(w, http.StatusNotFound, "VOLUME_NOT_FOUND", "LWS管理下のVolumeが見つかりません", "volume")
+			return
+		}
+		writeAPIError(w, http.StatusConflict, "VOLUME_DELETE_FAILED", "Volumeを削除できません", "volume")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": volume})
 }
 
 func managedComposeVolumeNames(id, appsRoot string, base []byte, overrideFilesJSON string) ([]string, error) {

@@ -52,6 +52,10 @@ export const api = {
     request<Configuration>(`/applications/${encodeURIComponent(id)}/configuration`),
   resourcePools: (includeSystem = false) =>
     request<ResourcePools>(`/resource-pools${includeSystem ? "?includeSystem=true" : ""}`),
+  deleteResourcePoolVolume: (name: string) =>
+    request<{ id: string }>(`/resource-pools/volumes/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
   create: (input: CreateApplicationInput) =>
     request<{ name: string }>("/applications", {
       method: "POST",

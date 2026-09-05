@@ -568,6 +568,45 @@ input:focus {
 .pool-row small {
   overflow-wrap: anywhere;
 }
+.pool-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.pool-status b {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.pool-status .is-used {
+  color: #a24735;
+}
+.pool-status .is-free {
+  color: #286653;
+}
+.pool-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid #d8b4ac;
+  background: #fff8f5;
+  color: #a24735;
+  font-size: 0.72rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.pool-delete:hover:not(:disabled) {
+  border-color: #a24735;
+  background: #fff0eb;
+}
+.pool-delete:disabled {
+  cursor: not-allowed;
+}
+.error-note {
+  color: #a24735;
+}
 .pool-kind {
   display: inline-block;
   min-width: 4.5rem;

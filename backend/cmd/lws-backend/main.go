@@ -85,6 +85,7 @@ func main() {
 		}()
 	}
 	server := backend.NewServer(db, runtime.Run)
+	server.Docker = runtime.Docker
 	server.SecretKey = secretKey
 	server.AppsRoot = appsRoot
 	server.Logs.SecretKey = secretKey

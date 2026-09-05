@@ -15,7 +15,10 @@ services:
       LWS_CADDY_CONTAINER: ${LWS_CADDY_CONTAINER:-lws-caddy-1}
       LWS_COREDNS_CONTAINER: ${LWS_COREDNS_CONTAINER:-lws-coredns-1}
     volumes:
+      # DBや設定はNamed Volumeに保持し、Docker daemonが参照する登録アプリの
+      # sourceだけをホストと共有する。
       - lws-backend-data:/var/lib/lws
+      - ${LWS_STATE_DIR:-/var/lib/lws}/apps:/var/lib/lws/apps
       - lws-backend-config:/etc/lws
       - lws-generated:/var/lib/lws/generated
       - /var/run/docker.sock:/var/run/docker.sock

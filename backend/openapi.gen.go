@@ -361,6 +361,8 @@ type PoolDeviceReference struct {
 type PoolResource struct {
 	Application     string            `json:"application"`
 	ApplicationName string            `json:"applicationName"`
+	Deletable       *bool             `json:"deletable,omitempty"`
+	InUse           *bool             `json:"inUse,omitempty"`
 	Kind            *PoolResourceKind `json:"kind,omitempty"`
 	Name            string            `json:"name"`
 	Status          string            `json:"status"`
@@ -647,6 +649,9 @@ type ClientInterface interface {
 	// CreatePoolDevice performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request.
 	// Takes a body of the `application/json` content type.
 	CreatePoolDevice(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteResourcePoolVolume performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+	DeleteResourcePoolVolume(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // ListApplications performs a GET /applications (the `ListApplications` operationId) request.
@@ -1077,6 +1082,19 @@ func (c *Client) CreatePoolDeviceWithBody(ctx context.Context, contentType strin
 // Takes a body of the `application/json` content type.
 func (c *Client) CreatePoolDevice(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreatePoolDeviceRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteResourcePoolVolume performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+func (c *Client) DeleteResourcePoolVolume(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteResourcePoolVolumeRequest(c.Server, volume)
 	if err != nil {
 		return nil, err
 	}
@@ -2059,6 +2077,40 @@ func NewCreatePoolDeviceRequestWithBody(server string, contentType string, body 
 	return req, nil
 }
 
+// NewDeleteResourcePoolVolumeRequest constructs an http.Request for the DeleteResourcePoolVolume method
+func NewDeleteResourcePoolVolumeRequest(server string, volume string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "volume", volume, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resource-pools/volumes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -2262,6 +2314,11 @@ type ClientWithResponsesInterface interface {
 	// CreatePoolDeviceWithResponse performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	CreatePoolDeviceWithResponse(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePoolDeviceResponse, error)
+
+	// DeleteResourcePoolVolumeWithResponse performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DeleteResourcePoolVolumeWithResponse(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*DeleteResourcePoolVolumeResponse, error)
 }
 
 type ListApplicationsResponse struct {
@@ -3097,6 +3154,47 @@ func (r CreatePoolDeviceResponse) ContentType() string {
 	return ""
 }
 
+type DeleteResourcePoolVolumeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PoolDeviceReference
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteResourcePoolVolumeResponse) GetJSON200() *PoolDeviceReference {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteResourcePoolVolumeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteResourcePoolVolumeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteResourcePoolVolumeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteResourcePoolVolumeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // ListApplicationsWithResponse performs a GET /applications (the `ListApplications` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3447,6 +3545,17 @@ func (c *ClientWithResponses) CreatePoolDeviceWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseCreatePoolDeviceResponse(rsp)
+}
+
+// DeleteResourcePoolVolumeWithResponse performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DeleteResourcePoolVolumeWithResponse(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*DeleteResourcePoolVolumeResponse, error) {
+	rsp, err := c.DeleteResourcePoolVolume(ctx, volume, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteResourcePoolVolumeResponse(rsp)
 }
 
 // ParseListApplicationsResponse parses an HTTP response from a ListApplicationsWithResponse call
@@ -3967,6 +4076,38 @@ func ParseCreatePoolDeviceResponse(rsp *http.Response) (*CreatePoolDeviceRespons
 	return response, nil
 }
 
+// ParseDeleteResourcePoolVolumeResponse parses an HTTP response from a DeleteResourcePoolVolumeWithResponse call
+func ParseDeleteResourcePoolVolumeResponse(rsp *http.Response) (*DeleteResourcePoolVolumeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteResourcePoolVolumeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PoolDeviceReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 404:
+		break // No content-type
+
+	case rsp.StatusCode == 409:
+		break // No content-type
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
@@ -4032,6 +4173,9 @@ type ServerInterface interface {
 
 	// (POST /resource-pools/devices)
 	CreatePoolDevice(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /resource-pools/volumes/{volume})
+	DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request, volume string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -4659,6 +4803,32 @@ func (siw *ServerInterfaceWrapper) CreatePoolDevice(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteResourcePoolVolume operation middleware
+func (siw *ServerInterfaceWrapper) DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "volume" -------------
+	var volume string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "volume", r.PathValue("volume"), &volume, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "volume", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteResourcePoolVolume(w, r, volume)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -4783,6 +4953,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health/ready", wrapper.HealthReady)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/resource-pools", wrapper.ListResourcePools)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/resource-pools/devices", wrapper.CreatePoolDevice)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/resource-pools/volumes/{volume}", wrapper.DeleteResourcePoolVolume)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications", wrapper.ListApplications)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications", wrapper.CreateApplication)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/applications/{application}", wrapper.UnregisterApplication)
@@ -5376,6 +5547,44 @@ func (response CreatePoolDevice201JSONResponse) VisitCreatePoolDeviceResponse(w 
 	return err
 }
 
+type DeleteResourcePoolVolumeRequestObject struct {
+	Volume string `json:"volume"`
+}
+
+type DeleteResourcePoolVolumeResponseObject interface {
+	VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error
+}
+
+type DeleteResourcePoolVolume200JSONResponse PoolDeviceReference
+
+func (response DeleteResourcePoolVolume200JSONResponse) VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteResourcePoolVolume404Response struct {
+}
+
+func (response DeleteResourcePoolVolume404Response) VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type DeleteResourcePoolVolume409Response struct {
+}
+
+func (response DeleteResourcePoolVolume409Response) VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -5441,6 +5650,9 @@ type StrictServerInterface interface {
 
 	// (POST /resource-pools/devices)
 	CreatePoolDevice(ctx context.Context, request CreatePoolDeviceRequestObject) (CreatePoolDeviceResponseObject, error)
+
+	// (DELETE /resource-pools/volumes/{volume})
+	DeleteResourcePoolVolume(ctx context.Context, request DeleteResourcePoolVolumeRequestObject) (DeleteResourcePoolVolumeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -6097,53 +6309,80 @@ func (sh *strictHandler) CreatePoolDevice(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// DeleteResourcePoolVolume operation middleware
+func (sh *strictHandler) DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request, volume string) {
+	var request DeleteResourcePoolVolumeRequestObject
+
+	request.Volume = volume
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteResourcePoolVolume(ctx, request.(DeleteResourcePoolVolumeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteResourcePoolVolume")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteResourcePoolVolumeResponseObject); ok {
+		if err := validResponse.VisitDeleteResourcePoolVolumeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"x3vN98rh6dXDJ68ePdz/7NvY7xBFLnCgzGjd3DbCSC7CS1J1tgqVj2wsM8d7MZBuiDhl9RV4K2apGWFN",
-	"mw3fGq9uWPnLXm0CuAxcuhWeJUzV188KeV8/frr/7I8/FLSW9TeDLKR60vH2YNWJBn9xXaetVFazbTOE",
-	"qTTTVIXT3afjnX8kFUqIzqYCnY8eHvzrq1d/+nLvu3+PP7m79/zeq6d/Pn4smzG12wGIuUpMboBhq5JO",
-	"0lZzxDZLLS8FB3HlqE13Xu7FQ3qE4g7oZnp/tt00F87+ZKQcpmqO4IhyMYvLjqg36lPTA2IfIbV0+p6R",
-	"m3AbpKbjYBfLXKX3x+ebzerb49FGba9sbSUBUOmbN8LVaZyTwx3egAEQPsc4BeTK3lkUvuSC7fbyief9",
-	"v3oe6nKYBtoTYNjyA9qLLxVmmeKVXaYY0M2+HJXmgG9NWm9R6ATYsY/JduvR6SeN6+HNF7X+x2a/k8nD",
-	"mxlQ1EDHZL22qL9OTHdo03n+sVnO808Md2jDDYl1XIYbEuvEcJWG6wNyeL/h4AFou5kPxZ7VcIu6kZEP",
-	"O3j8Yn/33t7zp4Uz0ufdFYesx49jJ5+y//nfDn73eP/+1693X4bNzPnmOd2mvef39u9/nXCTe36znf48",
-	"qpoHZv9dN8MhS/ltU5Udk1FgvRbNkwSo7VZ6bdVpf6fQ2pF0vzNXBY0NM+cnN/7auZz8NkDNV6FJxMRy",
-	"Ahuii06pWbST/0noIocpXjuE8W9msJQlUeh+9UZ7vPtkvPNyvPtivPONuFd5Md79e+JustYauWcRVdeY",
-	"udcQs7zFLL9nrhW+F46uz1W8M1JOWD8b7z4Y7zwa73xz8Ifv/nv3n/vP7u59+6lQcvzSNQFXQB2jFWZk",
-	"3BgsGKON0f8CAAD//w==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
