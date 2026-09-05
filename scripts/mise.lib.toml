@@ -1,8 +1,16 @@
 #:schema https://mise.jdx.dev/schema/mise-task.json
 
+[format]
+description = "GoとDashboardのコードを整形"
+run = "scripts/format.sh write"
+
+[format-check]
+description = "GoとDashboardのフォーマットを検査"
+run = "scripts/format.sh check"
+
 [lint]
 description = "静的検査を実行"
-run = "scripts/lint.sh"
+run = ["scripts/lint.sh", "npm --prefix dashboard run lint"]
 
 [test]
 description = "軽量な統合テストを実行"

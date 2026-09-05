@@ -69,13 +69,10 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.create.mockResolvedValue({ name: "operations/create" });
     renderApp();
     await screen.findByText("台帳にアプリを登録する");
-    fireEvent.change(
-      screen.getByPlaceholderText("https://github.com/owner/repository"),
-      { target: { value: "https://github.com/example/test" } },
-    );
-    fireEvent.submit(
-      screen.getByRole("button", { name: "検証して登録" }).closest("form")!,
-    );
+    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repository"), {
+      target: { value: "https://github.com/example/test" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "検証して登録" }).closest("form")!);
     await waitFor(() =>
       expect(apiMock.create.mock.calls[0]?.[0]).toEqual({
         repositoryUrl: "https://github.com/example/test",
@@ -122,9 +119,7 @@ describe("Dashboard デバッグルーム", () => {
       },
     ]);
     renderApp();
-    expect((await screen.findAllByText("登録解除済み")).length).toBeGreaterThan(
-      0,
-    );
+    expect((await screen.findAllByText("登録解除済み")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "再登録" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "完全削除" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "登録解除" })).toBeNull();
@@ -132,21 +127,18 @@ describe("Dashboard デバッグルーム", () => {
   });
 
   it("連続したJSONログを一つの構造化ログにまとめる", () => {
-    const entries = [
-      "{",
-      `  "service": "web",`,
-      `  "status": "ready"`,
-      "}",
-    ].map((message, index) => ({
-      id: String(index),
-      cursor: String(index),
-      occurredAt: "2026-08-23T00:00:00Z",
-      level: "info" as const,
-      component: "application" as const,
-      service: "web",
-      containerName: "web-1",
-      message: `[Compose検証] ${message}`,
-    }));
+    const entries = ["{", `  "service": "web",`, `  "status": "ready"`, "}"].map(
+      (message, index) => ({
+        id: String(index),
+        cursor: String(index),
+        occurredAt: "2026-08-23T00:00:00Z",
+        level: "info" as const,
+        component: "application" as const,
+        service: "web",
+        containerName: "web-1",
+        message: `[Compose検証] ${message}`,
+      }),
+    );
     const grouped = groupLogEntries(entries);
     expect(grouped).toHaveLength(1);
     expect(grouped[0].json).toBe('{"service":"web","status":"ready"}');
@@ -206,12 +198,8 @@ describe("Dashboard デバッグルーム", () => {
     renderApp();
     expect(await screen.findByText("完全削除: 実行中")).toBeTruthy();
     expect(screen.getByText("段階: 実行設定")).toBeTruthy();
-    expect(
-      screen.getByText("アプリのDocker volumeを削除しています"),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "完全削除" }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.getByText("アプリのDocker volumeを削除しています")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "完全削除" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("未完了の操作とアプリの実行状態を表示し、操作を無効化する", async () => {
@@ -239,12 +227,8 @@ describe("Dashboard デバッグルーム", () => {
     });
     renderApp();
     await screen.findByText("再構成: 実行中");
-    expect(
-      screen.getByText("実行状態").nextElementSibling?.textContent,
-    ).toContain("異常");
-    expect(
-      screen.getByRole("button", { name: "開始" }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.getByText("実行状態").nextElementSibling?.textContent).toContain("異常");
+    expect(screen.getByRole("button", { name: "開始" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("ページを読み込み直しても直近の完了Operationを表示する", async () => {
@@ -272,9 +256,7 @@ describe("Dashboard デバッグルーム", () => {
     });
     renderApp();
     await screen.findByText("開始: 完了");
-    expect(
-      screen.getByRole("button", { name: "開始" }).hasAttribute("disabled"),
-    ).toBe(false);
+    expect(screen.getByRole("button", { name: "開始" }).hasAttribute("disabled")).toBe(false);
   });
 
   it("Compose由来のリソースと、値を伏せたsecretの保持を表示する", async () => {
@@ -332,9 +314,7 @@ describe("Dashboard デバッグルーム", () => {
     expect(await screen.findByText("app-data")).toBeTruthy();
     expect(screen.getByText("lws-app-test-edge")).toBeTruthy();
     expect(screen.getByText("デバイスは不要")).toBeTruthy();
-    expect(
-      screen.getByPlaceholderText("設定済み（変更する場合のみ入力）"),
-    ).toBeTruthy();
+    expect(screen.getByPlaceholderText("設定済み（変更する場合のみ入力）")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     fireEvent.click(screen.getByRole("button", { name: "実行する" }));
     await waitFor(() =>
@@ -412,17 +392,13 @@ describe("Dashboard デバッグルーム", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     fireEvent.click(screen.getByRole("button", { name: "実行する" }));
     await waitFor(() =>
-      expect(apiMock.saveConfiguration).toHaveBeenCalledWith(
-        expect.anything(),
-        {},
-        [
-          {
-            service: "reader",
-            targetPath: "/dev/lws/card-reader",
-            deviceId: "device-reader",
-          },
-        ],
-      ),
+      expect(apiMock.saveConfiguration).toHaveBeenCalledWith(expect.anything(), {}, [
+        {
+          service: "reader",
+          targetPath: "/dev/lws/card-reader",
+          deviceId: "device-reader",
+        },
+      ]),
     );
   });
 });

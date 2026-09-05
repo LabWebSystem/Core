@@ -36,10 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await response.json().catch(() => null)) as {
       error?: { message?: string };
     } | null;
-    throw new ApiError(
-      body?.error?.message ?? "操作を完了できませんでした",
-      response.status,
-    );
+    throw new ApiError(body?.error?.message ?? "操作を完了できませんでした", response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -49,72 +46,50 @@ const operationName = (name: string) =>
   name.startsWith("operations/") ? name : `operations/${name}`;
 
 export const api = {
-  list: async () =>
-    (await request<{ applications: Application[] }>("/applications"))
-      .applications,
-  get: (id: string) =>
-    request<Application>(`/applications/${encodeURIComponent(id)}`),
+  list: async () => (await request<{ applications: Application[] }>("/applications")).applications,
+  get: (id: string) => request<Application>(`/applications/${encodeURIComponent(id)}`),
   configuration: (id: string) =>
-    request<Configuration>(
-      `/applications/${encodeURIComponent(id)}/configuration`,
-    ),
+    request<Configuration>(`/applications/${encodeURIComponent(id)}/configuration`),
   resourcePools: (includeSystem = false) =>
-    request<ResourcePools>(
-      `/resource-pools${includeSystem ? "?includeSystem=true" : ""}`,
-    ),
+    request<ResourcePools>(`/resource-pools${includeSystem ? "?includeSystem=true" : ""}`),
   create: (input: CreateApplicationInput) =>
     request<{ name: string }>("/applications", {
       method: "POST",
       body: JSON.stringify({ ...input, requestId: requestId() }),
     }),
   update: (app: Application, input: { ref?: string; subdomain?: string }) =>
-    request<{ name: string }>(
-      `/applications/${encodeURIComponent(appId(app))}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ ...input, requestId: requestId() }),
-      },
-    ),
-  action: (
-    app: Application,
-    action: "start" | "stop" | "sync" | "rebuild" | "register",
-  ) =>
-    request<{ name: string }>(
-      `/applications/${encodeURIComponent(appId(app))}:${action}`,
-      { method: "POST", body: JSON.stringify({ requestId: requestId() }) },
-    ),
+    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...input, requestId: requestId() }),
+    }),
+  action: (app: Application, action: "start" | "stop" | "sync" | "rebuild" | "register") =>
+    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}:${action}`, {
+      method: "POST",
+      body: JSON.stringify({ requestId: requestId() }),
+    }),
   unregister: (app: Application) =>
-    request<{ name: string }>(
-      `/applications/${encodeURIComponent(appId(app))}`,
-      { method: "DELETE", body: JSON.stringify({ requestId: requestId() }) },
-    ),
+    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}`, {
+      method: "DELETE",
+      body: JSON.stringify({ requestId: requestId() }),
+    }),
   purge: (app: Application) =>
-    request<{ name: string }>(
-      `/applications/${encodeURIComponent(appId(app))}:purge`,
-      {
-        method: "POST",
-        body: JSON.stringify({ requestId: requestId(), confirm: true }),
-      },
-    ),
+    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}:purge`, {
+      method: "POST",
+      body: JSON.stringify({ requestId: requestId(), confirm: true }),
+    }),
   saveConfiguration: (
     app: Application,
-    variables: Record<
-      string,
-      { value?: string; secret: boolean; keep?: boolean }
-    >,
+    variables: Record<string, { value?: string; secret: boolean; keep?: boolean }>,
     deviceBindings: { service: string; targetPath: string; deviceId: string }[],
   ) =>
-    request<{ name: string }>(
-      `/applications/${encodeURIComponent(appId(app))}/configuration`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({
-          variables,
-          deviceBindings,
-          requestId: requestId(),
-        }),
-      },
-    ),
+    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}/configuration`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        variables,
+        deviceBindings,
+        requestId: requestId(),
+      }),
+    }),
   createPoolDevice: (name: string, candidateStableId: string) =>
     request<{ id: string }>("/resource-pools/devices", {
       method: "POST",
@@ -123,18 +98,14 @@ export const api = {
   operation: (name: string) => request<Operation>(`/${operationName(name)}`),
   watchOperation(
     name: string,
-    onState: (
-      operation: Pick<Operation, "name" | "state" | "phase" | "displayMessage">,
-    ) => void,
+    onState: (operation: Pick<Operation, "name" | "state" | "phase" | "displayMessage">) => void,
     onError: () => void,
   ) {
     name = operationName(name);
     const source = new EventSource(`/api/v1/${name}:watch`);
     let finished = false;
     const receive = (event: Event) => {
-      const payload = JSON.parse(
-        (event as MessageEvent<string>).data,
-      ) as OperationEvent;
+      const payload = JSON.parse((event as MessageEvent<string>).data) as OperationEvent;
       const operation = {
         name,
         state: payload.type,
@@ -147,13 +118,7 @@ export const api = {
         source.close();
       }
     };
-    for (const state of [
-      "queued",
-      "running",
-      "succeeded",
-      "failed",
-      "cancelled",
-    ] as const)
+    for (const state of ["queued", "running", "succeeded", "failed", "cancelled"] as const)
       source.addEventListener(state, receive);
     source.onerror = () => {
       if (!finished) onError();
