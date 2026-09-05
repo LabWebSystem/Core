@@ -14,6 +14,16 @@ describe("Dashboard API client", () => {
     expect(body.subdomain).toBe("test");
   });
 
+  it("OpenAPI契約のCompose選択項目を登録要求へ含める", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "operations/one" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await api.create({ repositoryUrl: "https://github.com/example/app/tree/dev/new-arch", ref: "dev/new-arch", subdomain: "test", composeFile: "compose.dev.yaml", overrideFiles: ["compose.local.yaml"] });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.composeFile).toBe("compose.dev.yaml");
+    expect(body.overrideFiles).toEqual(["compose.local.yaml"]);
+  });
+
   it("API の日本語エラーをそのまま利用する", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "指定された値が不正です" } }), { status: 400 })));
     await expect(api.list()).rejects.toEqual(new ApiError("指定された値が不正です", 400));

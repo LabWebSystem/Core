@@ -7,6 +7,10 @@ export type LogEntry = components["schemas"]["LogEntry"];
 type LogEntryList = components["schemas"]["LogEntryList"];
 export type LogQuery = { limit?: number; startAt?: string; endAt?: string };
 export type ResourcePools = components["schemas"]["ResourcePools"];
+export type CreateApplicationInput = Omit<
+  components["schemas"]["CreateApplicationRequest"],
+  "requestId"
+>;
 type OperationEvent = {
   type: Operation["state"];
   data?: { message?: string; phase?: string };
@@ -58,7 +62,7 @@ export const api = {
     request<ResourcePools>(
       `/resource-pools${includeSystem ? "?includeSystem=true" : ""}`,
     ),
-  create: (input: { repositoryUrl: string; ref: string; subdomain: string; composeFile?: string }) =>
+  create: (input: CreateApplicationInput) =>
     request<{ name: string }>("/applications", {
       method: "POST",
       body: JSON.stringify({ ...input, requestId: requestId() }),

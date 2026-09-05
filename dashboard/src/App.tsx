@@ -23,6 +23,7 @@ import {
   ApiError,
   type Application,
   type Configuration,
+  type CreateApplicationInput,
   type LogEntry,
   type LogQuery,
   type Operation,
@@ -436,13 +437,7 @@ function RegisterForm({
   onSubmit,
 }: {
   busy: boolean;
-  onSubmit: (input: {
-    repositoryUrl: string;
-    ref: string;
-    subdomain: string;
-    composeFile?: string;
-    overrideFiles?: string[];
-  }) => void;
+  onSubmit: (input: CreateApplicationInput) => void;
 }) {
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [ref, setRef] = useState("main");
