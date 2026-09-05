@@ -281,12 +281,17 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 	if data, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "runtime", "lws.override.yaml")); err == nil {
 		overrideCompose = string(data)
 	}
+	effectiveCompose := ""
+	if data, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "runtime", "lws.effective.yaml")); err == nil {
+		effectiveCompose = string(data)
+	}
 	sort.Slice(v, func(i, j int) bool { return v[i]["name"].(string) < v[j]["name"].(string) })
 	writeJSON(w, 200, map[string]any{
 		"variables":             v,
 		"volumes":               volumes,
 		"network":               map[string]any{"name": EdgeNetworkName(appID(r)), "purpose": "公開サービスとLWSのReverse Proxyだけを接続"},
 		"lwsOverrideCompose":    overrideCompose,
+		"effectiveCompose":      effectiveCompose,
 		"manifestPublicService": manifestService,
 		"manifestPublicPort":    manifestPort,
 		"publicService":         publicService,

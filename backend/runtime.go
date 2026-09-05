@@ -100,6 +100,9 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := e.GenerateOverrideFromComposes(op.ApplicationID, configuredService, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
+		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
+			return err
+		}
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}
@@ -205,6 +208,9 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := e.GenerateOverrideFromComposes(op.ApplicationID, manifest.Public.Service, composePath, overridePaths, filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
+		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, composePath, overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
+			return err
+		}
 		overridesJSON, _ := json.Marshal(requestedOverrides)
 		if previousService == "" || op.Kind == "CREATE" {
 			previousService, previousPort = manifest.Public.Service, manifest.Public.Port
@@ -250,6 +256,9 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			overridePaths = append(overridePaths, filepath.Join(source, file))
 		}
 		if err := e.GenerateOverrideFromComposes(op.ApplicationID, previousService, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml")); err != nil {
+			return err
+		}
+		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
 			return err
 		}
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
@@ -622,6 +631,30 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	}
 	return ValidateEffectiveComposeWithOwnedNetwork(out, service, port, EdgeNetworkName(id))
 }
+
+// GenerateEffectiveComposeは、利用者が選択したCompose群とLWS overrideを
+// Docker Compose自身にマージさせた、確認用の完全なComposeを生成する。
+func (e *RuntimeExecutor) GenerateEffectiveCompose(ctx context.Context, id, compose string, overrides []string, override, path string) error {
+	env := filepath.Join(filepath.Dir(path), "app.env")
+	if _, err := os.Stat(env); os.IsNotExist(err) {
+		if err := WriteAtomic(env, nil, 0600); err != nil {
+			return err
+		}
+	}
+	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose}
+	for _, file := range overrides {
+		args = append(args, "-f", file)
+	}
+	args = append(args, "-f", override, "config", "--no-interpolate", "--format", "yaml")
+	data, err := e.Runner.Run(ctx, "docker", args...)
+	if err != nil {
+		return fmt.Errorf("マージ後のComposeを生成できません")
+	}
+	if len(data) == 0 {
+		return fmt.Errorf("マージ後のComposeが空です")
+	}
+	return WriteAtomic(path, data, 0600)
+}
 func (e *RuntimeExecutor) GenerateOverride(id, service, path string) error {
 	return e.GenerateOverrideWithVolumes(id, service, nil, path)
 }
@@ -699,6 +732,11 @@ func (e *RuntimeExecutor) GenerateOverrideFromComposes(id, service, compose stri
 		for i := range auto {
 			if auto[i].Source != "" && !strings.Contains(auto[i].Source, "${") && !filepath.IsAbs(auto[i].Source) {
 				auto[i].Source = filepath.Clean(filepath.Join(filepath.Dir(file), auto[i].Source))
+			}
+			if auto[i].Source != "" && !strings.Contains(auto[i].Source, "${") {
+				if _, statErr := os.Stat(auto[i].Source); statErr != nil {
+					return fmt.Errorf("%sのbind mount元が見つかりません: %s", auto[i].Service, auto[i].Source)
+				}
 			}
 		}
 		allAutoVolumes = append(allAutoVolumes, auto...)

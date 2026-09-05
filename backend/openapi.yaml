@@ -218,7 +218,7 @@ components:
         liveCursor: { type: string }
     ConfigurationResponse:
       type: object
-      required: [variables, volumes, network, devices, deviceAccess, ready, lwsOverrideCompose, webInterfaces, manifestPublicService, manifestPublicPort, publicService, publicPort]
+      required: [variables, volumes, network, devices, deviceAccess, ready, lwsOverrideCompose, effectiveCompose, webInterfaces, manifestPublicService, manifestPublicPort, publicService, publicPort]
       properties:
         variables:
           type: array
@@ -266,6 +266,7 @@ components:
             message: { type: string }
         ready: { type: boolean }
         lwsOverrideCompose: { type: string }
+        effectiveCompose: { type: string }
         webInterfaces:
           type: array
           items:

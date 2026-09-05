@@ -1247,10 +1247,10 @@ function AppWorkbench({
                 secret
               </label>
             </div>
-            {configuration?.lwsOverrideCompose ? (
+            {configuration?.effectiveCompose ? (
               <details className="override-preview">
-                <summary>LWSが生成した実行用override composeを確認</summary>
-                <pre>{configuration.lwsOverrideCompose}</pre>
+                <summary>マージ後の完全なComposeを確認</summary>
+                <pre>{configuration.effectiveCompose}</pre>
               </details>
             ) : null}
           </>

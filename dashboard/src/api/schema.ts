@@ -403,6 +403,7 @@ export interface components {
             };
             ready: boolean;
             lwsOverrideCompose: string;
+            effectiveCompose: string;
             webInterfaces: {
                 service: string;
                 port: number;
