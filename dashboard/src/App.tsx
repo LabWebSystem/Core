@@ -207,7 +207,11 @@ export function App() {
     try {
       setMessage(undefined);
       const result = await task();
-      setOperation(await api.operation(result.name));
+      const nextOperation = await api.operation(result.name);
+      setOperation(nextOperation);
+      if (["succeeded", "failed", "cancelled"].includes(nextOperation.state)) {
+        void client.invalidateQueries({ queryKey: ["applications"] });
+      }
       setLogView("task");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409 && selected) {
@@ -844,7 +848,15 @@ function AppWorkbench({
   const [newValue, setNewValue] = useState("");
   const [newSecret, setNewSecret] = useState(false);
   const [deviceValues, setDeviceValues] = useState<Record<string, string>>({});
+  const [publicService, setPublicService] = useState("");
+  const [publicPort, setPublicPort] = useState(0);
   const variables = configuration?.variables ?? [];
+  useEffect(() => {
+    if (configuration) {
+      setPublicService(configuration.publicService ?? configuration.manifestPublicService ?? "");
+      setPublicPort(configuration.publicPort ?? configuration.manifestPublicPort ?? 0);
+    }
+  }, [configuration]);
   const rows = [
     ...variables
       .filter((item) => !removed.includes(item.name))
@@ -889,6 +901,9 @@ function AppWorkbench({
   }));
   const changed = rows.filter((row) => row.edited || !row.configured).map((row) => row.name);
   const changeDetail = `${changed.length ? `追加・更新: ${changed.join("、")}` : "追加・更新はありません"}${removed.length ? `\n削除: ${removed.join("、")}` : ""}\nsecret の現在値は表示・送信されず、未変更の値は保持されます。`;
+  const publicArgs: [] | [string, number] = configuration?.webInterfaces?.length
+    ? [publicService, publicPort]
+    : [];
   const resourcePending = configLoading || (!configuration && !configError);
   const resourceError = configError && !configuration;
   const resourceText = (value: string) =>
@@ -1061,18 +1076,19 @@ function AppWorkbench({
             disabled={disabled || unregistered || configLoading || configError}
             onClick={() =>
               onConfirm(
-                "環境設定を更新する",
+                app.registrationState === "CONFIGURING" ? "アプリを登録する" : "環境設定を更新する",
                 () =>
                   api.saveConfiguration(
                     app,
                     save(),
                     bindings.filter((binding) => binding.deviceId),
+                    ...publicArgs,
                   ),
                 changeDetail,
               )
             }
           >
-            保存
+            {app.registrationState === "CONFIGURING" ? "登録" : "保存"}
           </button>
         </div>
         {configLoading ? (
@@ -1085,6 +1101,38 @@ function AppWorkbench({
               Compose が参照する変数を管理します。secret
               の現在値は表示せず、未変更なら安全に保持します。
             </p>
+            {configuration?.webInterfaces?.length ? (
+              <div className="interface-setting">
+                <label>
+                  公開するWebインターフェース
+                  <select
+                    disabled={disabled || unregistered}
+                    value={`${publicService}:${publicPort}`}
+                    onChange={(event) => {
+                      const [service, port] = event.target.value.split(":");
+                      setPublicService(service);
+                      setPublicPort(Number(port));
+                    }}
+                  >
+                    {(configuration?.webInterfaces ?? []).map((iface) => (
+                      <option
+                        key={`${iface.service}:${iface.port}`}
+                        value={`${iface.service}:${iface.port}`}
+                      >
+                        {iface.service}:{iface.port}
+                        {iface.service === configuration?.manifestPublicService &&
+                        iface.port === configuration?.manifestPublicPort
+                          ? "（manifestの既定値）"
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <small>
+                  manifestの公開先が初期選択されています。開発用サービスへ切り替える場合だけ変更してください。
+                </small>
+              </div>
+            ) : null}
             {configuration?.devices?.length ? (
               <div className="device-binding-list">
                 {configuration.devices.map((device) => {
@@ -1199,6 +1247,12 @@ function AppWorkbench({
                 secret
               </label>
             </div>
+            {configuration?.lwsOverrideCompose ? (
+              <details className="override-preview">
+                <summary>LWSが生成した実行用override composeを確認</summary>
+                <pre>{configuration.lwsOverrideCompose}</pre>
+              </details>
+            ) : null}
           </>
         )}
       </section>

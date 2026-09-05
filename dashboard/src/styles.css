@@ -480,6 +480,57 @@ input:focus {
   font-size: 0.76rem;
   line-height: 1.55;
 }
+.interface-setting {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0 12px;
+  padding: 10px 0;
+  border-top: 1px solid #e2e6e3;
+  border-bottom: 1px solid #e2e6e3;
+}
+.interface-setting label {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.7fr) minmax(180px, 1.3fr);
+  gap: 10px;
+  align-items: center;
+  color: #314456;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+.interface-setting select {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #c5d0c9;
+  background: #fff;
+  color: #273c4b;
+}
+.interface-setting small {
+  color: #71808c;
+  font-size: 0.69rem;
+  line-height: 1.45;
+}
+.override-preview {
+  margin-top: 16px;
+  border-top: 1px solid #e2e6e3;
+  padding-top: 10px;
+  color: #526b7d;
+  font-size: 0.72rem;
+}
+.override-preview summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+.override-preview pre {
+  max-height: 260px;
+  margin: 9px 0 0;
+  overflow: auto;
+  padding: 10px;
+  background: #f5f7f5;
+  color: #314456;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  white-space: pre;
+}
 .variable-row {
   grid-template-columns: minmax(100px, 0.7fr) minmax(160px, 1.5fr) 70px 28px;
   gap: 7px;

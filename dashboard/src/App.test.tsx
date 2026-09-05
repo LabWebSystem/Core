@@ -389,7 +389,7 @@ describe("Dashboard デバッグルーム", () => {
     renderApp();
     const select = await screen.findByRole("combobox");
     fireEvent.change(select, { target: { value: "device-reader" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "登録" }));
     fireEvent.click(screen.getByRole("button", { name: "実行する" }));
     await waitFor(() =>
       expect(apiMock.saveConfiguration).toHaveBeenCalledWith(expect.anything(), {}, [

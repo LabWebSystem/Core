@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 9 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,7 +35,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 9 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -653,6 +653,7 @@ func TestAutoVolumeReplacementsOnlyRewritesBindAndAnonymousVolumes(t *testing.T)
       - ./api:/app:rw
       - /app/node_modules
       - app-data:/data
+      - "${APPDATA_ROOT:-../../appdata/oruca}/config:/runtime-config"
       - type: bind
         source: ./config
         target: /config
@@ -663,7 +664,7 @@ func TestAutoVolumeReplacementsOnlyRewritesBindAndAnonymousVolumes(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(replacements) != 4 {
+	if len(replacements) != 5 {
 		t.Fatalf("自動volume変換数が不正です: %+v", replacements)
 	}
 	for _, replacement := range replacements {
@@ -672,6 +673,9 @@ func TestAutoVolumeReplacementsOnlyRewritesBindAndAnonymousVolumes(t *testing.T)
 		}
 		if replacement.Target == "/data" {
 			t.Fatal("名前付きvolumeを自動変換しました")
+		}
+		if replacement.Target == "/runtime-config" && replacement.Source != "${APPDATA_ROOT:-../../appdata/oruca}/config" {
+			t.Fatalf("環境変数を含むbind mountのsourceが不正です: %+v", replacement)
 		}
 	}
 }
@@ -1359,6 +1363,34 @@ func TestGeneratedOverrideLabelsAllComposeServices(t *testing.T) {
 	text := string(data)
 	if !strings.Contains(text, `"worker"`) || strings.Count(text, "com.labwebsystem.app-id") != 2 {
 		t.Fatalf("全serviceに所有labelがありません: %s", text)
+	}
+}
+
+func TestGeneratedOverrideConvertsHostPortsToExpose(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "compose.yaml")
+	dev := filepath.Join(dir, "compose.dev.yaml")
+	path := filepath.Join(dir, "lws.override.yaml")
+	if err := os.WriteFile(base, []byte("services:\n  web:\n    image: example\n    ports: [\"80:80\"]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dev, []byte("services:\n  vite:\n    image: example\n    ports:\n      - \"4000:4000\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	e := &RuntimeExecutor{InstallationID: "installation"}
+	if err := e.GenerateOverrideFromComposes("app-id", "web", base, []string{dev}, path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "ports: !reset []") {
+		t.Fatalf("host portをresetしていません: %s", text)
+	}
+	if !strings.Contains(text, "expose:") || !strings.Contains(text, "- \"4000\"") {
+		t.Fatalf("viteのexposeが不正です: %s", text)
 	}
 }
 

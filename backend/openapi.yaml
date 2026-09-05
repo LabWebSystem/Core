@@ -218,7 +218,7 @@ components:
         liveCursor: { type: string }
     ConfigurationResponse:
       type: object
-      required: [variables, volumes, network, devices, deviceAccess, ready]
+      required: [variables, volumes, network, devices, deviceAccess, ready, lwsOverrideCompose, webInterfaces, manifestPublicService, manifestPublicPort, publicService, publicPort]
       properties:
         variables:
           type: array
@@ -265,6 +265,19 @@ components:
             allowed: { type: boolean }
             message: { type: string }
         ready: { type: boolean }
+        lwsOverrideCompose: { type: string }
+        webInterfaces:
+          type: array
+          items:
+            type: object
+            required: [service, port]
+            properties:
+              service: { type: string }
+              port: { type: integer, minimum: 1, maximum: 65535 }
+        manifestPublicService: { type: string }
+        manifestPublicPort: { type: integer, minimum: 1, maximum: 65535 }
+        publicService: { type: string }
+        publicPort: { type: integer, minimum: 1, maximum: 65535 }
     CreateApplicationRequest:
       type: object
       required: [repositoryUrl, ref, subdomain, requestId]
@@ -296,6 +309,8 @@ components:
               service: { type: string }
               targetPath: { type: string }
               deviceId: { type: string }
+        publicService: { type: string }
+        publicPort: { type: integer, minimum: 1, maximum: 65535 }
         requestId: { type: string, format: uuid }
     ActionRequest:
       type: object

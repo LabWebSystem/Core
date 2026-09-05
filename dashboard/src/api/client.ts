@@ -81,12 +81,17 @@ export const api = {
     app: Application,
     variables: Record<string, { value?: string; secret: boolean; keep?: boolean }>,
     deviceBindings: { service: string; targetPath: string; deviceId: string }[],
+    ...publicInterface: [] | [string, number]
   ) =>
     request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}/configuration`, {
       method: "PATCH",
+      // 公開先は設定画面で取得できた場合だけ送信する。
       body: JSON.stringify({
         variables,
         deviceBindings,
+        ...(publicInterface.length
+          ? { publicService: publicInterface[0], publicPort: publicInterface[1] }
+          : {}),
         requestId: requestId(),
       }),
     }),

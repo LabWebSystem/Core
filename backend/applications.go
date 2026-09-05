@@ -208,6 +208,9 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 	}
 	volumes := []map[string]any{}
 	attachments := []DeviceAttachment{}
+	interfaces := []WebInterface{}
+	manifestService, publicService := "", ""
+	manifestPort, publicPort := 0, 0
 	bindings := map[string]map[string]any{}
 	if rows, err := s.DB.QueryContext(r.Context(), `SELECT service,target_path,device_id FROM application_device_bindings WHERE application_id=?`, appID(r)); err == nil {
 		defer rows.Close()
@@ -219,11 +222,10 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if s.AppsRoot != "" {
-		composeFile := "compose.yaml"
-		_ = s.DB.QueryRow(`SELECT compose_file FROM applications WHERE id=?`, appID(r)).Scan(&composeFile)
-		compose, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "source", composeFile))
+		_ = s.DB.QueryRow(`SELECT manifest_service,manifest_port,public_service,public_port FROM applications WHERE id=?`, appID(r)).Scan(&manifestService, &manifestPort, &publicService, &publicPort)
+		sources, err := s.applicationComposeSources(appID(r))
 		if err == nil {
-			if variables, err := ExtractComposeVariables(compose); err == nil {
+			if variables, err := MergeComposeVariables(sources); err == nil {
 				for _, variable := range variables {
 					if configured[variable.Name] {
 						for _, item := range v {
@@ -244,19 +246,46 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 					v = append(v, item)
 				}
 			}
-			if names, err := NamedVolumeNames(compose); err == nil {
-				for _, name := range names {
-					volumes = append(volumes, map[string]any{"name": name})
+			for _, source := range sources {
+				if names, err := NamedVolumeNames(source.Data); err == nil {
+					for _, name := range names {
+						volumes = append(volumes, map[string]any{"name": name})
+					}
+				}
+				if found, err := ComposeDeviceAttachments(source.Data); err == nil {
+					attachments = append(attachments, found...)
 				}
 			}
-			attachments, _ = ComposeDeviceAttachments(compose)
+			interfaces, _ = ComposeWebInterfaces(sources)
 		}
+	}
+	if publicService == "" {
+		publicService = manifestService
+	}
+	if publicPort == 0 {
+		publicPort = manifestPort
+	}
+	overrideCompose := ""
+	if data, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "runtime", "lws.override.yaml")); err == nil {
+		overrideCompose = string(data)
 	}
 	sort.Slice(v, func(i, j int) bool { return v[i]["name"].(string) < v[j]["name"].(string) })
 	writeJSON(w, 200, map[string]any{
-		"variables": v,
-		"volumes":   volumes,
-		"network":   map[string]any{"name": EdgeNetworkName(appID(r)), "purpose": "公開サービスとLWSのReverse Proxyだけを接続"},
+		"variables":             v,
+		"volumes":               volumes,
+		"network":               map[string]any{"name": EdgeNetworkName(appID(r)), "purpose": "公開サービスとLWSのReverse Proxyだけを接続"},
+		"lwsOverrideCompose":    overrideCompose,
+		"manifestPublicService": manifestService,
+		"manifestPublicPort":    manifestPort,
+		"publicService":         publicService,
+		"publicPort":            publicPort,
+		"webInterfaces": func() []map[string]any {
+			result := []map[string]any{}
+			for _, iface := range interfaces {
+				result = append(result, map[string]any{"service": iface.Service, "port": iface.Port})
+			}
+			return result
+		}(),
 		"devices": func() []map[string]any {
 			result := []map[string]any{}
 			for _, a := range attachments {
@@ -277,6 +306,20 @@ func (s *Server) getConfiguration(w http.ResponseWriter, r *http.Request) {
 		}()},
 		"ready": configurationReady(v, attachments, bindings),
 	})
+}
+
+func (s *Server) applicationComposeSources(id string) ([]ComposeSource, error) {
+	var composeFile, encoded string
+	if err := s.DB.QueryRow(`SELECT compose_file,override_files FROM applications WHERE id=?`, id).Scan(&composeFile, &encoded); err != nil {
+		return nil, err
+	}
+	var overrides []string
+	if encoded != "" {
+		if err := json.Unmarshal([]byte(encoded), &overrides); err != nil {
+			return nil, err
+		}
+	}
+	return ReadComposeSources(filepath.Join(s.AppsRoot, id, "source"), composeFile, overrides)
 }
 
 func configurationReady(vars []map[string]any, devices []DeviceAttachment, bindings map[string]map[string]any) bool {
@@ -316,6 +359,8 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 			TargetPath string `json:"targetPath"`
 			DeviceID   string `json:"deviceId"`
 		} `json:"deviceBindings"`
+		PublicService string `json:"publicService"`
+		PublicPort    int    `json:"publicPort"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "JSONが不正です", "body")
@@ -325,11 +370,42 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "requestIdはUUIDで指定してください", "requestId")
 		return
 	}
+	if req.PublicService != "" || req.PublicPort != 0 {
+		if req.PublicService == "" || req.PublicPort < 1 || req.PublicPort > 65535 {
+			writeAPIError(w, 400, "INVALID_ARGUMENT", "公開Webインターフェースの指定が不正です", "publicService")
+			return
+		}
+		sources, err := s.applicationComposeSources(appID(r))
+		if err != nil {
+			writeAPIError(w, 400, "INVALID_ARGUMENT", "Composeを読み取れません", "publicService")
+			return
+		}
+		interfaces, err := ComposeWebInterfaces(sources)
+		if err != nil {
+			writeValidationError(w, err)
+			return
+		}
+		valid := false
+		for _, iface := range interfaces {
+			if iface.Service == req.PublicService && iface.Port == req.PublicPort {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			writeAPIError(w, 400, "INVALID_ARGUMENT", "公開WebインターフェースがComposeに存在しません", "publicService")
+			return
+		}
+	}
 	prepared := make([]configurationVariableValue, 0, len(req.Variables))
 	if s.AppsRoot != "" {
-		data, err := os.ReadFile(filepath.Join(s.AppsRoot, appID(r), "source", "compose.yaml"))
+		sources, err := s.applicationComposeSources(appID(r))
 		if err == nil {
-			attachments, _ := ComposeDeviceAttachments(data)
+			attachments := []DeviceAttachment{}
+			for _, source := range sources {
+				found, _ := ComposeDeviceAttachments(source.Data)
+				attachments = append(attachments, found...)
+			}
 			wanted := map[string]bool{}
 			for _, a := range attachments {
 				wanted[a.Service+"\x00"+a.Target] = true
@@ -386,7 +462,15 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		}
 		prepared = append(prepared, configurationVariableValue{name: n, value: stored, secret: v.Secret})
 	}
-	payload, _ := json.Marshal(req.Variables)
+	payload, _ := json.Marshal(struct {
+		Variables map[string]struct {
+			Value  string `json:"value"`
+			Secret bool   `json:"secret"`
+			Keep   bool   `json:"keep"`
+		} `json:"variables"`
+		PublicService string `json:"publicService"`
+		PublicPort    int    `json:"publicPort"`
+	}{req.Variables, req.PublicService, req.PublicPort})
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(payload))
 	var existingID, existingKind, existingFingerprint string
 	err := s.DB.QueryRowContext(r.Context(), `SELECT id,kind,request_fingerprint FROM operations WHERE request_id=?`, req.RequestID).Scan(&existingID, &existingKind, &existingFingerprint)
@@ -428,6 +512,14 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 			_ = tx.Rollback()
 			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "設定を保存できません")
 			writeAPIError(w, http.StatusInternalServerError, "DATABASE_ERROR", "設定を保存できません", "")
+			return
+		}
+	}
+	if req.PublicService != "" {
+		if _, err := tx.ExecContext(r.Context(), `UPDATE applications SET public_service=?,public_port=?,updated_at=datetime('now') WHERE id=?`, req.PublicService, req.PublicPort, appID(r)); err != nil {
+			_ = tx.Rollback()
+			_ = SetOperationState(r.Context(), s.DB, op.ID, "CANCELLED", "公開先を保存できません")
+			writeAPIError(w, 500, "DATABASE_ERROR", "公開先を保存できません", "publicService")
 			return
 		}
 	}

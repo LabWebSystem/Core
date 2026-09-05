@@ -402,6 +402,15 @@ export interface components {
                 message: string;
             };
             ready: boolean;
+            lwsOverrideCompose: string;
+            webInterfaces: {
+                service: string;
+                port: number;
+            }[];
+            manifestPublicService: string;
+            manifestPublicPort: number;
+            publicService: string;
+            publicPort: number;
         };
         CreateApplicationRequest: {
             /** Format: uri */
@@ -428,6 +437,8 @@ export interface components {
                 targetPath: string;
                 deviceId: string;
             }[];
+            publicService?: string;
+            publicPort?: number;
             /** Format: uuid */
             requestId: string;
         };

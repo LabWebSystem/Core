@@ -4,14 +4,127 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 type AutoVolume struct{ Service, Target, Source, Mode, Name string }
+
+type ComposeSource struct {
+	Path string
+	Data []byte
+}
+
+// ReadComposeSourcesはメインComposeと、指定順のoverrideを同じ順序で読み取る。
+func ReadComposeSources(sourceRoot, composeFile string, overrideFiles []string) ([]ComposeSource, error) {
+	files := append([]string{composeFile}, overrideFiles...)
+	result := make([]ComposeSource, 0, len(files))
+	for _, file := range files {
+		if !containsComposeFile(file) {
+			return nil, NewValidationError("composeFile", "Composeファイル名が不正です", "INVALID_ARGUMENT")
+		}
+		path := filepath.Join(sourceRoot, file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("Composeを読み取れません: %w", err)
+		}
+		result = append(result, ComposeSource{Path: path, Data: data})
+	}
+	return result, nil
+}
+
+func MergeComposeVariables(sources []ComposeSource) ([]ComposeVariable, error) {
+	byName := map[string]ComposeVariable{}
+	for _, source := range sources {
+		variables, err := ExtractComposeVariables(source.Data)
+		if err != nil {
+			return nil, err
+		}
+		for _, variable := range variables {
+			byName[variable.Name] = variable
+		}
+	}
+	result := make([]ComposeVariable, 0, len(byName))
+	for _, variable := range byName {
+		result = append(result, variable)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result, nil
+}
+
+type WebInterface struct {
+	Service string
+	Port    int
+}
+
+func ComposeWebInterfaces(sources []ComposeSource) ([]WebInterface, error) {
+	seen := map[string]bool{}
+	result := []WebInterface{}
+	for _, source := range sources {
+		var model struct {
+			Services map[string]struct {
+				Ports  []any `yaml:"ports"`
+				Expose []any `yaml:"expose"`
+			} `yaml:"services"`
+		}
+		if err := yaml.Unmarshal(source.Data, &model); err != nil {
+			return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+		}
+		for service, definition := range model.Services {
+			portValues := append(append([]any{}, definition.Ports...), definition.Expose...)
+			for _, raw := range portValues {
+				port, ok := composeTargetPort(raw)
+				if !ok || port < 1 || port > 65535 {
+					continue
+				}
+				key := fmt.Sprintf("%s:%d", service, port)
+				if !seen[key] {
+					seen[key] = true
+					result = append(result, WebInterface{Service: service, Port: port})
+				}
+			}
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Service == result[j].Service {
+			return result[i].Port < result[j].Port
+		}
+		return result[i].Service < result[j].Service
+	})
+	return result, nil
+}
+
+func composeTargetPort(raw any) (int, bool) {
+	switch value := raw.(type) {
+	case string:
+		value = strings.SplitN(value, "/", 2)[0]
+		parts := strings.Split(value, ":")
+		value = parts[len(parts)-1]
+		port, err := strconv.Atoi(value)
+		return port, err == nil
+	case map[string]any:
+		target, ok := value["target"]
+		if !ok {
+			return 0, false
+		}
+		switch port := target.(type) {
+		case int:
+			return port, true
+		case int64:
+			return int(port), true
+		case uint64:
+			return int(port), true
+		case float64:
+			return int(port), port == float64(int(port))
+		}
+	}
+	return 0, false
+}
 
 func AutoVolumeReplacements(data []byte, appID string) ([]AutoVolume, error) {
 	var model struct {
@@ -28,7 +141,7 @@ func AutoVolumeReplacements(data []byte, appID string) ([]AutoVolume, error) {
 			var source, target, mode string
 			switch value := raw.(type) {
 			case string:
-				parts := strings.Split(value, ":")
+				parts := splitVolumeSpec(value)
 				if len(parts) == 1 {
 					target = parts[0]
 				} else {
@@ -183,6 +296,9 @@ func validateEffectiveService(name string, service map[string]any) error {
 			continue
 		}
 		if key == "ports" {
+			if ports, ok := value.([]any); ok && len(ports) == 0 {
+				continue
+			}
 			return NewValidationError(field+".ports", "host portは許可されていません", "BIND_MOUNT_FORBIDDEN")
 		}
 		if enabled, ok := value.(bool); !ok || enabled {
@@ -279,14 +395,40 @@ func rejectExternalResources(model map[string]any, ownedNetwork string) error {
 func isBindMount(volume any) bool {
 	switch value := volume.(type) {
 	case string:
-		source := strings.SplitN(value, ":", 2)[0]
-		return !strings.Contains(value, ":") || source == "." || source == ".." || strings.HasPrefix(source, "./") || strings.HasPrefix(source, "../") || filepath.IsAbs(source) || strings.HasPrefix(source, "~")
+		parts := splitVolumeSpec(value)
+		if len(parts) == 1 {
+			return true
+		}
+		source := parts[0]
+		return !strings.Contains(value, ":") || strings.Contains(source, "${") || source == "." || source == ".." || strings.HasPrefix(source, "./") || strings.HasPrefix(source, "../") || filepath.IsAbs(source) || strings.HasPrefix(source, "~")
 	case map[string]any:
 		kind, _ := value["type"].(string)
 		return kind != "volume" || value["source"] == nil
 	default:
 		return true
 	}
+}
+
+func splitVolumeSpec(value string) []string {
+	parts := []string{}
+	start := 0
+	depth := 0
+	for index, char := range value {
+		switch char {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ':':
+			if depth == 0 {
+				parts = append(parts, value[start:index])
+				start = index + 1
+			}
+		}
+	}
+	return append(parts, value[start:])
 }
 
 func ProjectPath(root, candidate string) string {
@@ -307,7 +449,7 @@ func NamedVolumeNames(data []byte) ([]string, error) {
 		for _, raw := range service.Volumes {
 			switch value := raw.(type) {
 			case string:
-				parts := strings.SplitN(value, ":", 2)
+				parts := splitVolumeSpec(value)
 				if len(parts) == 2 && !isBindMount(parts[0]+":/target") {
 					names[parts[0]] = true
 				}
