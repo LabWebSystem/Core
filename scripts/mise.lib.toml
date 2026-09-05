@@ -8,8 +8,13 @@ run = "scripts/format.sh write"
 description = "GoとDashboardのフォーマットを検査"
 run = "scripts/format.sh check"
 
+[dashboard-install]
+description = "Dashboardの依存関係をインストール"
+run = "npm --prefix dashboard ci --no-audit --no-fund"
+
 [lint]
 description = "静的検査を実行"
+depends = ["dashboard-install"]
 run = ["scripts/lint.sh", "npm --prefix dashboard run lint"]
 
 [test]
@@ -26,7 +31,8 @@ run = ["npm test", "npm run build"]
 
 [test-dashboard]
 description = "Dashboardのlint、test、build、イメージを検証"
-run = ["npm --prefix dashboard ci --no-audit --no-fund", "npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"]
+depends = ["dashboard-install"]
+run = ["npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"]
 
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"
