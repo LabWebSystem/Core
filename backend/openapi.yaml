@@ -177,8 +177,8 @@ components:
       required: [name, subdomain, repositoryUrl, ref, desiredState, observedState, registrationState, observedAt, reconciling, etag]
       properties:
         name: { type: string, pattern: '^applications/.+$' }
-        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[^/\\]+)*\.(?:yaml|yml)$' }
-        overrideFiles: { type: array, items: { type: string, pattern: '^[^/\\]+\\.(yaml|yml)$' } }
+        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
+        overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
         subdomain: { type: string }
         repositoryUrl: { type: string }
         ref: { type: string }
@@ -272,8 +272,8 @@ components:
         repositoryUrl: { type: string, format: uri }
         ref: { type: string, minLength: 1 }
         subdomain: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
-        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[^/\\]+)*\.(?:yaml|yml)$' }
-        overrideFiles: { type: array, items: { type: string, pattern: '^[^/\\]+\\.(yaml|yml)$' } }
+        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
+        overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
         requestId: { type: string, format: uuid }
     UpdateApplicationRequest:
       type: object
