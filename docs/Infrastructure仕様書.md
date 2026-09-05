@@ -32,10 +32,10 @@
 | パッケージ | `/usr/bin/lwsctl`、`/usr/share/lws/` | APT/DNFが所有する。インストール・更新時に起動しない |
 | 設定 | `/etc/lws/config.env`、`/etc/lws/secret.key` | LWSだけが読める。ホスト設定とsecret暗号化鍵 |
 | 状態 | `/var/lib/lws/database.sqlite` | Backend SQLite |
-| アプリ | `/var/lib/lws/apps/<app-id>/source/`、`runtime/` | 取得済みsourceと生成した`lws.override.yaml`、`app.env` |
+| アプリ | Backendの`lws-backend-data` Named Volume内の`/var/lib/lws/apps/<app-id>/source/`、`runtime/` | 取得済みsourceと生成した`lws.override.yaml`、`app.env` |
 | 生成物 | `/var/lib/lws/generated/Caddyfile`、`hosts` | SQLiteから生成する派生物 |
 
-- アプリの永続データはhost bind mountではなくDocker named volumeだけに置く。BackendのDBや設定もNamed Volumeに保持し、Backendが取得したComposeのbuild contextとbind mount元に使う`apps/`だけをホストの状態ディレクトリからBackendへbind mountする。
+- アプリの永続データ、BackendのDB、取得済みsource、生成設定はDocker Named Volumeに保持する。登録アプリのComposeでhost bind mountおよび匿名Volumeを禁止するため、LWSはアプリ領域をホストへbind mountしない。`build.context`はBackendがNamed Volume内のsourceからDockerへ送信する。
 - 通常の`lwsctl down`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl down --purge`は確認後、LWSの全アプリと本体を停止し、現在のinstallation IDとLWS所有labelで識別できるcontainer、network、named volume、設定、状態を完全削除する。別のDockerシステムの資源は削除しない。パッケージの削除はAPT / DNFへ委譲する。
 
 ## 4. ネットワーク、DNS、Reverse Proxy
@@ -110,10 +110,10 @@ docker compose --project-name lws-app-<app-id> \
 - `build.context`と`build.dockerfile`は、実体パスがsource root配下の場合だけ許可する。絶対パス、root外へ解決される相対パス、external network、external volumeを拒否する。パスを丸めたりComposeを書き換えたりして受理しない。
 - 事前検査を通過したものだけを`docker compose config --format json`で正規化し、manifest指定serviceの存在を確認する。公開serviceやportは推測しない。
 - 初回登録はsourceとmanifestの検証後に`CONFIGURING`へ遷移し、containerを起動しない。Dashboardまたは設定APIで必須環境変数とdevice bindingを保存した後の開始操作だけがComposeを起動する。
-- 実効Composeではbind mount、匿名volume、tmpfs、host port、host network/PID/IPC、privileged、Docker socket、named volume以外のmountを拒否する。`devices`は例外であり、Composeのcontainer側targetと権限を保ちつつ、LWSデバイスプールから解決した現在の`/dev` pathだけを生成overrideへ渡す。
+- source検証と実効Compose検証の両方で、bind mount、匿名volume、tmpfs、host port、host network/PID/IPC、privileged、Docker socket、named volume以外のmountを拒否する。`devices`は例外であり、Composeのcontainer側targetと権限を保ちつつ、LWSデバイスプールから解決した現在の`/dev` pathだけを生成overrideへ渡す。開発時のファイル同期が必要なアプリは、プロジェクトrootからの相対pathだけを指定したDocker Compose Watchを利用する。
 
 ## 7. ライフサイクルと禁止事項
 
 - `lwsctl start`は設定を確認してLWS本体Composeを起動する。`stop`は実行中のLWS本体Composeを停止する。`down`はLWS本体Composeのコンテナとnetworkを削除する。`rebuild`は本体と派生設定を再構成するが、アプリsourceやvolumeを削除しない。
 - 通常の停止・同期・再構成で`docker compose down --volumes`を使わない。完全削除時だけ、project名、LWS所有label、installation ID、app-idが一致するvolumeを削除できる。
-- `docker system prune`、`docker volume prune`、未検証Composeの起動、外部リポジトリ由来bind mountの許可、`compose.override.yaml`の暗黙取込み、Backend以外へのDocker socket付与を禁止する。
+- `docker system prune`、`docker volume prune`、未検証Composeの起動、host bind mountまたは匿名Volumeの許可、`compose.override.yaml`の暗黙取込み、Backend以外へのDocker socket付与を禁止する。

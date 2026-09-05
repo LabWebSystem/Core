@@ -716,34 +716,6 @@ func (e *RuntimeExecutor) GenerateOverrideFromComposes(id, service, compose stri
 	if err != nil {
 		return err
 	}
-	allAutoVolumes := []AutoVolume{}
-	for _, file := range append([]string{compose}, overrides...) {
-		contents := data
-		if file != compose {
-			contents, err = os.ReadFile(file)
-			if err != nil {
-				return fmt.Errorf("override Composeを読み取れません")
-			}
-		}
-		auto, autoErr := AutoVolumeReplacements(contents, id)
-		if autoErr != nil {
-			return autoErr
-		}
-		for i := range auto {
-			if auto[i].Source != "" && !strings.Contains(auto[i].Source, "${") && !filepath.IsAbs(auto[i].Source) {
-				auto[i].Source = filepath.Clean(filepath.Join(filepath.Dir(file), auto[i].Source))
-			}
-			if auto[i].Source != "" && !strings.Contains(auto[i].Source, "${") {
-				if _, statErr := os.Stat(auto[i].Source); statErr != nil {
-					return fmt.Errorf("%sのbind mount元が見つかりません: %s", auto[i].Service, auto[i].Source)
-				}
-			}
-		}
-		allAutoVolumes = append(allAutoVolumes, auto...)
-	}
-	if err := e.addAutoVolumesToOverride(id, allAutoVolumes, path); err != nil {
-		return err
-	}
 	attachments := []DeviceAttachment{}
 	for _, source := range composeSources {
 		found, attachmentErr := ComposeDeviceAttachments(source.Data)
@@ -828,55 +800,6 @@ func (e *RuntimeExecutor) addHostPortsToOverride(interfaces []WebInterface, path
 		}
 	}
 	encoded, err := yaml.Marshal(model)
-	if err != nil {
-		return err
-	}
-	return WriteAtomic(path, encoded, 0600)
-}
-
-func (e *RuntimeExecutor) addAutoVolumesToOverride(id string, replacements []AutoVolume, path string) error {
-	if len(replacements) == 0 {
-		return nil
-	}
-	encoded, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var model map[string]any
-	if err = json.Unmarshal(encoded, &model); err != nil {
-		return err
-	}
-	services := model["services"].(map[string]any)
-	volumes, ok := model["volumes"].(map[string]any)
-	if !ok {
-		volumes = map[string]any{}
-		model["volumes"] = volumes
-	}
-	seen := map[string]bool{}
-	for _, replacement := range replacements {
-		key := replacement.Service + "\x00" + replacement.Target
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		item, ok := services[replacement.Service].(map[string]any)
-		if !ok {
-			continue
-		}
-		volumeKey := "lws-auto-" + replacement.Name[4:]
-		mount := volumeKey + ":" + replacement.Target
-		if replacement.Mode != "" {
-			mount += ":" + replacement.Mode
-		}
-		current, _ := item["volumes"].([]any)
-		item["volumes"] = append(current, mount)
-		definition := map[string]any{"name": replacement.Name, "labels": map[string]string{"com.labwebsystem.owner": "lws", "com.labwebsystem.installation-id": e.InstallationID, "com.labwebsystem.app-id": id}}
-		if replacement.Source != "" && !strings.Contains(replacement.Source, "${") {
-			definition["driver_opts"] = map[string]string{"type": "none", "o": "bind", "device": replacement.Source}
-		}
-		volumes[volumeKey] = definition
-	}
-	encoded, err = json.Marshal(model)
 	if err != nil {
 		return err
 	}

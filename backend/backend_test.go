@@ -646,37 +646,29 @@ func TestEffectiveComposeAllowsNamedVolumeButRejectsBindMount(t *testing.T) {
 	}
 }
 
-func TestAutoVolumeReplacementsOnlyRewritesBindAndAnonymousVolumes(t *testing.T) {
-	data := []byte(`services:
-  api:
-    volumes:
-      - ./api:/app:rw
-      - /app/node_modules
-      - app-data:/data
-      - "${APPDATA_ROOT:-../../appdata/oruca}/config:/runtime-config"
-      - type: bind
-        source: ./config
-        target: /config
-      - type: volume
-        target: /cache
-`)
-	replacements, err := AutoVolumeReplacements(data, "app-id")
-	if err != nil {
-		t.Fatal(err)
+func TestComposeSourceAllowsOnlyNamedVolumes(t *testing.T) {
+	named := []byte("services:\n  api:\n    volumes:\n      - app-data:/data:rw\n    develop:\n      watch:\n        - action: sync\n          path: ./src\n          target: /app/src\nvolumes:\n  app-data: {}\n")
+	if err := ValidateComposeSource("/tmp/project", named); err != nil {
+		t.Fatalf("名前付きVolumeを拒否しました: %v", err)
 	}
-	if len(replacements) != 5 {
-		t.Fatalf("自動volume変換数が不正です: %+v", replacements)
+	for _, source := range [][]byte{
+		[]byte("services:\n  api:\n    volumes:\n      - ./data:/data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - /host/data:/data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - /data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - type: bind\n        source: ./data\n        target: /data\n"),
+		[]byte("services:\n  api:\n    volumes:\n      - type: volume\n        target: /data\n"),
+	} {
+		err := ValidateComposeSource("/tmp/project", source)
+		if err == nil || !strings.Contains(err.Error(), "bind mount") {
+			t.Fatalf("bindまたは匿名Volumeを拒否できません: %s (%v)", source, err)
+		}
 	}
-	for _, replacement := range replacements {
-		if replacement.Service != "api" || !strings.HasPrefix(replacement.Name, "lws-app-id-vol-") {
-			t.Fatalf("自動volume名が不正です: %+v", replacement)
-		}
-		if replacement.Target == "/data" {
-			t.Fatal("名前付きvolumeを自動変換しました")
-		}
-		if replacement.Target == "/runtime-config" && replacement.Source != "${APPDATA_ROOT:-../../appdata/oruca}/config" {
-			t.Fatalf("環境変数を含むbind mountのsourceが不正です: %+v", replacement)
-		}
+}
+
+func TestComposeSourceRejectsWatchPathOutsideProject(t *testing.T) {
+	err := ValidateComposeSource("/tmp/project", []byte("services:\n  api:\n    develop:\n      watch:\n        - action: sync\n          path: ../source\n          target: /app/src\n"))
+	if err == nil || !strings.Contains(err.Error(), "Compose Watch") {
+		t.Fatalf("root外のCompose Watch pathを拒否できません: %v", err)
 	}
 }
 

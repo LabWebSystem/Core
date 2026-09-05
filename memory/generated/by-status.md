@@ -102,6 +102,7 @@
 - CHG-077 | SHIPPED | - | アプリ資源と環境変数の管理情報をDashboardへ追加する
 - CHG-078 | SHIPPED | - | Compose検証JSONを一行でOperationログへ記録する
 - CHG-079 | SHIPPED | - | 設定レイヤーとリソースプールを追加する
+- CHG-080 | SHIPPED | - | 登録アプリのhost bind mount変換を廃止する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する

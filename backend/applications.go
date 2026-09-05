@@ -67,17 +67,17 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	volumes, networks := []map[string]any{}, []map[string]any{}
-	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain,compose_file,override_files FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
+	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain,compose_file FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
 	if err == nil {
 		defer apps.Close()
 		for apps.Next() {
-			var id, sub, composeFile, overrideFilesJSON string
-			if apps.Scan(&id, &sub, &composeFile, &overrideFilesJSON) != nil {
+			var id, sub, composeFile string
+			if apps.Scan(&id, &sub, &composeFile) != nil {
 				continue
 			}
 			if s.AppsRoot != "" {
 				if data, e := os.ReadFile(filepath.Join(s.AppsRoot, id, "source", composeFile)); e == nil {
-					if names, e := managedComposeVolumeNames(id, s.AppsRoot, data, overrideFilesJSON); e == nil {
+					if names, e := managedComposeVolumeNames(data); e == nil {
 						for _, n := range names {
 							inUse, status, deletable := s.volumeState(r.Context(), n)
 							volumes = append(volumes, map[string]any{"name": n, "application": "applications/" + id, "applicationName": sub, "status": status, "inUse": inUse, "deletable": deletable})
@@ -135,20 +135,10 @@ func (s *Server) deleteResourcePoolVolume(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"id": volume})
 }
 
-func managedComposeVolumeNames(id, appsRoot string, base []byte, overrideFilesJSON string) ([]string, error) {
+func managedComposeVolumeNames(base []byte) ([]string, error) {
 	names, err := NamedVolumeNames(base)
 	if err != nil {
 		return nil, err
-	}
-	var overrides []string
-	_ = json.Unmarshal([]byte(overrideFilesJSON), &overrides)
-	all := append([]AutoVolume{}, mustAutoVolumes(base, id)...)
-	for _, file := range overrides {
-		data, readErr := os.ReadFile(filepath.Join(appsRoot, id, "source", file))
-		if readErr != nil {
-			continue
-		}
-		all = append(all, mustAutoVolumes(data, id)...)
 	}
 	seen := map[string]bool{}
 	result := []string{}
@@ -158,19 +148,8 @@ func managedComposeVolumeNames(id, appsRoot string, base []byte, overrideFilesJS
 			result = append(result, name)
 		}
 	}
-	for _, volume := range all {
-		if !seen[volume.Name] {
-			seen[volume.Name] = true
-			result = append(result, volume.Name)
-		}
-	}
 	sort.Strings(result)
 	return result, nil
-}
-
-func mustAutoVolumes(data []byte, id string) []AutoVolume {
-	result, _ := AutoVolumeReplacements(data, id)
-	return result
 }
 
 func (s *Server) refreshLWSDevices(ctx context.Context) ([]PhysicalDevice, error) {
