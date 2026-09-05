@@ -224,6 +224,31 @@ button:disabled {
   line-height: 1.5;
 }
 .error-text { color: #a53d31; }
+.override-picker {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #dbe1dc;
+}
+.override-picker legend {
+  padding: 0 4px;
+  color: #516273;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+.override-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid #edf0ed;
+}
+.override-check { color: #314456; font-size: 0.8rem; font-weight: 600; }
+.override-check input { width: auto; }
+.override-actions { display: flex; gap: 5px; }
+.override-actions button { padding: 4px 7px; border: 1px solid #cbd5ce; background: #fff; color: #526b7d; font-size: 0.7rem; }
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

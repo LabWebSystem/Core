@@ -333,8 +333,8 @@ export interface components {
         };
         Application: {
             name: string;
-            /** @enum {string} */
-            composeFile?: "compose.yaml" | "compose.yml" | "docker-compose.yaml" | "docker-compose.yml";
+            composeFile?: string;
+            overrideFiles?: string[];
             subdomain: string;
             repositoryUrl: string;
             ref: string;
@@ -408,8 +408,8 @@ export interface components {
             repositoryUrl: string;
             ref: string;
             subdomain: string;
-            /** @enum {string} */
-            composeFile?: "compose.yaml" | "compose.yml" | "docker-compose.yaml" | "docker-compose.yml";
+            composeFile?: string;
+            overrideFiles?: string[];
             /** Format: uuid */
             requestId: string;
         };

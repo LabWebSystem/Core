@@ -441,6 +441,7 @@ function RegisterForm({
     ref: string;
     subdomain: string;
     composeFile?: string;
+    overrideFiles?: string[];
   }) => void;
 }) {
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -449,11 +450,12 @@ function RegisterForm({
   const [composeFile, setComposeFile] = useState("compose.yaml");
   const [branches, setBranches] = useState<string[]>([]);
   const [composeFiles, setComposeFiles] = useState<string[]>([]);
+  const [overrideFiles, setOverrideFiles] = useState<string[]>([]);
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const repositoryReady = /^https:\/\/github\.com\/[^/]+\/[^/]+/.test(repositoryUrl);
   useEffect(() => {
     const match = repositoryUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/(.*))?\/?$/);
-    if (!match) { setBranches([]); setComposeFiles([]); setLookupState("idle"); return; }
+    if (!match) { setBranches([]); setComposeFiles([]); setOverrideFiles([]); setLookupState("idle"); return; }
     const [, owner, name, urlRef] = match;
     if (urlRef) setRef(decodeURIComponent(urlRef));
     setLookupState("loading");
@@ -464,15 +466,18 @@ function RegisterForm({
     ]).then(([branchData, fileData]) => {
       if (!active) return;
       const nextBranches = Array.isArray(branchData) ? branchData.map((item: { name: string }) => item.name) : [];
-      const names = Array.isArray(fileData) ? fileData.map((item: { name: string }) => item.name).filter((name: string) => ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].includes(name)) : [];
+      const names = Array.isArray(fileData) ? fileData.map((item: { name: string }) => item.name).filter((name: string) => /compose.*\.(yaml|yml)$/.test(name)) : [];
+      const priority = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+      names.sort((a: string, b: string) => (priority.indexOf(a) < 0 ? 99 : priority.indexOf(a)) - (priority.indexOf(b) < 0 ? 99 : priority.indexOf(b)));
       setBranches(nextBranches);
       setComposeFiles(names);
       setSubdomain(name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 62) || "app");
       if (names.length && !names.includes(composeFile)) setComposeFile(names[0]);
+      setOverrideFiles((current) => current.filter((file) => names.includes(file) && file !== (names[0] ?? composeFile)));
       setLookupState("ready");
     }).catch(() => { if (active) setLookupState("error"); });
     return () => { active = false; };
-  }, [repositoryUrl]);
+  }, [repositoryUrl, ref]);
   return (
     <section className="empty-workbench">
       <div className="empty-icon">
@@ -487,7 +492,7 @@ function RegisterForm({
         className="register-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit({ repositoryUrl, ref, subdomain, ...(composeFile !== "compose.yaml" ? { composeFile } : {}) });
+          onSubmit({ repositoryUrl, ref, subdomain, ...(overrideFiles.length ? { overrideFiles } : {}), ...(composeFile !== "compose.yaml" ? { composeFile } : {}) });
         }}
       >
         <label>
@@ -500,6 +505,17 @@ function RegisterForm({
             onChange={(e) => setRepositoryUrl(e.target.value)}
           />
         </label>
+        <fieldset className="override-picker">
+          <legend>overrideするComposeファイル（任意）</legend>
+          <small className="field-hint">未選択のまま登録するとoverrideは適用されません。複数選択時は上から順に読み込みます。</small>
+          {composeFiles.filter((file) => file !== composeFile).length ? composeFiles.filter((file) => file !== composeFile).map((file) => {
+            const index = overrideFiles.indexOf(file);
+            return <div className="override-row" key={file}>
+              <label className="override-check"><input type="checkbox" checked={index >= 0} onChange={(event) => setOverrideFiles((current) => event.target.checked ? [...current, file] : current.filter((item) => item !== file))} /> {file}</label>
+              {index >= 0 && <span className="override-actions"><button type="button" disabled={index === 0} onClick={() => setOverrideFiles((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}>上へ</button><button type="button" disabled={index === overrideFiles.length - 1} onClick={() => setOverrideFiles((current) => { const next = [...current]; [next[index], next[index + 1]] = [next[index + 1], next[index]]; return next; })}>下へ</button></span>}
+            </div>;
+          }) : <p className="field-hint">選択可能なoverride Composeファイルはありません。</p>}
+        </fieldset>
         <div className="form-row">
           <label>
             ブランチまたはタグ
@@ -517,7 +533,7 @@ function RegisterForm({
         </div>
         <label>
           使用するComposeファイル
-          {repositoryReady ? <select value={composeFile} onChange={(e) => setComposeFile(e.target.value)} disabled={lookupState === "loading"}>
+          {repositoryReady ? <select value={composeFile} onChange={(e) => { const next = e.target.value; setComposeFile(next); setOverrideFiles((current) => current.filter((file) => file !== next)); }} disabled={lookupState === "loading"}>
             {(composeFiles.length ? composeFiles : ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]).map((file) => <option key={file}>{file}</option>)}
           </select> : <input value={composeFile} readOnly aria-label="使用するComposeファイル" />}
           <small className="field-hint">優先順位: compose.yaml → compose.yml → docker-compose.yaml → docker-compose.yml</small>

@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 8 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 9 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,7 +35,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 8 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 9 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -642,6 +642,36 @@ func TestEffectiveComposeAllowsNamedVolumeButRejectsBindMount(t *testing.T) {
 	} {
 		if err := ValidateEffectiveCompose([]byte(bad), "web", 3000); err == nil {
 			t.Fatalf("forbidden effective compose accepted: %s", bad)
+		}
+	}
+}
+
+func TestAutoVolumeReplacementsOnlyRewritesBindAndAnonymousVolumes(t *testing.T) {
+	data := []byte(`services:
+  api:
+    volumes:
+      - ./api:/app:rw
+      - /app/node_modules
+      - app-data:/data
+      - type: bind
+        source: ./config
+        target: /config
+      - type: volume
+        target: /cache
+`)
+	replacements, err := AutoVolumeReplacements(data, "app-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replacements) != 4 {
+		t.Fatalf("自動volume変換数が不正です: %+v", replacements)
+	}
+	for _, replacement := range replacements {
+		if replacement.Service != "api" || !strings.HasPrefix(replacement.Name, "lws-app-id-vol-") {
+			t.Fatalf("自動volume名が不正です: %+v", replacement)
+		}
+		if replacement.Target == "/data" {
+			t.Fatal("名前付きvolumeを自動変換しました")
 		}
 	}
 }

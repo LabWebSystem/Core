@@ -67,17 +67,17 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	volumes, networks := []map[string]any{}, []map[string]any{}
-	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain,compose_file FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
+	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain,compose_file,override_files FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
 	if err == nil {
 		defer apps.Close()
 		for apps.Next() {
-			var id, sub, composeFile string
-			if apps.Scan(&id, &sub, &composeFile) != nil {
+			var id, sub, composeFile, overrideFilesJSON string
+			if apps.Scan(&id, &sub, &composeFile, &overrideFilesJSON) != nil {
 				continue
 			}
 			if s.AppsRoot != "" {
 				if data, e := os.ReadFile(filepath.Join(s.AppsRoot, id, "source", composeFile)); e == nil {
-					if names, e := NamedVolumeNames(data); e == nil {
+					if names, e := managedComposeVolumeNames(id, s.AppsRoot, data, overrideFilesJSON); e == nil {
 						for _, n := range names {
 							volumes = append(volumes, map[string]any{"name": n, "application": "applications/" + id, "applicationName": sub, "status": "managed"})
 						}
@@ -93,6 +93,44 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"devices": devices, "physicalDevices": candidates, "volumes": volumes, "networks": networks})
+}
+
+func managedComposeVolumeNames(id, appsRoot string, base []byte, overrideFilesJSON string) ([]string, error) {
+	names, err := NamedVolumeNames(base)
+	if err != nil {
+		return nil, err
+	}
+	var overrides []string
+	_ = json.Unmarshal([]byte(overrideFilesJSON), &overrides)
+	all := append([]AutoVolume{}, mustAutoVolumes(base, id)...)
+	for _, file := range overrides {
+		data, readErr := os.ReadFile(filepath.Join(appsRoot, id, "source", file))
+		if readErr != nil {
+			continue
+		}
+		all = append(all, mustAutoVolumes(data, id)...)
+	}
+	seen := map[string]bool{}
+	result := []string{}
+	for _, name := range names {
+		if !seen[name] {
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
+	for _, volume := range all {
+		if !seen[volume.Name] {
+			seen[volume.Name] = true
+			result = append(result, volume.Name)
+		}
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func mustAutoVolumes(data []byte, id string) []AutoVolume {
+	result, _ := AutoVolumeReplacements(data, id)
+	return result
 }
 
 func (s *Server) refreshLWSDevices(ctx context.Context) ([]PhysicalDevice, error) {

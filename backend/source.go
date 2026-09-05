@@ -138,6 +138,10 @@ func CloneAndValidate(ctx context.Context, runner CommandRunner, url, ref, dest 
 }
 
 func CloneAndValidateWithCompose(ctx context.Context, runner CommandRunner, url, ref, requestedCompose, dest string) (string, error) {
+	return CloneAndValidateWithOverrides(ctx, runner, url, ref, requestedCompose, nil, dest)
+}
+
+func CloneAndValidateWithOverrides(ctx context.Context, runner CommandRunner, url, ref, requestedCompose string, requestedOverrides []string, dest string) (string, error) {
 	url, ref = RepositoryURLAndRef(url, ref)
 	tmp := dest + ".tmp"
 	_ = os.RemoveAll(tmp)
@@ -185,6 +189,18 @@ func CloneAndValidateWithCompose(ctx context.Context, runner CommandRunner, url,
 	if err = ValidateComposeSource(tmp, compose); err != nil {
 		return "", err
 	}
+	for _, override := range requestedOverrides {
+		if !validComposeFilename(override) {
+			return "", fmt.Errorf("override Composeファイル名が不正です")
+		}
+		data, readErr := os.ReadFile(filepath.Join(tmp, override))
+		if readErr != nil {
+			return "", fmt.Errorf("指定したoverride Composeファイルが見つかりません")
+		}
+		if readErr = ValidateComposeSource(tmp, data); readErr != nil {
+			return "", readErr
+		}
+	}
 	reportOperationPhase(ctx, "source_activate", "検証済みのアプリ定義を反映しています")
 	old := dest + ".old"
 	_ = os.RemoveAll(old)
@@ -198,13 +214,19 @@ func CloneAndValidateWithCompose(ctx context.Context, runner CommandRunner, url,
 	return composeFile, nil
 }
 
-func containsComposeFile(value string) bool {
-	for _, candidate := range composeFilePriority {
-		if value == candidate {
-			return true
-		}
+func validComposeFilename(value string) bool {
+	if value == "" || filepath.Base(value) != value || strings.ContainsAny(value, "\\\x00\r\n") {
+		return false
 	}
-	return false
+	ext := strings.ToLower(filepath.Ext(value))
+	return ext == ".yaml" || ext == ".yml"
+}
+
+func containsComposeFile(value string) bool {
+	if !validComposeFilename(value) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(value), "compose")
 }
 
 func FinalizeSourceSwap(dest string) error {

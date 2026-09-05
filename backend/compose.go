@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -9,6 +10,68 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+type AutoVolume struct{ Service, Target, Source, Mode, Name string }
+
+func AutoVolumeReplacements(data []byte, appID string) ([]AutoVolume, error) {
+	var model struct {
+		Services map[string]struct {
+			Volumes []any `yaml:"volumes"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	result := []AutoVolume{}
+	for service, definition := range model.Services {
+		for _, raw := range definition.Volumes {
+			var source, target, mode string
+			switch value := raw.(type) {
+			case string:
+				parts := strings.Split(value, ":")
+				if len(parts) == 1 {
+					target = parts[0]
+				} else {
+					source, target = parts[0], parts[1]
+					if !isBindMount(value) {
+						continue
+					}
+					if len(parts) > 2 {
+						mode = parts[2]
+					}
+				}
+			case map[string]any:
+				kind, _ := value["type"].(string)
+				source, _ = value["source"].(string)
+				target, _ = value["target"].(string)
+				if readOnly, _ := value["read_only"].(bool); readOnly {
+					mode = "ro"
+				}
+				if kind == "volume" && source != "" {
+					continue
+				}
+				if kind != "bind" && kind != "volume" {
+					continue
+				}
+			default:
+				continue
+			}
+			if target == "" {
+				continue
+			}
+			seed := fmt.Sprintf("%s\x00%s\x00%s", service, target, source)
+			digest := fmt.Sprintf("%x", sha256.Sum256([]byte(seed)))[:12]
+			result = append(result, AutoVolume{Service: service, Target: target, Source: source, Mode: mode, Name: "lws-" + appID + "-vol-" + digest})
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Service == result[j].Service {
+			return result[i].Target < result[j].Target
+		}
+		return result[i].Service < result[j].Service
+	})
+	return result, nil
+}
 
 var forbiddenComposeKeys = map[string]string{"include": "外部Composeのincludeは許可されていません", "extends": "Composeのextendsは許可されていません", "env_file": "env_fileは許可されていません", "label_file": "label_fileは許可されていません", "volumes_from": "volumes_fromは許可されていません", "privileged": "privilegedは許可されていません", "network_mode": "host networkは許可されていません", "pid": "host PIDは許可されていません", "ipc": "host IPCは許可されていません", "tmpfs": "tmpfsは許可されていません", "configs": "ファイル型configsは許可されていません", "secrets": "ファイル型secretsは許可されていません", "additional_contexts": "追加build contextは許可されていません"}
 
