@@ -130,6 +130,7 @@
 - CHG-085 | SHIPPED | Dashboard development environment | Dashboard開発用の未使用状態ディレクトリ指定を削除する
 - CHG-086 | SHIPPED | Documentation | 現行実装に合わせて文書の正本と状態を整理する
 - CHG-087 | SHIPPED | lwsctl lifecycle | lwsctlの状態表示と再帰ライフサイクル操作を拡張する
+- CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

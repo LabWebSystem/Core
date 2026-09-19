@@ -45,6 +45,9 @@ func (s *Server) Handler() http.Handler {
 	}
 	api := generatedAPI{server: s}
 	wrapper := ServerInterfaceWrapper{Handler: api}
+	mux.HandleFunc("GET /swagger", swaggerRedirect)
+	mux.HandleFunc("GET /swagger/", swaggerUI)
+	mux.HandleFunc("GET /openapi.json", openAPIJSON)
 	// GoのServeMuxはwildcard直後のcustom method（{application}:start）を
 	// patternとして受け付けないため、生成wrapperの通常routeと分離する。
 	mux.HandleFunc("GET /api/v1/health/live", wrapper.HealthLive)

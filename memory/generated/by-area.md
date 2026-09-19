@@ -111,6 +111,9 @@
 ## Backend / Runtime / Dashboard
 - CHG-084 | SHIPPED | Backend / Runtime / Dashboard | アプリのリビルドをイメージ更新から強制再作成まで一貫させる
 
+## Backend HTTP API
+- CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
+
 ## Dashboard development environment
 - CHG-085 | SHIPPED | Dashboard development environment | Dashboard開発用の未使用状態ディレクトリ指定を削除する
 

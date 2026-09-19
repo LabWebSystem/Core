@@ -103,6 +103,8 @@ LWSはリポジトリを取得して内容を確認します。登録直後は`C
 
 APIのベースパスは`/api/v1`です。変更操作はすぐに`Operation`を返し、進捗は`GET /operations/{operation}`またはSSEの`GET /operations/{operation}:watch`で確認します。
 
+OpenAPIの仕様は`http://api.<base-domain>/openapi.json`で取得でき、Swagger UIは`http://api.<base-domain>/swagger/`で確認できます。
+
 主なリソースと操作は次のとおりです。
 
 | メソッド | パス | 内容 |
