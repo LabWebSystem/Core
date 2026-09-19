@@ -354,7 +354,7 @@ func TestDerivedDashboardRoute(t *testing.T) {
 		t.Fatalf("dashboard host is missing: %s", hosts)
 	}
 	caddy := GenerateCaddyfile("example.internal", nil)
-	for _, want := range []string{"http://dashboard.example.internal", "handle /api/*", "reverse_proxy dashboard:80", "header_up Host api.example.internal"} {
+	for _, want := range []string{"http://dashboard.example.internal", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy dashboard:80", "header_up Host api.example.internal"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("dashboard route is missing %q: %s", want, caddy)
 		}
@@ -388,6 +388,11 @@ func TestHTTPUsesOpenAPISchemaValidationBeforeHandler(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM applications`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("schema違反でDB副作用が発生しました: count=%d err=%v", count, err)
 	}
+	operationResponse := httptest.NewRecorder()
+	(&Server{DB: db}).Handler().ServeHTTP(operationResponse, httptest.NewRequest(http.MethodGet, "/api/v1/operations/not-an-uuid", nil))
+	if operationResponse.Code != http.StatusBadRequest {
+		t.Fatalf("Operation IDの形式違反を受理しました: status=%d body=%s", operationResponse.Code, operationResponse.Body.String())
+	}
 }
 
 func TestHTTPReadyRejectsClosedDatabase(t *testing.T) {
@@ -419,7 +424,7 @@ func TestHTTPReadyHonorsRuntimeReadiness(t *testing.T) {
 }
 
 func TestHTTPReadEndpointsRejectMissingDatabase(t *testing.T) {
-	for _, path := range []string{"/api/v1/applications/app", "/api/v1/operations/op", "/api/v1/applications/app/configuration"} {
+	for _, path := range []string{"/api/v1/applications/app", "/api/v1/operations/550e8400-e29b-41d4-a716-446655440000", "/api/v1/applications/app/configuration"} {
 		t.Run(path, func(t *testing.T) {
 			rr := httptest.NewRecorder()
 			(&Server{}).Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))

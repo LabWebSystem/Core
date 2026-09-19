@@ -119,18 +119,19 @@ CIでも可能な限り同じ`mise`タスクを利用してください。
 
 CLI名は `lwsctl` とします。
 
-許可するコマンドは次の6個だけです。
+許可するコマンドは次の7個だけです。
 
 ```text
 lwsctl start
 lwsctl stop
 lwsctl status
+lwsctl version
 lwsctl rebuild
 lwsctl update
 lwsctl down
 ```
 
-仕様変更が明示されない限り、7個目のコマンドを追加しないでください。
+仕様変更が明示されない限り、8個目のコマンドを追加しないでください。
 
 ### `start`
 
@@ -148,6 +149,10 @@ LWS管理下のランタイムを安全かつ冪等に停止します。
 ### `status`
 
 状態を変更せず、LWSの実行状態を表示します。
+
+### `version`
+
+状態を変更せず、パッケージ管理下のLWSバージョンを表示します。
 
 ### `rebuild`
 

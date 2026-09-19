@@ -105,6 +105,10 @@
 ## Backend / Docker Compose
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 
+## Backend / Infrastructure
+- BUG-022 | VERIFIED | Backend / Infrastructure | DashboardホストのSwagger UIがBackendへ転送されない
+- CHG-089 | SHIPPED | Backend / Infrastructure | DashboardホストからSwagger UIを公開する
+
 ## Backend / Runtime
 - CHG-083 | SHIPPED | Backend / Runtime | 公開serviceの既存networkを引き継ぐ
 
@@ -113,6 +117,7 @@
 
 ## Backend HTTP API
 - CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
+- CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
 
 ## Dashboard development environment
 - CHG-085 | SHIPPED | Dashboard development environment | Dashboard開発用の未使用状態ディレクトリ指定を削除する
@@ -149,6 +154,9 @@
 
 ## logging
 - BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
+
+## lwsctl
+- CHG-091 | SHIPPED | lwsctl | lwsctlにバージョン表示コマンドを追加する
 
 ## lwsctl lifecycle
 - CHG-087 | SHIPPED | lwsctl lifecycle | lwsctlの状態表示と再帰ライフサイクル操作を拡張する

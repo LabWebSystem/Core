@@ -62,6 +62,7 @@ reserve.example.internal
 | `lwsctl start --domain <domain>` | 初回設定またはLWSの起動 |
 | `lwsctl stop [--recursive]` | LWSを停止。`--recursive`指定時は子のアプリcontainerも停止する |
 | `lwsctl status` | lwsctlのバージョン、設定とコンテナの状態を表示 |
+| `lwsctl version` | lwsctlのバージョンを表示 |
 | `lwsctl rebuild` | 設定を作り直して実行環境を再構成 |
 | `lwsctl update` | パッケージとDockerイメージを更新。同じdigestのイメージは再取得しない |
 | `lwsctl down [--recursive]` | LWSの実行環境を削除。`--recursive`指定時は子のアプリcontainerも削除する |
@@ -103,7 +104,7 @@ LWSはリポジトリを取得して内容を確認します。登録直後は`C
 
 APIのベースパスは`/api/v1`です。変更操作はすぐに`Operation`を返し、進捗は`GET /operations/{operation}`またはSSEの`GET /operations/{operation}:watch`で確認します。
 
-OpenAPIの仕様は`http://api.<base-domain>/openapi.json`で取得でき、Swagger UIは`http://api.<base-domain>/swagger/`で確認できます。
+OpenAPIの仕様は`http://api.<base-domain>/openapi.json`または`http://dashboard.<base-domain>/openapi.json`で取得でき、Swagger UIは`http://api.<base-domain>/swagger/`または`http://dashboard.<base-domain>/swagger/`で確認できます。
 
 主なリソースと操作は次のとおりです。
 

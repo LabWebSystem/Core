@@ -67,6 +67,7 @@ sudo lwsctl status
 | `lwsctl start` | LWSを起動する。初回はベースドメインを設定する |
 | `lwsctl stop [--recursive]` | LWSを停止する。`--recursive`指定時は子のアプリcontainerも停止する |
 | `lwsctl status` | lwsctlのバージョン、設定と実行状態を確認する |
+| `lwsctl version` | lwsctlのバージョンを確認する |
 | `lwsctl rebuild` | LWSの設定を再生成して実行環境を作り直す |
 | `lwsctl update` | LWSのパッケージとDockerイメージを更新する。同じdigestのイメージは再取得しない |
 | `lwsctl down [--recursive]` | LWSの実行環境を削除する。`--recursive`指定時は子のアプリcontainerも削除する |

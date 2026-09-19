@@ -129,10 +129,10 @@ paths:
               $ref: '#/components/schemas/ConfigurationRequest'
       responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
   /operations/{operation}:
-    parameters: [{ name: operation, in: path, required: true, schema: { type: string } }]
+    parameters: [{ name: operation, in: path, required: true, schema: { $ref: '#/components/schemas/OperationID' } }]
     get: { operationId: getOperation, responses: { '200': { description: Operation取得, content: { application/json: { schema: { $ref: '#/components/schemas/OperationResource' } } } } } }
   /operations/{operation}:watch:
-    parameters: [{ name: operation, in: path, required: true, schema: { type: string } }]
+    parameters: [{ name: operation, in: path, required: true, schema: { $ref: '#/components/schemas/OperationID' } }]
     get: { operationId: watchOperation, responses: { '200': { description: SSE, content: { text/event-stream: { schema: { type: string } } } } } }
   /applications/{application}/logEntries:
     parameters:
@@ -163,16 +163,27 @@ paths:
         '404': { description: 未検出 }
 components:
   schemas:
+    OperationID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+      description: Operationの一意なID。Operation作成APIが返すname（operations/{operation}）のoperation部分を指定します。
+      example: 550e8400-e29b-41d4-a716-446655440000
+    OperationName:
+      type: string
+      pattern: '^operations/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+      description: Operationのリソース名。
+      example: operations/550e8400-e29b-41d4-a716-446655440000
     OperationReference:
       type: object
       required: [name]
       properties:
-        name: { type: string, pattern: '^operations/.+$' }
+        name: { $ref: '#/components/schemas/OperationName' }
     OperationResource:
       type: object
       required: [name, kind, state, createdAt, updatedAt]
       properties:
-        name: { type: string, pattern: '^operations/.+$' }
+        name: { $ref: '#/components/schemas/OperationName' }
         kind: { type: string }
         state: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
         phase: { type: string }

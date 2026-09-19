@@ -149,6 +149,10 @@ func TestOpenAPIDeclaresResponseSchemasAndObservedAt(t *testing.T) {
 	if application == nil || application.Value.Properties["observedAt"] == nil {
 		t.Fatal("Application.observedAtがOpenAPIにありません")
 	}
+	operationPath := spec.Paths.Find("/operations/{operation}")
+	if operationPath == nil || len(operationPath.Parameters) != 1 || operationPath.Parameters[0].Value == nil || operationPath.Parameters[0].Value.Schema == nil || operationPath.Parameters[0].Value.Schema.Value.Format != "uuid" {
+		t.Fatal("Operationのpath parameterがUUIDとしてOpenAPIに定義されていません")
+	}
 }
 
 func TestCreateApplicationRollsBackWhenOperationCreationFails(t *testing.T) {

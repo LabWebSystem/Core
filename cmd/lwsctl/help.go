@@ -15,6 +15,7 @@ LWSのライフサイクルをDocker Composeで管理します。
   stop       LWS管理下の実行環境を安全かつ冪等に停止します。
   down       LWS管理下の実行環境を停止して削除します。
   status     設定済みのベースドメインと実行環境の状態を表示します。
+  version    lwsctlのバージョンを表示します。
   rebuild    生成設定を検証し、LWS実行環境を再構成します。
   update     パッケージと対応するイメージを更新し、起動中の場合だけ再起動します。
 
@@ -67,6 +68,8 @@ LWS実行環境を停止して削除します。通常は設定と永続デー�
 `)
 	case "status":
 		fmt.Fprint(w, "使い方: lwsctl status\n\nlwsctlのバージョン、設定済みのベースドメインとDocker Compose実行環境の状態を表示します。状態は変更しません。\n")
+	case "version":
+		fmt.Fprint(w, "使い方: lwsctl version\n\nlwsctlのバージョンを表示します。状態は変更しません。\n")
 	case "rebuild":
 		fmt.Fprint(w, "使い方: lwsctl rebuild\n\n設定を検証し、LWS実行環境と生成設定を再構成します。パッケージは再インストールしません。\n")
 	case "update":

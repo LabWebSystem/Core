@@ -112,6 +112,10 @@ test_help() {
     'down       LWS管理下の実行環境を停止して削除します。' \
     "$TMP/help"
 
+  grep -q \
+    'version    lwsctlのバージョンを表示します。' \
+    "$TMP/help"
+
   ! "$LWSCTL" uninstall >"$TMP/uninstall" 2>&1
 
   "$LWSCTL" start --help >"$TMP/start-help"
@@ -145,6 +149,12 @@ test_update_before_start() {
 }
 
 test_lifecycle() {
+  "$LWSCTL" version >"$TMP/version-output"
+
+  grep -qx \
+    'lwsctlバージョン: 0.1.2' \
+    "$TMP/version-output"
+
   "$LWSCTL" status >"$TMP/status-before"
 
   grep -q \

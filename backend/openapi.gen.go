@@ -310,21 +310,30 @@ type LogEntryList struct {
 	NextCursor *string    `json:"nextCursor,omitempty"`
 }
 
+// OperationID Operationの一意なID。Operation作成APIが返すname（operations/{operation}）のoperation部分を指定します。
+type OperationID = openapi_types.UUID
+
+// OperationName Operationのリソース名。
+type OperationName = string
+
 // OperationReference defines model for OperationReference.
 type OperationReference struct {
-	Name string `json:"name"`
+	// Name Operationのリソース名。
+	Name OperationName `json:"name"`
 }
 
 // OperationResource defines model for OperationResource.
 type OperationResource struct {
-	CreatedAt      time.Time              `json:"createdAt"`
-	DisplayMessage *string                `json:"displayMessage,omitempty"`
-	ErrorMessage   *string                `json:"errorMessage,omitempty"`
-	Kind           string                 `json:"kind"`
-	Name           string                 `json:"name"`
-	Phase          *string                `json:"phase,omitempty"`
-	State          OperationResourceState `json:"state"`
-	UpdatedAt      time.Time              `json:"updatedAt"`
+	CreatedAt      time.Time `json:"createdAt"`
+	DisplayMessage *string   `json:"displayMessage,omitempty"`
+	ErrorMessage   *string   `json:"errorMessage,omitempty"`
+	Kind           string    `json:"kind"`
+
+	// Name Operationのリソース名。
+	Name      OperationName          `json:"name"`
+	Phase     *string                `json:"phase,omitempty"`
+	State     OperationResourceState `json:"state"`
+	UpdatedAt time.Time              `json:"updatedAt"`
 }
 
 // OperationResourceState defines model for OperationResource.State.
@@ -634,10 +643,10 @@ type ClientInterface interface {
 	HealthReady(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOperation performs a GET /operations/{operation} (the `GetOperation` operationId) request.
-	GetOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WatchOperation performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
-	WatchOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	WatchOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListResourcePools performs a GET /resource-pools (the `ListResourcePools` operationId) request.
 	ListResourcePools(ctx context.Context, params *ListResourcePoolsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1026,7 +1035,7 @@ func (c *Client) HealthReady(ctx context.Context, reqEditors ...RequestEditorFn)
 }
 
 // GetOperation performs a GET /operations/{operation} (the `GetOperation` operationId) request.
-func (c *Client) GetOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOperationRequest(c.Server, operation)
 	if err != nil {
 		return nil, err
@@ -1039,7 +1048,7 @@ func (c *Client) GetOperation(ctx context.Context, operation string, reqEditors 
 }
 
 // WatchOperation performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
-func (c *Client) WatchOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) WatchOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewWatchOperationRequest(c.Server, operation)
 	if err != nil {
 		return nil, err
@@ -1916,12 +1925,12 @@ func NewHealthReadyRequest(server string) (*http.Request, error) {
 }
 
 // NewGetOperationRequest constructs an http.Request for the GetOperation method
-func NewGetOperationRequest(server string, operation string) (*http.Request, error) {
+func NewGetOperationRequest(server string, operation OperationID) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1950,12 +1959,12 @@ func NewGetOperationRequest(server string, operation string) (*http.Request, err
 }
 
 // NewWatchOperationRequest constructs an http.Request for the WatchOperation method
-func NewWatchOperationRequest(server string, operation string) (*http.Request, error) {
+func NewWatchOperationRequest(server string, operation OperationID) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -2293,12 +2302,12 @@ type ClientWithResponsesInterface interface {
 	// GetOperationWithResponse performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*GetOperationResponse, error)
+	GetOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*GetOperationResponse, error)
 
 	// WatchOperationWithResponse performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	WatchOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error)
+	WatchOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error)
 
 	// ListResourcePoolsWithResponse performs a GET /resource-pools (the `ListResourcePools` operationId) request.
 	//
@@ -3495,7 +3504,7 @@ func (c *ClientWithResponses) HealthReadyWithResponse(ctx context.Context, reqEd
 // GetOperationWithResponse performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*GetOperationResponse, error) {
+func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*GetOperationResponse, error) {
 	rsp, err := c.GetOperation(ctx, operation, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3506,7 +3515,7 @@ func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, oper
 // WatchOperationWithResponse performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) WatchOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error) {
+func (c *ClientWithResponses) WatchOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error) {
 	rsp, err := c.WatchOperation(ctx, operation, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -4163,10 +4172,10 @@ type ServerInterface interface {
 	HealthReady(w http.ResponseWriter, r *http.Request)
 
 	// (GET /operations/{operation})
-	GetOperation(w http.ResponseWriter, r *http.Request, operation string)
+	GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID)
 
 	// (GET /operations/{operation}:watch)
-	WatchOperation(w http.ResponseWriter, r *http.Request, operation string)
+	WatchOperation(w http.ResponseWriter, r *http.Request, operation OperationID)
 
 	// (GET /resource-pools)
 	ListResourcePools(w http.ResponseWriter, r *http.Request, params ListResourcePoolsParams)
@@ -4711,9 +4720,9 @@ func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.R
 	_ = err
 
 	// ------------- Path parameter "operation" -------------
-	var operation string
+	var operation OperationID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operation", Err: err})
 		return
@@ -4737,9 +4746,9 @@ func (siw *ServerInterfaceWrapper) WatchOperation(w http.ResponseWriter, r *http
 	_ = err
 
 	// ------------- Path parameter "operation" -------------
-	var operation string
+	var operation OperationID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operation", Err: err})
 		return
@@ -5431,7 +5440,7 @@ func (response HealthReady503Response) VisitHealthReadyResponse(w http.ResponseW
 }
 
 type GetOperationRequestObject struct {
-	Operation string `json:"operation"`
+	Operation OperationID `json:"operation"`
 }
 
 type GetOperationResponseObject interface {
@@ -5453,7 +5462,7 @@ func (response GetOperation200JSONResponse) VisitGetOperationResponse(w http.Res
 }
 
 type WatchOperationRequestObject struct {
-	Operation string `json:"operation"`
+	Operation OperationID `json:"operation"`
 }
 
 type WatchOperationResponseObject interface {
@@ -6201,7 +6210,7 @@ func (sh *strictHandler) HealthReady(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetOperation operation middleware
-func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, operation string) {
+func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
 	var request GetOperationRequestObject
 
 	request.Operation = operation
@@ -6227,7 +6236,7 @@ func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, op
 }
 
 // WatchOperation operation middleware
-func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, operation string) {
+func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
 	var request WatchOperationRequestObject
 
 	request.Operation = operation
@@ -6340,49 +6349,53 @@ func (sh *strictHandler) DeleteResourcePoolVolume(w http.ResponseWriter, r *http
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"YhNNqrsFGK62x6XuSvd/AQAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

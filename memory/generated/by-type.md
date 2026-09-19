@@ -41,6 +41,7 @@
 - BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 - BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない
+- BUG-022 | VERIFIED | Backend / Infrastructure | DashboardホストのSwagger UIがBackendへ転送されない
 
 ## CHG
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -131,6 +132,9 @@
 - CHG-086 | SHIPPED | Documentation | 現行実装に合わせて文書の正本と状態を整理する
 - CHG-087 | SHIPPED | lwsctl lifecycle | lwsctlの状態表示と再帰ライフサイクル操作を拡張する
 - CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
+- CHG-089 | SHIPPED | Backend / Infrastructure | DashboardホストからSwagger UIを公開する
+- CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
+- CHG-091 | SHIPPED | lwsctl | lwsctlにバージョン表示コマンドを追加する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

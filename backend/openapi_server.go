@@ -77,11 +77,11 @@ func (a generatedAPI) CreatePoolDevice(w http.ResponseWriter, r *http.Request) {
 func (a generatedAPI) DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request, volume string) {
 	a.server.deleteResourcePoolVolume(w, r, volume)
 }
-func (a generatedAPI) GetOperation(w http.ResponseWriter, r *http.Request, operation string) {
-	a.server.getOperation(w, withOperationPath(r, operation))
+func (a generatedAPI) GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
+	a.server.getOperation(w, withOperationPath(r, operation.String()))
 }
-func (a generatedAPI) WatchOperation(w http.ResponseWriter, r *http.Request, operation string) {
-	a.server.watchOperation(w, withOperationPath(r, operation))
+func (a generatedAPI) WatchOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
+	a.server.watchOperation(w, withOperationPath(r, operation.String()))
 }
 
 func withApplicationPath(r *http.Request, value string) *http.Request {

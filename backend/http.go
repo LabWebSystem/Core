@@ -95,10 +95,20 @@ func openAPIValidation(next http.Handler) http.Handler {
 		})
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		route, params, err := router.FindRoute(r)
+		validationRequest := r
+		if strings.HasSuffix(r.URL.Path, ":watch") {
+			// legacy routerはcustom method suffixをpath parameterへ含めるため、
+			// OpenAPI検証時だけsuffixを除去してUUID等の型を正しく検証する。
+			validationRequest = r.Clone(r.Context())
+			validationRequest.URL.Path = strings.TrimSuffix(validationRequest.URL.Path, ":watch")
+			if validationRequest.URL.RawPath != "" {
+				validationRequest.URL.RawPath = strings.TrimSuffix(validationRequest.URL.RawPath, ":watch")
+			}
+		}
+		route, params, err := router.FindRoute(validationRequest)
 		if err == nil {
-			input := &openapi3filter.RequestValidationInput{Request: r, PathParams: params, Route: route}
-			if err := openapi3filter.ValidateRequest(r.Context(), input); err != nil {
+			input := &openapi3filter.RequestValidationInput{Request: validationRequest, PathParams: params, Route: route}
+			if err := openapi3filter.ValidateRequest(validationRequest.Context(), input); err != nil {
 				writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "API要求がOpenAPI契約に適合しません", "body")
 				return
 			}

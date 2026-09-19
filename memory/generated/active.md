@@ -37,4 +37,5 @@
 - BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 - BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない
+- BUG-022 | VERIFIED | Backend / Infrastructure | DashboardホストのSwagger UIがBackendへ転送されない
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

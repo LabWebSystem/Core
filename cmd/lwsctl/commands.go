@@ -67,6 +67,11 @@ func (a *application) run(args []string) error {
 			return fmt.Errorf("statusにはオプションを指定できません")
 		}
 		return a.status()
+	case "version":
+		if len(options) != 0 {
+			return fmt.Errorf("versionにはオプションを指定できません")
+		}
+		return a.printVersion()
 	case "rebuild":
 		if len(options) != 0 {
 			return fmt.Errorf("rebuildにはオプションを指定できません")
@@ -81,6 +86,11 @@ func (a *application) run(args []string) error {
 		printUsage(os.Stderr)
 		return exitError{code: 2}
 	}
+}
+
+func (a *application) printVersion() error {
+	fmt.Printf("lwsctlバージョン: %s\n", a.version)
+	return nil
 }
 
 func (a *application) start(options []string) error {
