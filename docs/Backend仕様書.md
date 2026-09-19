@@ -69,7 +69,7 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | `GET` | `/applications/{application}/logEntries:watch` | cursorから再開できるSSEによる永続ログ配信 |
 
 - 登録要求は`repositoryUrl`、`ref`、`subdomain`を含む。表示名と説明はmanifestから読む。
-- 長時間操作はOperationを返す。未完了Operationがあるapp-idへの新規変更は409で拒否する。
+- 長時間操作はOperationを返す。同一app-idへの変更は永続FIFOで待機し、同じapp-idで同時に実行しない。同じrequestIdの再送は既存Operationへ収束する。
 - 登録解除はアプリcontainerとapp用edge networkだけを削除し、source、runtime、named volume、アプリ設定、UNREGISTEREDのDB記録を保持する。再登録は保持したsource・設定を使って復帰する。完全削除は`UNREGISTERED`または`CONFIGURING`で`confirm:true`の要求だけが実行でき、アプリデータ、source、runtime、所有確認済みvolumeを削除してからDB記録を物理削除する。CONFIGURINGからは先に登録解除する。途中失敗時は記録を保持する。
 
 完全削除はOperationの進捗を記録しながらアプリデータ、source、runtime、所有確認済みvolumeを削除し、完了ログとOperationを確定した後にアプリDB記録を物理削除する。削除中の失敗時は記録を保持する。
@@ -98,6 +98,10 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | 冪等性 | 変更要求はUUID v4の`requestId`を受け、同一要求の再送には同じOperationを返す |
 | 再試行 | `requestId`付き変更とreadだけを、指数backoffとjitterで再試行する |
 | 並列性 | 同一app-idは直列化し、異なるapp-idは上限2のworker poolで並列化する |
+
+以下は将来の運用目標であり、現在の品質ゲートの合否条件や稼働中の計測値ではない。計測基盤を導入するまでは、実装仕様として扱わない。
+
+### 将来の運用目標
 
 28日rolling windowのSLOは次とする。
 

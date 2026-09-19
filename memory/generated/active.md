@@ -15,6 +15,7 @@
 - ADR-012 | ACCEPTED | - | DashboardをReact・Chakra UIの同一画面管理クライアントとして実装する
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
+- ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
@@ -32,7 +33,7 @@
 - BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る
 - BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
 - BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
-- BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
+- BUG-018 | VERIFIED | backend-operation | purge完了後にOperation履歴を取得できない
 - BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 - BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない

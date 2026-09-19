@@ -34,6 +34,11 @@ description = "Dashboardのlint、test、build、イメージを検証"
 depends = ["dashboard-install"]
 run = ["npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"]
 
+[test-dashboard-e2e]
+description = "DashboardのPlaywright UIテストを実行"
+depends = ["dashboard-install"]
+run = ["npx --prefix dashboard playwright install chromium", "npm --prefix dashboard run test:e2e"]
+
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"
 run = "scripts/run-with-image-cleanup.sh uv run --project qa robot --nostatusrc --exclude live --outputdir test/result/robot qa/suites"

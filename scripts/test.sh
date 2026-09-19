@@ -17,6 +17,9 @@ cat >"$TMP/bin/docker" <<'EOF'
 #!/bin/sh
 status=0
 case "$*" in
+  *'ps -q --filter label=com.labwebsystem.owner=lws --filter label=com.labwebsystem.installation-id='*'--filter label=com.labwebsystem.app-id'*)
+    printf 'owned-app-container\n'
+    ;;
   *'ps -q --filter label=com.labwebsystem.owner=lws --filter label=com.labwebsystem.installation-id='*)
     printf 'owned-system-container\n'
     ;;
@@ -102,6 +105,10 @@ test_help() {
     "$TMP/help"
 
   grep -q \
+    -- '-r, --recursive' \
+    "$TMP/help"
+
+  grep -q \
     'down       LWS管理下の実行環境を停止して削除します。' \
     "$TMP/help"
 
@@ -148,7 +155,11 @@ test_lifecycle() {
     '先にlwsctl startを実行してください' \
     "$TMP/status-before"
 
-  test "$(wc -l <"$TMP/status-before")" -eq 2
+  grep -q \
+    'バージョン: 0.1.2' \
+    "$TMP/status-before"
+
+  test "$(wc -l <"$TMP/status-before")" -eq 3
   test ! -s "$TMP/docker.log"
 
   "$LWSCTL" start \
@@ -188,6 +199,17 @@ test_domain_change() {
 
   grep -qx \
     'LWS_BASE_DOMAIN=changed.internal' \
+    "$TMP/etc/config.env"
+}
+
+test_localhost_domain() {
+  "$LWSCTL" start \
+    --domain localhost \
+    --force \
+    >/dev/null
+
+  grep -qx \
+    'LWS_BASE_DOMAIN=localhost' \
     "$TMP/etc/config.env"
 }
 
@@ -283,12 +305,52 @@ test_down() {
     'down --remove-orphans --volumes | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
-  stop_line="$(grep -nF 'stop owned-system-container' "$TMP/docker.log" | cut -d: -f1)"
+  ! grep -qF 'owned-app-container' "$TMP/docker.log"
+
+  "$LWSCTL" start \
+    --domain changed.internal \
+    --force \
+    >/dev/null
+
+  : >"$TMP/docker.log"
+
+  "$LWSCTL" stop \
+    --recursive
+
+  grep -qF \
+    'stop owned-app-container' \
+    "$TMP/docker.log"
+
+  "$LWSCTL" down \
+    --recursive
+
+  grep -qF \
+    'rm -f owned-app-container' \
+    "$TMP/docker.log"
+
+  grep -qF \
+    'network rm owned-app-network' \
+    "$TMP/docker.log"
+
+  ! grep -qF 'volume rm owned-app-volume' "$TMP/docker.log"
+  test -f "$TMP/etc/config.env"
+
+  "$LWSCTL" start \
+    --domain changed.internal \
+    --force \
+    >/dev/null
+
+  : >"$TMP/docker.log"
+
+  "$LWSCTL" down \
+    --recursive \
+    --purge \
+    --force
+
   down_line="$(grep -nF 'compose --project-name lws --file' "$TMP/docker.log" | tail -1 | cut -d: -f1)"
   app_remove_line="$(grep -nF 'rm -f owned-app-container' "$TMP/docker.log" | cut -d: -f1)"
   network_remove_line="$(grep -nF 'network rm owned-app-network' "$TMP/docker.log" | cut -d: -f1)"
   volume_remove_line="$(grep -nF 'volume rm owned-app-volume' "$TMP/docker.log" | cut -d: -f1)"
-  test "$stop_line" -lt "$down_line"
   test "$down_line" -lt "$app_remove_line"
   test "$app_remove_line" -lt "$network_remove_line"
   test "$network_remove_line" -lt "$volume_remove_line"
@@ -506,6 +568,7 @@ main() {
     test_update_before_start
     test_lifecycle
     test_domain_change
+    test_localhost_domain
     test_config_migration
     test_update
     test_update_running

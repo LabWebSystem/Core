@@ -7,5 +7,9 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: ["dashboard.lws.localhost"],
   },
-  test: { environment: "jsdom", globals: true },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    include: ["src/**/*.{test,spec}.{js,ts,jsx,tsx}"],
+  },
 });

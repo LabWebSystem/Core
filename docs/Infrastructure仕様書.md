@@ -36,7 +36,7 @@
 | 生成物 | `/var/lib/lws/generated/Caddyfile`、`hosts` | SQLiteから生成する派生物 |
 
 - アプリの永続データ、BackendのDB、取得済みsource、生成設定はDocker Named Volumeに保持する。登録アプリのComposeでhost bind mountおよび匿名Volumeを禁止するため、LWSはアプリ領域をホストへbind mountしない。`build.context`はBackendがNamed Volume内のsourceからDockerへ送信する。
-- 通常の`lwsctl down`は設定、LWS管理データ、LWS所有volumeを保持する。`lwsctl down --purge`は確認後、LWSの全アプリと本体を停止し、現在のinstallation IDとLWS所有labelで識別できるcontainer、network、named volume、設定、状態を完全削除する。別のDockerシステムの資源は削除しない。パッケージの削除はAPT / DNFへ委譲する。
+- 通常の`lwsctl down`はLWS本体の実行環境だけを削除し、設定、LWS管理データ、LWS所有volumeとアプリ資源を保持する。`lwsctl down --recursive`は現在のinstallation IDとLWS所有labelで識別できるアプリcontainerとedge networkも削除する。`lwsctl down --purge`は確認後にLWS本体の設定、状態、永続volumeを削除し、`--recursive`指定時はアプリのLWS所有named volumeも削除する。別のDockerシステムの資源は削除しない。パッケージの削除はAPT / DNFへ委譲する。
 
 ## 4. ネットワーク、DNS、Reverse Proxy
 
@@ -114,6 +114,6 @@ docker compose --project-name lws-app-<app-id> \
 
 ## 7. ライフサイクルと禁止事項
 
-- `lwsctl start`は設定を確認してLWS本体Composeを起動する。`stop`は実行中のLWS本体Composeを停止する。`down`はLWS本体Composeのコンテナとnetworkを削除する。`rebuild`は本体と派生設定を再構成するが、アプリsourceやvolumeを削除しない。
+- `lwsctl start`は設定を確認してLWS本体Composeを起動する。ベースドメインには通常のhostnameに加えて`localhost`を指定できる。`stop`は実行中のLWS本体Composeを停止し、`-r`または`--recursive`指定時はLWS所有・installation ID一致のアプリcontainerも停止する。`down`はLWS本体Composeのコンテナとnetworkを削除し、`--recursive`指定時はアプリcontainerとedge networkも削除する。`rebuild`は本体と派生設定を再構成するが、アプリsourceやvolumeを削除しない。
 - 通常の停止・同期・再構成で`docker compose down --volumes`を使わない。完全削除時だけ、project名、LWS所有label、installation ID、app-idが一致するvolumeを削除できる。
 - `docker system prune`、`docker volume prune`、未検証Composeの起動、host bind mountまたは匿名Volumeの許可、`compose.override.yaml`の暗黙取込み、Backend以外へのDocker socket付与を禁止する。

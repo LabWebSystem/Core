@@ -266,6 +266,8 @@ Related:
 
 ### 機能が削除された場合
 
+以下は形式を示す架空の例であり、実在するレコードIDではない。
+
 例:
 
 - 過去バージョンにCSVインポート機能が存在した
@@ -284,22 +286,22 @@ Related:
 例:
 
 ````md
-# SUP-003: CSVインポート関連の過去バグ修正情報を通常参照から外す
+# SUP-EXAMPLE: 旧機能関連の過去バグ修正情報を通常参照から外す
 
 Status: ACTIVE
-Supersedes: BUG-012, CHG-021
-Reason: CSVインポート機能自体をCHG-045で削除したため、当該バグ修正情報は最新バージョンの実装判断には不要になった
-NewBaseline: CHG-045
+Supersedes: BUG-EXAMPLE, CHG-EXAMPLE
+Reason: 旧機能自体をCHG-EXAMPLEで削除したため、当該バグ修正情報は最新バージョンの実装判断には不要になった
+NewBaseline: CHG-EXAMPLE
 CurrentValue: current
 ValidityScope: latest
-ReactivatedIf: CSVインポート機能を再導入する場合のみ、BUG-012とCHG-021を履歴として確認する
-Related: CHG-045
+ReactivatedIf: 旧機能を再導入する場合のみ、BUG-EXAMPLEとCHG-EXAMPLEを履歴として確認する
+Related: CHG-EXAMPLE
 ````
 
 元のBUG側は次のように更新する。
 
 ````md
-# BUG-012: CSVインポート時に列順が崩れる
+# BUG-EXAMPLE: 旧機能の入力時に不整合が起きる
 
 Status: ARCHIVED
 Area: import
@@ -310,8 +312,8 @@ Verification: 複数列順のCSVで確認済み
 FutureRelevance: ignore
 CurrentValue: none
 ValidityScope: removed-feature
-ResolvedBy: CHG-021
-Related: CHG-045, SUP-003
+ResolvedBy: CHG-EXAMPLE
+Related: CHG-EXAMPLE, SUP-EXAMPLE
 ````
 
 ---

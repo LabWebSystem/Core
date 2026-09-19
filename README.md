@@ -4,7 +4,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> 現在のLWSは v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。
+> このリポジトリのCore開発版は v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。公開済みリリースの最新タグは v0.1.10 です。
 
 ## できること
 
@@ -21,6 +21,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 ### 必要なもの
 
 - Ubuntu系またはAlmaLinux系のLinux
+- 現在のリリース成果物はamd64（RPMではx86_64）向け
 - Docker EngineとDocker Compose plugin
 - 空いている80/tcp、53/tcp、53/udpポート
 - GitHub Releasesへ接続できるネットワーク
@@ -46,6 +47,8 @@ sudo lwsctl start --domain example.internal
 sudo lwsctl status
 ```
 
+ベースドメインには`localhost`も指定できます。
+
 たとえば、`reserve`というアプリは次のURLで公開されます。
 
 ```text
@@ -57,17 +60,19 @@ reserve.example.internal
 | コマンド | 内容 |
 |---|---|
 | `lwsctl start --domain <domain>` | 初回設定またはLWSの起動 |
-| `lwsctl stop` | LWSを停止。設定と保存データは残る |
-| `lwsctl status` | 設定とコンテナの状態を表示 |
+| `lwsctl stop [--recursive]` | LWSを停止。`--recursive`指定時は子のアプリcontainerも停止する |
+| `lwsctl status` | lwsctlのバージョン、設定とコンテナの状態を表示 |
 | `lwsctl rebuild` | 設定を作り直して実行環境を再構成 |
 | `lwsctl update` | パッケージとDockerイメージを更新。同じdigestのイメージは再取得しない |
-| `lwsctl down` | 実行環境を削除。設定と保存データは残る |
+| `lwsctl down [--recursive]` | LWSの実行環境を削除。`--recursive`指定時は子のアプリcontainerも削除する |
 
 設定や保存データも含めて削除する場合は、次を実行します。
 
 ```sh
 sudo lwsctl down --purge
 ```
+
+通常の`stop`と`down`はLWS本体だけを対象にします。子のアプリも対象にする場合は`-r`または`--recursive`を追加します。`down --recursive --purge`では、子のアプリのLWS所有volumeも削除します。
 
 詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
 
@@ -118,7 +123,7 @@ APIのベースパスは`/api/v1`です。変更操作はすぐに`Operation`を
 
 ```sh
 mise install
-mise run verify          # 普段の開発・通常CI用。約数秒
+mise run verify          # 普段の開発・通常CI用
 mise run verify qa       # DockerとRobot QAを含む確認
 mise run verify release  # リリース前の確認とパッケージ生成
 mise run dev             # 開発用Composeを起動

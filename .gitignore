@@ -31,7 +31,6 @@ dashboard/node_modules/
 dashboard/tsconfig.tsbuildinfo
 .package-work/
 sdk/dist/
-.lws-dashboard-dev/
 
 # Editor/IDE
 # .idea/
@@ -43,3 +42,4 @@ test/result/robot-live/
 test/result/robot-lifecycle/
 docs/generated/
 qa/.venv/
+dashboard/test-results/

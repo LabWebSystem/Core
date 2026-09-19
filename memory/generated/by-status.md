@@ -17,12 +17,10 @@
 - ADR-012 | ACCEPTED | - | DashboardをReact・Chakra UIの同一画面管理クライアントとして実装する
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
+- ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
 
 ## ACTIVE
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
-
-## OPEN
-- BUG-018 | OPEN | backend-operation | purge完了後にOperation履歴を取得できない
 
 ## SHIPPED
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -107,6 +105,9 @@
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - CHG-083 | SHIPPED | Backend / Runtime | 公開serviceの既存networkを引き継ぐ
 - CHG-084 | SHIPPED | Backend / Runtime / Dashboard | アプリのリビルドをイメージ更新から強制再作成まで一貫させる
+- CHG-085 | SHIPPED | Dashboard development environment | Dashboard開発用の未使用状態ディレクトリ指定を削除する
+- CHG-086 | SHIPPED | Documentation | 現行実装に合わせて文書の正本と状態を整理する
+- CHG-087 | SHIPPED | lwsctl lifecycle | lwsctlの状態表示と再帰ライフサイクル操作を拡張する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
@@ -130,6 +131,7 @@
 - BUG-015 | VERIFIED | quality-gate | テストで取得したDockerイメージが残る
 - BUG-016 | VERIFIED | backend-operation | 登録解除Operationが開始されない
 - BUG-017 | VERIFIED | logging | 正常なstderrと複数行ログがerror表示される
+- BUG-018 | VERIFIED | backend-operation | purge完了後にOperation履歴を取得できない
 - BUG-019 | VERIFIED | backend-runtime | CONFIGURINGからの起動で公開経路が生成されない
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
 - BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない

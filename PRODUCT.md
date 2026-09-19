@@ -29,7 +29,7 @@ LWSは、GitHubリポジトリのCompose定義を検証してDocker Composeで�
 - GitHubリポジトリURL、アプリ定義、アプリ名、ベースドメイン、APIリクエストは未信頼入力として扱う。
 - 現段階では、重厚な認証機能は実装しない。
 - 管理APIは認証・認可未実装のため、信頼できるLAN内だけで利用する。
-- DashboardとTypeScript SDKは開発途中である。
+- Dashboardは基本的なアプリ管理機能を実装済みで、UIの洗練と受け入れ確認を継続している。TypeScript SDKは開発途中である。
 
 ## Brand Commitments
 
@@ -40,7 +40,7 @@ LWSは、GitHubリポジトリのCompose定義を検証してDocker Composeで�
 
 ## Evidence on Hand
 
-実装・仕様・利用手順は、`README.md`、`docs/`、`backend/`、`cmd/lwsctl/`、`infrastructure/`にある。Dashboardは現在Dockerfileとモックサーバーのみで、完成した画面実装やデザイン資産はない。実在の顧客事例、導入実績、評価値は確認できていないため、将来の画面や文書で創作しない。
+実装・仕様・利用手順は、`README.md`、`docs/`、`backend/`、`cmd/lwsctl/`、`infrastructure/`にある。Dashboardにはアプリ登録、状態確認、操作、設定、ログ、削除を扱う基本画面とテストがある。UIの完成度、実在の顧客事例、導入実績、評価値は確認できていないため、将来の画面や文書で創作しない。
 
 ## Product Principles
 
