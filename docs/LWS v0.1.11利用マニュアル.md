@@ -1,4 +1,6 @@
-# LWS v0.1.7 利用マニュアル
+# LWS v0.1.11 開発版 利用マニュアル
+
+> この文書はCore v0.1.11の開発版を対象とします。公開済みリリースの最新タグはv0.1.10です。
 
 ## LWSでできること
 
@@ -7,7 +9,7 @@ LWSは、研究室や家庭内LANで使うWebアプリを、決まったURLで�
 LWSを使うと、次のことができます。
 
 - WebアプリをGitHubリポジトリから登録する
-- アプリをDocker Composeで起動する
+- アプリを設定確認後にDocker Composeで起動する
 - アプリごとに専用のURLを割り当てる
 - アプリを停止・再起動・再構成する
 - アプリの設定値やsecretを管理する
@@ -30,7 +32,7 @@ example.internal
 reserve.example.internal
 ```
 
-URLの名前解決はLWSのDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用する端末がLWSのDNSを使うように、LAN側のDHCPやDNS設定を整えてください。
+Dashboardは`dashboard.example.internal`で開きます。URLの名前解決はLWSのDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用する端末がLWSホストのDNSを使うよう、LAN側のDHCPまたは端末のDNS設定を整えてください。
 
 ## 利用を始める
 
@@ -46,6 +48,8 @@ sudo lwsctl start --domain example.internal
 
 初回起動時に、ベースドメインとLWSの実行環境が準備されます。
 
+ベースドメインには`localhost`も指定できます。
+
 起動前に、ホストの80番ポートと53番ポート（TCP/UDP）が空いている必要があります。
 
 ### 3. 状態を確認する
@@ -54,18 +58,19 @@ sudo lwsctl start --domain example.internal
 sudo lwsctl status
 ```
 
-設定済みのベースドメインと、LWSの各コンテナの状態を確認できます。
+現在のlwsctlのバージョン、設定済みのベースドメインと、LWSの各コンテナの状態を確認できます。
 
 ## LWS本体を操作する
 
 | コマンド | できること |
 | --- | --- |
 | `lwsctl start` | LWSを起動する。初回はベースドメインを設定する |
-| `lwsctl stop` | LWSを停止する。設定や保存データは残る |
-| `lwsctl status` | 設定と実行状態を確認する |
+| `lwsctl stop [--recursive]` | LWSを停止する。`--recursive`指定時は子のアプリcontainerも停止する |
+| `lwsctl status` | lwsctlのバージョン、設定と実行状態を確認する |
+| `lwsctl version` | lwsctlのバージョンを確認する |
 | `lwsctl rebuild` | LWSの設定を再生成して実行環境を作り直す |
 | `lwsctl update` | LWSのパッケージとDockerイメージを更新する。同じdigestのイメージは再取得しない |
-| `lwsctl down` | LWSの実行環境を削除する。設定や保存データは残る |
+| `lwsctl down [--recursive]` | LWSの実行環境を削除する。`--recursive`指定時は子のアプリcontainerも削除する |
 
 `down`は実行環境だけを削除します。設定・状態・保存データまで削除する場合は、確認のうえで次を実行します。
 
@@ -78,6 +83,8 @@ sudo lwsctl down --purge
 ```sh
 sudo lwsctl down --purge --force
 ```
+
+通常の`stop`と`down`はLWS本体だけを対象にします。子のアプリも対象にする場合は`-r`または`--recursive`を追加します。`down --recursive --purge`では、子のアプリのLWS所有volumeも削除します。
 
 ## アプリを登録する
 
@@ -100,7 +107,7 @@ public:
   port: 3000
 ```
 
-Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdomainを指定して登録します。登録後、LWSがリポジトリを取得・検査し、問題がなければDocker Composeでアプリを起動します。
+Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdomainを指定して登録します。登録後、LWSがリポジトリを取得・検査し、アプリは`CONFIGURING`（設定待ち）になります。Dashboardで環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
 
 アプリの公開serviceやportは推測されません。manifestに記載したserviceがCompose内に存在しない場合、アプリは起動されません。
 
@@ -118,13 +125,31 @@ Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdom
 
 アプリの変更処理はすぐに受付結果を返し、バックグラウンドで実行されます。処理の進み具合はOperationの状態として確認できます。
 
-同じアプリに複数の変更を同時に行うことはできません。前の処理が完了してから次の操作を行ってください。
+同じアプリへの変更は同時実行されず、永続FIFOで待機します。受付時に返されたOperationを確認し、必要なら次の変更を送信してください。
+
+APIを直接使う場合の最小例は次のとおりです。
+
+```sh
+curl -X POST http://api.example.internal/api/v1/applications \
+  -H 'Content-Type: application/json' \
+  -d '{"repositoryUrl":"https://github.com/example/app","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}'
+
+curl http://api.example.internal/api/v1/operations/<operation-id>
+```
+
+変更操作は`202`とOperation名を返します。完了状態はOperation APIまたはSSEで確認します。
 
 ## 設定値とsecret
 
 アプリごとに環境変数を設定できます。パスワードやAPIキーなどsecretとして登録した値は暗号化して保存され、取得時に値そのものは表示されません。
 
-ただし、LWS v0.1.7にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
+ただし、LWS v0.1.11にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
+
+## リソースプールと設定レイヤー
+
+Dashboardのリソースプールでは、Composeから検出した名前付きVolumeとアプリ専用Networkを確認できます。USBなどの物理デバイスは、検出候補を利用者がLWSデバイス名で登録してから、アプリの設定画面でserviceごとに割り当てます。接続ポートが変わっても、LWSが現在の`/dev` pathを再検出して実行時に解決します。
+
+アプリ登録時はコンテナを起動しません。必須環境変数とdevice割り当てを保存してから、開始操作を実行してください。
 
 ## 登録解除と完全削除
 
@@ -141,15 +166,15 @@ Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdom
 
 ### 完全削除
 
-完全削除は、登録解除済みのアプリに対してだけ実行できます。アプリのsource、設定、保存データ、LWS内の記録を削除します。
+完全削除は、登録解除済みまたは設定待ちのアプリに対して実行できます。設定待ちアプリは先に登録解除され、アプリのsource、設定、保存データ、LWS内の記録を削除します。
 
 この操作は元に戻せないため、確認が必要です。
 
-## v0.1.7での注意点
+## v0.1.11での注意点
 
 - 管理操作の中心はBackend APIです。
 - Dashboardでは、アプリの登録、状態確認、開始・停止・同期・再構成、環境設定、ログ確認、登録解除、完全削除を行えます。LWS本体の起動・停止・更新は引き続き`lwsctl`で行います。
-- TypeScript SDKはまだモック段階です。
+- TypeScript SDKは開発途中です。
 - APIの認証・認可はありません。
 - WebSocketは使用せず、処理状態やログの通知にはSSEを使います。
 - LWSのDNSをLAN端末へ配布するDHCP設定は、利用者側で行います。

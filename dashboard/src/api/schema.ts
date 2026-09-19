@@ -36,6 +36,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resource-pools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listResourcePools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resource-pools/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPoolDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resource-pools/volumes/{volume}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                volume: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteResourcePoolVolume"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications": {
         parameters: {
             query?: never;
@@ -301,6 +351,8 @@ export interface components {
         };
         Application: {
             name: string;
+            composeFile?: string;
+            overrideFiles?: string[];
             subdomain: string;
             repositoryUrl: string;
             ref: string;
@@ -344,6 +396,7 @@ export interface components {
                 isSecret: boolean;
                 configured: boolean;
                 value?: string;
+                defaultValue?: string;
                 required: boolean;
                 hasDefault: boolean;
             }[];
@@ -362,13 +415,29 @@ export interface components {
                 configured: boolean;
                 deviceId?: string;
             }[];
+            deviceAccess: {
+                allowed: boolean;
+                message: string;
+            };
             ready: boolean;
+            lwsOverrideCompose: string;
+            effectiveCompose: string;
+            webInterfaces: {
+                service: string;
+                port: number;
+            }[];
+            manifestPublicService: string;
+            manifestPublicPort: number;
+            publicService: string;
+            publicPort: number;
         };
         CreateApplicationRequest: {
             /** Format: uri */
             repositoryUrl: string;
             ref: string;
             subdomain: string;
+            composeFile?: string;
+            overrideFiles?: string[];
             /** Format: uuid */
             requestId: string;
         };
@@ -387,6 +456,8 @@ export interface components {
                 targetPath: string;
                 deviceId: string;
             }[];
+            publicService?: string;
+            publicPort?: number;
             /** Format: uuid */
             requestId: string;
         };
@@ -400,8 +471,52 @@ export interface components {
             /** @constant */
             confirm: true;
         };
+        ResourcePools: {
+            devices: components["schemas"]["PoolDevice"][];
+            physicalDevices: components["schemas"]["PhysicalDeviceResource"][];
+            volumes: components["schemas"]["PoolResource"][];
+            networks: components["schemas"]["PoolResource"][];
+        };
+        PoolDevice: {
+            id: string;
+            name: string;
+            stableId: string;
+            currentPath: string;
+            status: string;
+            metadata: {
+                [key: string]: string;
+            };
+        };
+        PhysicalDeviceResource: {
+            stableId: string;
+            currentPath: string;
+            name: string;
+            /** @enum {string} */
+            category: "user" | "system";
+            metadata: {
+                [key: string]: string;
+            };
+        };
+        PoolResource: {
+            name: string;
+            application: string;
+            applicationName: string;
+            status: string;
+            inUse?: boolean;
+            deletable?: boolean;
+            /** @enum {string} */
+            kind?: "edge" | "compose";
+        };
+        CreatePoolDeviceRequest: {
+            name: string;
+            candidateStableId: string;
+        };
+        PoolDeviceReference: {
+            id: string;
+        };
         Variable: {
             value?: string;
+            defaultValue?: string;
             secret: boolean;
             keep?: boolean;
         };
@@ -453,6 +568,88 @@ export interface operations {
             };
             /** @description 利用不可 */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listResourcePools: {
+        parameters: {
+            query?: {
+                includeSystem?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description LWSリソースプール */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourcePools"];
+                };
+            };
+        };
+    };
+    createPoolDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePoolDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description デバイス登録完了 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolDeviceReference"];
+                };
+            };
+        };
+    };
+    deleteResourcePoolVolume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                volume: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Volume削除完了 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolDeviceReference"];
+                };
+            };
+            /** @description 未検出 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 使用中または削除できないVolume */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

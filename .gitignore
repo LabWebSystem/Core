@@ -42,3 +42,4 @@ test/result/robot-live/
 test/result/robot-lifecycle/
 docs/generated/
 qa/.venv/
+dashboard/test-results/

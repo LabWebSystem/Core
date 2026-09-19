@@ -55,10 +55,11 @@ func (a *application) run(args []string) error {
 	case "start":
 		return a.start(options)
 	case "stop":
-		if len(options) != 0 {
-			return fmt.Errorf("stopにはオプションを指定できません")
+		recursive, err := parseStopOptions(options)
+		if err != nil {
+			return err
 		}
-		return a.stop()
+		return a.stop(recursive)
 	case "down":
 		return a.down(options)
 	case "status":
@@ -66,6 +67,11 @@ func (a *application) run(args []string) error {
 			return fmt.Errorf("statusにはオプションを指定できません")
 		}
 		return a.status()
+	case "version":
+		if len(options) != 0 {
+			return fmt.Errorf("versionにはオプションを指定できません")
+		}
+		return a.printVersion()
 	case "rebuild":
 		if len(options) != 0 {
 			return fmt.Errorf("rebuildにはオプションを指定できません")
@@ -80,6 +86,11 @@ func (a *application) run(args []string) error {
 		printUsage(os.Stderr)
 		return exitError{code: 2}
 	}
+}
+
+func (a *application) printVersion() error {
+	fmt.Printf("lwsctlバージョン: %s\n", a.version)
+	return nil
 }
 
 func (a *application) start(options []string) error {
@@ -170,7 +181,7 @@ func parseStartOptions(options []string) (string, bool, error) {
 	return domain, force, nil
 }
 
-func (a *application) stop() error {
+func (a *application) stop(recursive bool) error {
 	if _, err := os.Stat(a.paths.composeFile); errors.Is(err, os.ErrNotExist) {
 		fmt.Println("LWSはインストールされていません")
 		return nil
@@ -183,11 +194,17 @@ func (a *application) stop() error {
 	if err := a.compose("stop"); err != nil {
 		return err
 	}
+	if recursive {
+		if err := a.stopOwnedAppContainers(); err != nil {
+			return err
+		}
+	}
 	fmt.Println("LWSを停止しました")
 	return nil
 }
 
 func (a *application) status() error {
+	fmt.Printf("lwsctlバージョン: %s\n", a.version)
 	if err := a.loadConfig(); err == nil {
 		fmt.Printf("設定済み: YES\nドメイン: %s\n", a.domain)
 	} else if errors.Is(err, os.ErrNotExist) {
@@ -306,7 +323,7 @@ func (a *application) hasRunningServices() (bool, error) {
 }
 
 func (a *application) down(options []string) error {
-	purge, force, err := parseDownOptions(options)
+	recursive, purge, force, err := parseDownOptions(options)
 	if err != nil {
 		return err
 	}
@@ -317,17 +334,16 @@ func (a *application) down(options []string) error {
 		return err
 	}
 	if purge && !force {
-		confirmed, err := confirm("LWSの設定と永続データを削除します。続行しますか?")
+		message := "LWSの設定と永続データを削除します。続行しますか?"
+		if recursive {
+			message = "LWSと子のアプリの設定、状態、永続データを削除します。続行しますか?"
+		}
+		confirmed, err := confirm(message)
 		if err != nil {
 			return err
 		}
 		if !confirmed {
 			return errors.New("完全削除をキャンセルしました")
-		}
-	}
-	if purge {
-		if err := a.stopOwnedContainers(); err != nil {
-			return err
 		}
 	}
 	downArgs := []string{"down", "--remove-orphans"}
@@ -337,10 +353,12 @@ func (a *application) down(options []string) error {
 	if err := a.compose(downArgs...); err != nil {
 		return err
 	}
-	if purge {
-		if err := a.purgeOwnedAppResources(); err != nil {
+	if recursive {
+		if err := a.removeOwnedAppResources(purge); err != nil {
 			return err
 		}
+	}
+	if purge {
 		if err := os.RemoveAll(a.paths.configDir); err != nil {
 			return err
 		}
@@ -356,31 +374,32 @@ func (a *application) down(options []string) error {
 	return nil
 }
 
-func (a *application) stopOwnedContainers() error {
-	containers, err := a.dockerOutput("ps", "-q", "--filter", "label=com.labwebsystem.owner=lws", "--filter", "label=com.labwebsystem.installation-id="+a.installationID)
-	if err != nil {
-		return errors.New("LWS管理container一覧を取得できません")
-	}
-	if ids := strings.Fields(string(containers)); len(ids) > 0 {
-		args := append([]string{"stop"}, ids...)
-		if err := a.docker(args...); err != nil {
-			return errors.New("LWS管理containerを停止できません")
-		}
-	}
-	return nil
-}
-
-func parseDownOptions(options []string) (bool, bool, error) {
-	purge, force := false, false
+func parseStopOptions(options []string) (bool, error) {
+	recursive := false
 	for len(options) > 0 {
 		switch options[0] {
+		case "-r", "--recursive":
+			recursive, options = true, options[1:]
+		default:
+			return false, fmt.Errorf("stopの不明なオプションです: %s", options[0])
+		}
+	}
+	return recursive, nil
+}
+
+func parseDownOptions(options []string) (bool, bool, bool, error) {
+	recursive, purge, force := false, false, false
+	for len(options) > 0 {
+		switch options[0] {
+		case "-r", "--recursive":
+			recursive, options = true, options[1:]
 		case "--purge":
 			purge, options = true, options[1:]
 		case "-f", "--force":
 			force, options = true, options[1:]
 		default:
-			return false, false, fmt.Errorf("downの不明なオプションです: %s", options[0])
+			return false, false, false, fmt.Errorf("downの不明なオプションです: %s", options[0])
 		}
 	}
-	return purge, force, nil
+	return recursive, purge, force, nil
 }

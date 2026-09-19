@@ -149,6 +149,10 @@ func TestOpenAPIDeclaresResponseSchemasAndObservedAt(t *testing.T) {
 	if application == nil || application.Value.Properties["observedAt"] == nil {
 		t.Fatal("Application.observedAtがOpenAPIにありません")
 	}
+	operationPath := spec.Paths.Find("/operations/{operation}")
+	if operationPath == nil || len(operationPath.Parameters) != 1 || operationPath.Parameters[0].Value == nil || operationPath.Parameters[0].Value.Schema == nil || operationPath.Parameters[0].Value.Schema.Value.Format != "uuid" {
+		t.Fatal("Operationのpath parameterがUUIDとしてOpenAPIに定義されていません")
+	}
 }
 
 func TestCreateApplicationRollsBackWhenOperationCreationFails(t *testing.T) {
@@ -171,6 +175,22 @@ func TestCreateApplicationRollsBackWhenOperationCreationFails(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatal("Operation作成失敗時にアプリが残りました")
+	}
+}
+
+func TestCreateApplicationAcceptsComposeSelectionDefinedByOpenAPI(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	body := strings.NewReader(`{"repositoryUrl":"https://github.com/example/app/tree/dev/new-arch","ref":"dev/new-arch","subdomain":"oruca","composeFile":"compose.dev.yaml","overrideFiles":["compose.local.yaml"],"requestId":"550e8400-e29b-41d4-a716-446655440114"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	NewServer(db, nil).Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("OpenAPI契約に適合する登録要求が拒否されました: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
 

@@ -194,3 +194,24 @@ func (d *DockerResources) RemoveVolume(ctx context.Context, app, name string) er
 	_, err = d.Runner.Run(ctx, "docker", "volume", "rm", name)
 	return err
 }
+
+func (d *DockerResources) RemoveOwnedVolume(ctx context.Context, name string) error {
+	r, err := d.inspect(ctx, "volume", name)
+	if err != nil {
+		return err
+	}
+	if r.Labels["com.labwebsystem.owner"] != "lws" || r.Labels["com.labwebsystem.installation-id"] != d.InstallationID || r.Labels["com.labwebsystem.app-id"] == "" {
+		return fmt.Errorf("LWS所有確認に失敗しました")
+	}
+	_, err = d.Runner.Run(ctx, "docker", "volume", "rm", name)
+	return err
+}
+
+// VolumeInUseは、停止済みコンテナを含めてVolumeの接続状態を確認します。
+func (d *DockerResources) VolumeInUse(ctx context.Context, name string) (bool, error) {
+	out, err := d.Runner.Run(ctx, "docker", "ps", "-a", "--filter", "volume="+name, "--format", "{{.ID}}")
+	if err != nil {
+		return false, fmt.Errorf("Volumeの使用状況を確認できません")
+	}
+	return len(strings.Fields(string(out))) > 0, nil
+}

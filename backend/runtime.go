@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type RuntimeExecutor struct {
@@ -62,10 +65,13 @@ func (e *RuntimeExecutor) ReconcileStartup(ctx context.Context) error {
 }
 
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
-	var repo, ref, state, desired, previousName, previousDescription, previousRevision, previousService string
-	var previousPort int
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &desired, &previousName, &previousDescription, &previousRevision, &previousService, &previousPort); err != nil {
+	var repo, ref, state, desired, previousName, previousDescription, previousRevision, manifestService, composeFile, overrideFilesJSON, previousService string
+	var previousPort, manifestPort int
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port,public_service,public_port,compose_file,override_files FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &desired, &previousName, &previousDescription, &previousRevision, &manifestService, &manifestPort, &previousService, &previousPort, &composeFile, &overrideFilesJSON); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
+	}
+	if previousService == "" {
+		previousService, previousPort = manifestService, manifestPort
 	}
 	root := filepath.Join(e.Root, op.ApplicationID)
 	source := filepath.Join(root, "source")
@@ -79,6 +85,23 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		if desired != "RUNNING" {
 			return nil
+		}
+		var configuredService string
+		var configuredPort int
+		if err := e.DB.QueryRowContext(ctx, `SELECT public_service,public_port FROM applications WHERE id=?`, op.ApplicationID).Scan(&configuredService, &configuredPort); err != nil || configuredService == "" || configuredPort < 1 {
+			configuredService, configuredPort = previousService, previousPort
+		}
+		var configureOverrides []string
+		_ = json.Unmarshal([]byte(overrideFilesJSON), &configureOverrides)
+		overridePaths := make([]string, 0, len(configureOverrides))
+		for _, file := range configureOverrides {
+			overridePaths = append(overridePaths, filepath.Join(source, file))
+		}
+		if err := e.GenerateOverrideFromComposes(op.ApplicationID, configuredService, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml")); err != nil {
+			return err
+		}
+		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
+			return err
 		}
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
@@ -125,9 +148,27 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := ValidateRepositoryURL(repo); err != nil {
 			return err
 		}
-		if err := CloneAndValidate(ctx, e.Runner, repo, ref, source); err != nil {
+		requestedCompose := composeFile
+		var requestedOverrides []string
+		_ = json.Unmarshal([]byte(overrideFilesJSON), &requestedOverrides)
+		if op.Payload != "" {
+			var p struct {
+				ComposeFile   string   `json:"composeFile"`
+				OverrideFiles []string `json:"overrideFiles"`
+			}
+			_ = json.Unmarshal([]byte(op.Payload), &p)
+			if p.ComposeFile != "" {
+				requestedCompose = p.ComposeFile
+			}
+			if p.OverrideFiles != nil {
+				requestedOverrides = p.OverrideFiles
+			}
+		}
+		selectedCompose, err := CloneAndValidateWithOverrides(ctx, e.Runner, repo, ref, requestedCompose, requestedOverrides, source)
+		if err != nil {
 			return err
 		}
+		composeFile = selectedCompose
 		reportOperationPhase(ctx, "runtime_prepare", "アプリの実行設定を準備しています")
 		sourceSwapActive := true
 		metadataUpdated := false
@@ -137,7 +178,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			}
 			if runErr != nil {
 				if metadataUpdated {
-					_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, previousService, previousPort, op.ApplicationID)
+					_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, manifestService, manifestPort, op.ApplicationID)
 				}
 				if err := RestoreSourceSwap(source); err != nil {
 					runErr = fmt.Errorf("sourceを復元できません: %w（元のエラー: %v）", err, runErr)
@@ -159,10 +200,22 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err != nil {
 			return err
 		}
-		if err := e.GenerateOverrideFromCompose(op.ApplicationID, manifest.Public.Service, filepath.Join(source, "compose.yaml"), filepath.Join(runtime, "lws.override.yaml")); err != nil {
+		composePath := filepath.Join(source, composeFile)
+		overridePaths := make([]string, 0, len(requestedOverrides))
+		for _, file := range requestedOverrides {
+			overridePaths = append(overridePaths, filepath.Join(source, file))
+		}
+		if err := e.GenerateOverrideFromComposes(op.ApplicationID, manifest.Public.Service, composePath, overridePaths, filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
-		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, manifest.Public.Service, manifest.Public.Port, op.ApplicationID); err != nil {
+		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, composePath, overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
+			return err
+		}
+		overridesJSON, _ := json.Marshal(requestedOverrides)
+		if previousService == "" || op.Kind == "CREATE" {
+			previousService, previousPort = manifest.Public.Service, manifest.Public.Port
+		}
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,public_service=?,public_port=?,compose_file=?,override_files=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, manifest.Public.Service, manifest.Public.Port, previousService, previousPort, composeFile, string(overridesJSON), op.ApplicationID); err != nil {
 			return err
 		}
 		metadataUpdated = true
@@ -176,7 +229,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			sourceSwapActive = false
 			return nil
 		}
-		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, "compose.yaml")); err != nil {
+		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, composeFile)); err != nil {
 			return err
 		}
 		reportOperationPhase(ctx, "compose_up", "Docker containerを作成しています")
@@ -193,19 +246,50 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		sourceSwapActive = false
 		return nil
 	case "START", "REBUILD":
-		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, "compose.yaml")); err != nil {
+		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, composeFile)); err != nil {
 			return err
 		}
-		if err := e.GenerateOverrideFromCompose(op.ApplicationID, previousService, filepath.Join(source, "compose.yaml"), filepath.Join(runtime, "lws.override.yaml")); err != nil {
+		var startOverrides []string
+		_ = json.Unmarshal([]byte(overrideFilesJSON), &startOverrides)
+		overridePaths := make([]string, 0, len(startOverrides))
+		for _, file := range startOverrides {
+			overridePaths = append(overridePaths, filepath.Join(source, file))
+		}
+		if err := e.GenerateOverrideFromComposes(op.ApplicationID, previousService, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml")); err != nil {
 			return err
 		}
-		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+		if err := e.GenerateEffectiveCompose(ctx, op.ApplicationID, filepath.Join(source, composeFile), overridePaths, filepath.Join(runtime, "lws.override.yaml"), filepath.Join(runtime, "lws.effective.yaml")); err != nil {
 			return err
+		}
+		if op.Kind == "REBUILD" {
+			reportOperationPhase(ctx, "image_pull", "Docker imageを取得しています")
+			if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "pull"); err != nil {
+				return err
+			}
+			reportOperationPhase(ctx, "image_build", "Docker imageをビルドしています")
+			if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "build", "--pull"); err != nil {
+				return err
+			}
+		}
+		upArgs := []string{"up", "-d"}
+		if op.Kind == "REBUILD" {
+			upArgs = append(upArgs, "--force-recreate", "--remove-orphans")
+		}
+		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, upArgs...); err != nil {
+			return err
+		}
+		// CONFIGURINGからの初回起動では、公開設定の再生成前にACTIVEへ遷移
+		// させる必要がある。DerivedManagerはACTIVEアプリだけを公開する。
+		wasActive := state == "ACTIVE"
+		if !wasActive {
+			if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE',updated_at=datetime('now') WHERE id=?`, op.ApplicationID); err != nil {
+				return err
+			}
 		}
 		if err := e.syncDerived(ctx); err != nil {
-			return err
-		}
-		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET registration_state='ACTIVE' WHERE id=?`, op.ApplicationID); err != nil {
+			if !wasActive {
+				_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET registration_state=?,updated_at=datetime('now') WHERE id=?`, state, op.ApplicationID)
+			}
 			return err
 		}
 		return e.markApplicationState(ctx, op.ApplicationID, "RUNNING", "RUNNING", "")
@@ -287,17 +371,21 @@ func (e *RuntimeExecutor) ensureConfigurationReady(ctx context.Context, id, comp
 	if _, err := RefreshLWSDevices(ctx, e.DB, e.DeviceScanner); err != nil {
 		return fmt.Errorf("LWSデバイスの接続状態を確認できません: %w", err)
 	}
-	data, err := os.ReadFile(compose)
+	sources, err := e.selectedComposeSources(id, compose)
 	if err != nil {
 		return err
 	}
-	attachments, err := ComposeDeviceAttachments(data)
+	variables, err := MergeComposeVariables(sources)
 	if err != nil {
 		return err
 	}
-	variables, err := ExtractComposeVariables(data)
-	if err != nil {
-		return err
+	attachments := []DeviceAttachment{}
+	for _, source := range sources {
+		found, attachmentErr := ComposeDeviceAttachments(source.Data)
+		if attachmentErr != nil {
+			return attachmentErr
+		}
+		attachments = append(attachments, found...)
 	}
 	for _, v := range variables {
 		if v.Required {
@@ -341,7 +429,11 @@ func (e *RuntimeExecutor) markApplicationState(ctx context.Context, id, desired,
 	return err
 }
 func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime string, action ...string) (runErr error) {
-	compose := filepath.Join(source, "compose.yaml")
+	composeFile := "compose.yaml"
+	if err := e.DB.QueryRow(`SELECT compose_file FROM applications WHERE id=?`, id).Scan(&composeFile); err != nil || !containsComposeFile(composeFile) {
+		composeFile = "compose.yaml"
+	}
+	compose := filepath.Join(source, composeFile)
 	override := filepath.Join(runtime, "lws.override.yaml")
 	env := filepath.Join(runtime, "app.env")
 	if _, err := os.Stat(compose); err != nil {
@@ -355,25 +447,14 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 			reportOperationPhase(ctx, "compose_execute", "Compose定義がないため実行環境を確認しました")
 			return nil
 		}
-		return fmt.Errorf("compose.yamlが見つかりません")
+		return fmt.Errorf("%sが見つかりません", composeFile)
 	}
 	if len(action) > 0 && action[0] == "up" {
 		reportOperationPhase(ctx, "environment_prepare", "環境変数を準備しています")
-		manifestData, err := os.ReadFile(filepath.Join(source, "lws.manifest.yaml"))
-		if err != nil {
-			return fmt.Errorf("manifestが見つかりません")
-		}
-		manifest, err := ValidateManifest(manifestData)
-		if err != nil {
-			return err
-		}
 		if err := e.prepareEnvironment(ctx, compose, runtime); err != nil {
 			return err
 		}
-		reportOperationPhase(ctx, "compose_validate", "Compose設定を検証しています")
-		if err := e.validateEffectiveCompose(ctx, id, compose, "", runtime, manifest.Public.Service, manifest.Public.Port); err != nil {
-			return err
-		}
+		// 公開用の生成overrideを含めた実効Composeを、下の検証で一度だけ検査する。
 	}
 	if _, err := os.Stat(override); os.IsNotExist(err) {
 		if err := WriteAtomic(override, []byte("services: {}\n"), 0600); err != nil {
@@ -389,8 +470,14 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 		if err != nil {
 			return err
 		}
+		publicService, publicPort := manifest.Public.Service, manifest.Public.Port
+		var configuredService string
+		var configuredPort int
+		if err := e.DB.QueryRowContext(ctx, `SELECT public_service,public_port FROM applications WHERE id=?`, id).Scan(&configuredService, &configuredPort); err == nil && configuredService != "" && configuredPort > 0 {
+			publicService, publicPort = configuredService, configuredPort
+		}
 		reportOperationPhase(ctx, "compose_validate", "公開用のCompose設定を検証しています")
-		if err := e.validateEffectiveCompose(ctx, id, compose, override, runtime, manifest.Public.Service, manifest.Public.Port); err != nil {
+		if err := e.validateEffectiveCompose(ctx, id, compose, override, runtime, publicService, publicPort); err != nil {
 			return err
 		}
 	}
@@ -421,7 +508,13 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 			}()
 		}
 	}
-	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override}
+	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose}
+	if files, err := readOverrideFiles(e.DB, id); err == nil {
+		for _, file := range files {
+			args = append(args, "-f", filepath.Join(source, file))
+		}
+	}
+	args = append(args, "-f", override)
 	args = append(args, action...)
 	if len(action) > 0 && action[0] == "up" {
 		reportOperationPhase(ctx, "container_create", "Docker containerを作成しています")
@@ -434,6 +527,26 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 	return nil
 }
 
+func readOverrideFiles(db *sql.DB, id string) ([]string, error) {
+	var encoded string
+	if err := db.QueryRow(`SELECT override_files FROM applications WHERE id=?`, id).Scan(&encoded); err != nil {
+		return nil, err
+	}
+	var files []string
+	if encoded == "" {
+		return files, nil
+	}
+	if err := json.Unmarshal([]byte(encoded), &files); err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if !validComposeFilename(file) {
+			return nil, fmt.Errorf("override Composeファイル名が不正です")
+		}
+	}
+	return files, nil
+}
+
 func (e *RuntimeExecutor) prepareEnvironment(ctx context.Context, compose, runtime string) error {
 	if e.DB == nil {
 		return fmt.Errorf("データベースを利用できません")
@@ -441,11 +554,12 @@ func (e *RuntimeExecutor) prepareEnvironment(ctx context.Context, compose, runti
 	if err := os.MkdirAll(runtime, 0700); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(compose)
+	id := filepath.Base(filepath.Dir(runtime))
+	sources, err := e.selectedComposeSources(id, compose)
 	if err != nil {
 		return fmt.Errorf("Composeを読み取れません")
 	}
-	references, err := ExtractComposeVariables(data)
+	references, err := MergeComposeVariables(sources)
 	if err != nil {
 		return err
 	}
@@ -496,6 +610,20 @@ func (e *RuntimeExecutor) prepareEnvironment(ctx context.Context, compose, runti
 	return WriteAtomic(filepath.Join(runtime, "app.env"), []byte(output.String()), 0600)
 }
 
+func (e *RuntimeExecutor) selectedComposeSources(id, compose string) ([]ComposeSource, error) {
+	var encoded string
+	if err := e.DB.QueryRow(`SELECT override_files FROM applications WHERE id=?`, id).Scan(&encoded); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	var overrides []string
+	if encoded != "" {
+		if err := json.Unmarshal([]byte(encoded), &overrides); err != nil {
+			return nil, err
+		}
+	}
+	return ReadComposeSources(filepath.Dir(compose), filepath.Base(compose), overrides)
+}
+
 func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, compose, override, runtime, service string, port int) error {
 	env := filepath.Join(runtime, "app.env")
 	if err := os.MkdirAll(runtime, 0700); err != nil {
@@ -508,7 +636,13 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	}
 	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "config", "--format", "json"}
 	if override != "" {
-		args = []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose, "-f", override, "config", "--format", "json"}
+		args = []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose}
+		if files, err := readOverrideFiles(e.DB, id); err == nil {
+			for _, file := range files {
+				args = append(args, "-f", filepath.Join(filepath.Dir(runtime), "source", file))
+			}
+		}
+		args = append(args, "-f", override, "config", "--format", "json")
 	}
 	out, err := runLoggedJSON(ctx, e.Runner, "Compose検証", "docker", args...)
 	if err != nil {
@@ -519,11 +653,39 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	}
 	return ValidateEffectiveComposeWithOwnedNetwork(out, service, port, EdgeNetworkName(id))
 }
+
+// GenerateEffectiveComposeは、利用者が選択したCompose群とLWS overrideを
+// Docker Compose自身にマージさせた、確認用の完全なComposeを生成する。
+func (e *RuntimeExecutor) GenerateEffectiveCompose(ctx context.Context, id, compose string, overrides []string, override, path string) error {
+	env := filepath.Join(filepath.Dir(path), "app.env")
+	if _, err := os.Stat(env); os.IsNotExist(err) {
+		if err := WriteAtomic(env, nil, 0600); err != nil {
+			return err
+		}
+	}
+	args := []string{"compose", "--project-name", ProjectName(id), "--env-file", env, "-f", compose}
+	for _, file := range overrides {
+		args = append(args, "-f", file)
+	}
+	args = append(args, "-f", override, "config", "--no-interpolate", "--format", "yaml")
+	data, err := e.Runner.Run(ctx, "docker", args...)
+	if err != nil {
+		return fmt.Errorf("マージ後のComposeを生成できません")
+	}
+	if len(data) == 0 {
+		return fmt.Errorf("マージ後のComposeが空です")
+	}
+	return WriteAtomic(path, data, 0600)
+}
 func (e *RuntimeExecutor) GenerateOverride(id, service, path string) error {
 	return e.GenerateOverrideWithVolumes(id, service, nil, path)
 }
 
 func (e *RuntimeExecutor) GenerateOverrideFromCompose(id, service, compose string, path string) error {
+	return e.GenerateOverrideFromComposes(id, service, compose, nil, path)
+}
+
+func (e *RuntimeExecutor) GenerateOverrideFromComposes(id, service, compose string, overrides []string, path string) error {
 	data, err := os.ReadFile(compose)
 	if err != nil {
 		return fmt.Errorf("Composeを読み取れません")
@@ -536,34 +698,160 @@ func (e *RuntimeExecutor) GenerateOverrideFromCompose(id, service, compose strin
 	if err != nil {
 		return err
 	}
+	serviceSet := map[string]bool{}
+	for _, name := range services {
+		serviceSet[name] = true
+	}
+	for _, file := range overrides {
+		contents, readErr := os.ReadFile(file)
+		if readErr != nil {
+			return fmt.Errorf("override Composeを読み取れません")
+		}
+		names, nameErr := ComposeServiceNames(contents)
+		if nameErr == nil {
+			for _, name := range names {
+				if !serviceSet[name] {
+					services = append(services, name)
+					serviceSet[name] = true
+				}
+			}
+		}
+		named, namedErr := NamedVolumeNames(contents)
+		if namedErr == nil {
+			volumes = append(volumes, named...)
+		}
+	}
+	sort.Strings(services)
+	sort.Strings(volumes)
 	if err := e.GenerateOverrideWithServicesAndVolumes(id, service, services, volumes, path); err != nil {
 		return err
 	}
-	attachments, err := ComposeDeviceAttachments(data)
+	composeSources := []ComposeSource{{Path: compose, Data: data}}
+	for _, file := range overrides {
+		contents, readErr := os.ReadFile(file)
+		if readErr != nil {
+			return fmt.Errorf("override Composeを読み取れません")
+		}
+		composeSources = append(composeSources, ComposeSource{Path: file, Data: contents})
+	}
+	interfaces, err := ComposeWebInterfaces(composeSources)
 	if err != nil {
 		return err
 	}
-	if len(attachments) == 0 {
+	attachments := []DeviceAttachment{}
+	for _, source := range composeSources {
+		found, attachmentErr := ComposeDeviceAttachments(source.Data)
+		if attachmentErr != nil {
+			return attachmentErr
+		}
+		attachments = append(attachments, found...)
+	}
+	// 公開serviceがoverride側にのみ定義される場合でも、元のdefault
+	// networkを維持して内部serviceへ接続できるようにする。
+	if err := e.preservePublicServiceNetworks(id, service, composeSources, path); err != nil {
+		return err
+	}
+	if len(attachments) > 0 {
+		overrideData, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var model map[string]any
+		if err := json.Unmarshal(overrideData, &model); err != nil {
+			return err
+		}
+		serviceModels := model["services"].(map[string]any)
+		for _, a := range attachments {
+			var actual string
+			err := e.DB.QueryRow(`SELECT d.current_path FROM application_device_bindings b JOIN lws_devices d ON d.id=b.device_id WHERE b.application_id=? AND b.service=? AND b.target_path=?`, id, a.Service, a.Target).Scan(&actual)
+			if err == nil && strings.HasPrefix(actual, "/dev/") {
+				sm := serviceModels[a.Service].(map[string]any)
+				sm["devices"] = appendDevice(sm["devices"], actual+":"+a.Target+":"+a.Permissions)
+			}
+		}
+		encoded, err := json.Marshal(model)
+		if err != nil {
+			return err
+		}
+		if err := WriteAtomic(path, encoded, 0600); err != nil {
+			return err
+		}
+	}
+	return e.addHostPortsToOverride(interfaces, path)
+}
+
+func (e *RuntimeExecutor) preservePublicServiceNetworks(id, service string, sources []ComposeSource, path string) error {
+	networks, err := ComposeServiceNetworkNamesFromSources(sources, service)
+	if err != nil {
 		return nil
 	}
-	overrideData, err := os.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	var model map[string]any
-	if err := json.Unmarshal(overrideData, &model); err != nil {
+	if err := json.Unmarshal(data, &model); err != nil {
 		return err
 	}
-	serviceModels := model["services"].(map[string]any)
-	for _, a := range attachments {
-		var actual string
-		err := e.DB.QueryRow(`SELECT d.current_path FROM application_device_bindings b JOIN lws_devices d ON d.id=b.device_id WHERE b.application_id=? AND b.service=? AND b.target_path=?`, id, a.Service, a.Target).Scan(&actual)
-		if err == nil && strings.HasPrefix(actual, "/dev/") {
-			sm := serviceModels[a.Service].(map[string]any)
-			sm["devices"] = appendDevice(sm["devices"], actual+":"+a.Target+":"+a.Permissions)
+	serviceModels, ok := model["services"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("生成overrideのservicesが不正です")
+	}
+	publicModel, ok := serviceModels[service].(map[string]any)
+	if !ok {
+		return fmt.Errorf("公開serviceがComposeにありません")
+	}
+	publicNetworks := map[string]any{}
+	for _, network := range networks {
+		publicNetworks[network] = map[string]any{}
+	}
+	publicNetworks["lws-edge"] = map[string]any{"aliases": []string{"lws-" + id}}
+	publicModel["networks"] = publicNetworks
+	encoded, err := json.Marshal(model)
+	if err != nil {
+		return err
+	}
+	return WriteAtomic(path, encoded, 0600)
+}
+
+func (e *RuntimeExecutor) addHostPortsToOverride(interfaces []WebInterface, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var model map[string]any
+	if err := json.Unmarshal(data, &model); err != nil {
+		return err
+	}
+	services, ok := model["services"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("生成overrideのservicesが不正です")
+	}
+	for _, service := range services {
+		if definition, ok := service.(map[string]any); ok {
+			// Composeのportsはhost公開を意味するため、!resetで確実に無効化する。
+			definition["ports"] = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!reset"}
 		}
 	}
-	encoded, err := json.Marshal(model)
+	for _, iface := range interfaces {
+		definition, ok := services[iface.Service].(map[string]any)
+		if !ok {
+			continue
+		}
+		current, _ := definition["expose"].([]any)
+		port := strconv.Itoa(iface.Port)
+		found := false
+		for _, item := range current {
+			if fmt.Sprint(item) == port {
+				found = true
+				break
+			}
+		}
+		if !found {
+			definition["expose"] = append(current, port)
+		}
+	}
+	encoded, err := yaml.Marshal(model)
 	if err != nil {
 		return err
 	}

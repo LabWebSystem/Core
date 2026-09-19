@@ -24,8 +24,7 @@ button:disabled {
 .app-shell {
   min-height: 100vh;
   padding: 20px;
-  background:
-    radial-gradient(circle at top right, #d9ebe1 0, transparent 29rem), #edf0eb;
+  background: radial-gradient(circle at top right, #d9ebe1 0, transparent 29rem), #edf0eb;
 }
 .topbar {
   max-width: 1600px;
@@ -83,10 +82,7 @@ button:disabled {
   min-height: 620px;
   margin: auto;
   display: grid;
-  grid-template-columns: minmax(205px, 0.8fr) minmax(500px, 2.1fr) minmax(
-      250px,
-      1fr
-    );
+  grid-template-columns: minmax(205px, 0.8fr) minmax(500px, 2.1fr) minmax(250px, 1fr);
   border: 1px solid #cbd5ce;
   background: #f9faf7;
   box-shadow: 0 20px 55px #233b2b18;
@@ -216,6 +212,55 @@ button:disabled {
   color: #516273;
   font-size: 0.76rem;
   font-weight: 700;
+}
+.field-hint {
+  color: #607283;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.error-text {
+  color: #a53d31;
+}
+.override-picker {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #dbe1dc;
+}
+.override-picker legend {
+  padding: 0 4px;
+  color: #516273;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+.override-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid #edf0ed;
+}
+.override-check {
+  color: #314456;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.override-check input {
+  width: auto;
+}
+.override-actions {
+  display: flex;
+  gap: 5px;
+}
+.override-actions button {
+  padding: 4px 7px;
+  border: 1px solid #cbd5ce;
+  background: #fff;
+  color: #526b7d;
+  font-size: 0.7rem;
 }
 .form-row {
   display: grid;
@@ -435,6 +480,57 @@ input:focus {
   font-size: 0.76rem;
   line-height: 1.55;
 }
+.interface-setting {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0 12px;
+  padding: 10px 0;
+  border-top: 1px solid #e2e6e3;
+  border-bottom: 1px solid #e2e6e3;
+}
+.interface-setting label {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.7fr) minmax(180px, 1.3fr);
+  gap: 10px;
+  align-items: center;
+  color: #314456;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+.interface-setting select {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #c5d0c9;
+  background: #fff;
+  color: #273c4b;
+}
+.interface-setting small {
+  color: #71808c;
+  font-size: 0.69rem;
+  line-height: 1.45;
+}
+.override-preview {
+  margin-top: 16px;
+  border-top: 1px solid #e2e6e3;
+  padding-top: 10px;
+  color: #526b7d;
+  font-size: 0.72rem;
+}
+.override-preview summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+.override-preview pre {
+  max-height: 260px;
+  margin: 9px 0 0;
+  overflow: auto;
+  padding: 10px;
+  background: #f5f7f5;
+  color: #314456;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  white-space: pre;
+}
 .variable-row {
   grid-template-columns: minmax(100px, 0.7fr) minmax(160px, 1.5fr) 70px 28px;
   gap: 7px;
@@ -472,6 +568,53 @@ input:focus {
 .pool-row small {
   overflow-wrap: anywhere;
 }
+.pool-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.pool-status b {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.pool-status .is-used {
+  color: #a24735;
+}
+.pool-status .is-free {
+  color: #286653;
+}
+.pool-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid #d8b4ac;
+  background: #fff8f5;
+  color: #a24735;
+  font-size: 0.72rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.pool-delete:hover:not(:disabled) {
+  border-color: #a24735;
+  background: #fff0eb;
+}
+.pool-delete:disabled {
+  cursor: not-allowed;
+}
+.error-note {
+  color: #a24735;
+}
+.pool-kind {
+  display: inline-block;
+  min-width: 4.5rem;
+  margin-right: 8px;
+  color: #286653;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
 .device-register {
   display: grid;
   grid-template-columns: minmax(140px, 0.7fr) minmax(220px, 1.3fr) auto;
@@ -493,10 +636,7 @@ input:focus {
 }
 .device-binding-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.7fr) minmax(160px, 1fr) minmax(
-      180px,
-      1.2fr
-    );
+  grid-template-columns: minmax(130px, 0.7fr) minmax(160px, 1fr) minmax(180px, 1.2fr);
   gap: 8px;
   align-items: center;
   padding: 10px 0;
@@ -705,7 +845,7 @@ input:focus {
   color: #314456;
   border: 1px solid #dbe4dd;
   font:
-    0.72rem/1.45 ui-monospace,
+    0.72rem / 1.45 ui-monospace,
     monospace;
   white-space: nowrap;
 }
@@ -763,7 +903,7 @@ input:focus {
     grid-template-columns: minmax(180px, 0.7fr) 1.6fr;
   }
   .activity-pane {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     min-height: 240px;
     border-left: 0;
     border-top: 1px solid #d7ddd8;

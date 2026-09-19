@@ -24,7 +24,7 @@ const (
 )
 
 func (m *DerivedManager) Sync(ctx context.Context) error {
-	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,manifest_service,manifest_port FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
+	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,COALESCE(NULLIF(public_service,''),manifest_service),CASE WHEN public_port > 0 THEN public_port ELSE manifest_port END FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
 	if err != nil {
 		return err
 	}

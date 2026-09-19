@@ -41,12 +41,30 @@ func (a *application) docker(arguments ...string) error {
 	return command.Run()
 }
 
-func (a *application) purgeOwnedAppResources() error {
-	owner := "label=com.labwebsystem.owner=lws"
-	installation := "label=com.labwebsystem.installation-id=" + a.installationID
-	app := "label=com.labwebsystem.app-id"
+func (a *application) appResourceFilters() []string {
+	return []string{
+		"--filter", "label=com.labwebsystem.owner=lws",
+		"--filter", "label=com.labwebsystem.installation-id=" + a.installationID,
+		"--filter", "label=com.labwebsystem.app-id",
+	}
+}
 
-	containers, err := a.dockerOutput("ps", "-aq", "--filter", owner, "--filter", installation, "--filter", app)
+func (a *application) stopOwnedAppContainers() error {
+	arguments := append([]string{"ps", "-q"}, a.appResourceFilters()...)
+	containers, err := a.dockerOutput(arguments...)
+	if err != nil {
+		return errors.New("LWSアプリcontainer一覧を取得できません")
+	}
+	if ids := strings.Fields(string(containers)); len(ids) > 0 {
+		if err := a.docker(append([]string{"stop"}, ids...)...); err != nil {
+			return errors.New("LWSアプリcontainerを停止できません")
+		}
+	}
+	return nil
+}
+
+func (a *application) removeOwnedAppResources(removeVolumes bool) error {
+	containers, err := a.dockerOutput(append([]string{"ps", "-aq"}, a.appResourceFilters()...)...)
 	if err != nil {
 		return errors.New("LWSアプリcontainer一覧を取得できません")
 	}
@@ -57,7 +75,8 @@ func (a *application) purgeOwnedAppResources() error {
 		}
 	}
 
-	networks, err := a.dockerOutput("network", "ls", "-q", "--filter", owner, "--filter", installation, "--filter", app)
+	filters := a.appResourceFilters()
+	networks, err := a.dockerOutput(append([]string{"network", "ls", "-q"}, filters...)...)
 	if err != nil {
 		return errors.New("LWSアプリnetwork一覧を取得できません")
 	}
@@ -68,7 +87,11 @@ func (a *application) purgeOwnedAppResources() error {
 		}
 	}
 
-	volumes, err := a.dockerOutput("volume", "ls", "-q", "--filter", owner, "--filter", installation, "--filter", app)
+	if !removeVolumes {
+		return nil
+	}
+
+	volumes, err := a.dockerOutput(append([]string{"volume", "ls", "-q"}, filters...)...)
 	if err != nil {
 		return errors.New("LWSアプリvolume一覧を取得できません")
 	}
@@ -103,6 +126,7 @@ func (a *application) composeCommand(arguments ...string) (*exec.Cmd, error) {
 	if a.publicAddress != "" {
 		command.Env = setEnvironment(command.Env, "LWS_PUBLIC_ADDRESS", a.publicAddress)
 	}
+	command.Env = setEnvironment(command.Env, "LWS_STATE_DIR", a.paths.stateDir)
 	command.Env = setEnvironment(command.Env, "LWS_CADDY_CONTAINER", a.paths.project+"-caddy-1")
 	command.Env = setEnvironment(command.Env, "LWS_COREDNS_CONTAINER", a.paths.project+"-coredns-1")
 	return command, nil

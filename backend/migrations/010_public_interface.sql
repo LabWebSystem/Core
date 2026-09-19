@@ -1,0 +1,2 @@
+ALTER TABLE applications ADD COLUMN public_service TEXT NOT NULL DEFAULT '';
+ALTER TABLE applications ADD COLUMN public_port INTEGER NOT NULL DEFAULT 0;

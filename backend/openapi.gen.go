@@ -124,6 +124,42 @@ func (e OperationResourceState) Valid() bool {
 	}
 }
 
+// Defines values for PhysicalDeviceResourceCategory.
+const (
+	System PhysicalDeviceResourceCategory = "system"
+	User   PhysicalDeviceResourceCategory = "user"
+)
+
+// Valid indicates whether the value is a known member of the PhysicalDeviceResourceCategory enum.
+func (e PhysicalDeviceResourceCategory) Valid() bool {
+	switch e {
+	case System:
+		return true
+	case User:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PoolResourceKind.
+const (
+	Compose PoolResourceKind = "compose"
+	Edge    PoolResourceKind = "edge"
+)
+
+// Valid indicates whether the value is a known member of the PoolResourceKind enum.
+func (e PoolResourceKind) Valid() bool {
+	switch e {
+	case Compose:
+		return true
+	case Edge:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PurgeRequestConfirm.
 const (
 	True PurgeRequestConfirm = true
@@ -146,6 +182,7 @@ type ActionRequest struct {
 
 // Application defines model for Application.
 type Application struct {
+	ComposeFile       *string                      `json:"composeFile,omitempty"`
 	DesiredState      string                       `json:"desiredState"`
 	Etag              string                       `json:"etag"`
 	LatestError       *string                      `json:"latestError,omitempty"`
@@ -153,6 +190,7 @@ type Application struct {
 	Name              string                       `json:"name"`
 	ObservedAt        time.Time                    `json:"observedAt"`
 	ObservedState     string                       `json:"observedState"`
+	OverrideFiles     *[]string                    `json:"overrideFiles,omitempty"`
 	Reconciling       bool                         `json:"reconciling"`
 	Ref               string                       `json:"ref"`
 	RegistrationState ApplicationRegistrationState `json:"registrationState"`
@@ -175,12 +213,18 @@ type ConfigurationRequest struct {
 		Service    string `json:"service"`
 		TargetPath string `json:"targetPath"`
 	} `json:"deviceBindings,omitempty"`
-	RequestId openapi_types.UUID  `json:"requestId"`
-	Variables map[string]Variable `json:"variables"`
+	PublicPort    *int                `json:"publicPort,omitempty"`
+	PublicService *string             `json:"publicService,omitempty"`
+	RequestId     openapi_types.UUID  `json:"requestId"`
+	Variables     map[string]Variable `json:"variables"`
 }
 
 // ConfigurationResponse defines model for ConfigurationResponse.
 type ConfigurationResponse struct {
+	DeviceAccess struct {
+		Allowed bool   `json:"allowed"`
+		Message string `json:"message"`
+	} `json:"deviceAccess"`
 	Devices []struct {
 		Configured  bool    `json:"configured"`
 		DeviceId    *string `json:"deviceId,omitempty"`
@@ -189,30 +233,49 @@ type ConfigurationResponse struct {
 		SourceHint  string  `json:"sourceHint"`
 		TargetPath  string  `json:"targetPath"`
 	} `json:"devices"`
-	Network struct {
+	EffectiveCompose      string `json:"effectiveCompose"`
+	LwsOverrideCompose    string `json:"lwsOverrideCompose"`
+	ManifestPublicPort    int    `json:"manifestPublicPort"`
+	ManifestPublicService string `json:"manifestPublicService"`
+	Network               struct {
 		Name    string `json:"name"`
 		Purpose string `json:"purpose"`
 	} `json:"network"`
-	Ready     bool `json:"ready"`
-	Variables []struct {
-		Configured bool    `json:"configured"`
-		HasDefault bool    `json:"hasDefault"`
-		IsSecret   bool    `json:"isSecret"`
-		Name       string  `json:"name"`
-		Required   bool    `json:"required"`
-		Value      *string `json:"value,omitempty"`
+	PublicPort    int    `json:"publicPort"`
+	PublicService string `json:"publicService"`
+	Ready         bool   `json:"ready"`
+	Variables     []struct {
+		Configured   bool    `json:"configured"`
+		DefaultValue *string `json:"defaultValue,omitempty"`
+		HasDefault   bool    `json:"hasDefault"`
+		IsSecret     bool    `json:"isSecret"`
+		Name         string  `json:"name"`
+		Required     bool    `json:"required"`
+		Value        *string `json:"value,omitempty"`
 	} `json:"variables"`
 	Volumes []struct {
 		Name string `json:"name"`
 	} `json:"volumes"`
+	WebInterfaces []struct {
+		Port    int    `json:"port"`
+		Service string `json:"service"`
+	} `json:"webInterfaces"`
 }
 
 // CreateApplicationRequest defines model for CreateApplicationRequest.
 type CreateApplicationRequest struct {
+	ComposeFile   *string            `json:"composeFile,omitempty"`
+	OverrideFiles *[]string          `json:"overrideFiles,omitempty"`
 	Ref           string             `json:"ref"`
 	RepositoryUrl string             `json:"repositoryUrl"`
 	RequestId     openapi_types.UUID `json:"requestId"`
 	Subdomain     string             `json:"subdomain"`
+}
+
+// CreatePoolDeviceRequest defines model for CreatePoolDeviceRequest.
+type CreatePoolDeviceRequest struct {
+	CandidateStableId string `json:"candidateStableId"`
+	Name              string `json:"name"`
 }
 
 // Error defines model for Error.
@@ -247,25 +310,75 @@ type LogEntryList struct {
 	NextCursor *string    `json:"nextCursor,omitempty"`
 }
 
+// OperationID Operationの一意なID。Operation作成APIが返すname（operations/{operation}）のoperation部分を指定します。
+type OperationID = openapi_types.UUID
+
+// OperationName Operationのリソース名。
+type OperationName = string
+
 // OperationReference defines model for OperationReference.
 type OperationReference struct {
-	Name string `json:"name"`
+	// Name Operationのリソース名。
+	Name OperationName `json:"name"`
 }
 
 // OperationResource defines model for OperationResource.
 type OperationResource struct {
-	CreatedAt      time.Time              `json:"createdAt"`
-	DisplayMessage *string                `json:"displayMessage,omitempty"`
-	ErrorMessage   *string                `json:"errorMessage,omitempty"`
-	Kind           string                 `json:"kind"`
-	Name           string                 `json:"name"`
-	Phase          *string                `json:"phase,omitempty"`
-	State          OperationResourceState `json:"state"`
-	UpdatedAt      time.Time              `json:"updatedAt"`
+	CreatedAt      time.Time `json:"createdAt"`
+	DisplayMessage *string   `json:"displayMessage,omitempty"`
+	ErrorMessage   *string   `json:"errorMessage,omitempty"`
+	Kind           string    `json:"kind"`
+
+	// Name Operationのリソース名。
+	Name      OperationName          `json:"name"`
+	Phase     *string                `json:"phase,omitempty"`
+	State     OperationResourceState `json:"state"`
+	UpdatedAt time.Time              `json:"updatedAt"`
 }
 
 // OperationResourceState defines model for OperationResource.State.
 type OperationResourceState string
+
+// PhysicalDeviceResource defines model for PhysicalDeviceResource.
+type PhysicalDeviceResource struct {
+	Category    PhysicalDeviceResourceCategory `json:"category"`
+	CurrentPath string                         `json:"currentPath"`
+	Metadata    map[string]string              `json:"metadata"`
+	Name        string                         `json:"name"`
+	StableId    string                         `json:"stableId"`
+}
+
+// PhysicalDeviceResourceCategory defines model for PhysicalDeviceResource.Category.
+type PhysicalDeviceResourceCategory string
+
+// PoolDevice defines model for PoolDevice.
+type PoolDevice struct {
+	CurrentPath string            `json:"currentPath"`
+	Id          string            `json:"id"`
+	Metadata    map[string]string `json:"metadata"`
+	Name        string            `json:"name"`
+	StableId    string            `json:"stableId"`
+	Status      string            `json:"status"`
+}
+
+// PoolDeviceReference defines model for PoolDeviceReference.
+type PoolDeviceReference struct {
+	Id string `json:"id"`
+}
+
+// PoolResource defines model for PoolResource.
+type PoolResource struct {
+	Application     string            `json:"application"`
+	ApplicationName string            `json:"applicationName"`
+	Deletable       *bool             `json:"deletable,omitempty"`
+	InUse           *bool             `json:"inUse,omitempty"`
+	Kind            *PoolResourceKind `json:"kind,omitempty"`
+	Name            string            `json:"name"`
+	Status          string            `json:"status"`
+}
+
+// PoolResourceKind defines model for PoolResource.Kind.
+type PoolResourceKind string
 
 // PurgeRequest defines model for PurgeRequest.
 type PurgeRequest struct {
@@ -276,6 +389,14 @@ type PurgeRequest struct {
 // PurgeRequestConfirm defines model for PurgeRequest.Confirm.
 type PurgeRequestConfirm bool
 
+// ResourcePools defines model for ResourcePools.
+type ResourcePools struct {
+	Devices         []PoolDevice             `json:"devices"`
+	Networks        []PoolResource           `json:"networks"`
+	PhysicalDevices []PhysicalDeviceResource `json:"physicalDevices"`
+	Volumes         []PoolResource           `json:"volumes"`
+}
+
 // UpdateApplicationRequest defines model for UpdateApplicationRequest.
 type UpdateApplicationRequest struct {
 	Ref       *string            `json:"ref,omitempty"`
@@ -285,9 +406,10 @@ type UpdateApplicationRequest struct {
 
 // Variable defines model for Variable.
 type Variable struct {
-	Keep   *bool   `json:"keep,omitempty"`
-	Secret bool    `json:"secret"`
-	Value  *string `json:"value,omitempty"`
+	DefaultValue *string `json:"defaultValue,omitempty"`
+	Keep         *bool   `json:"keep,omitempty"`
+	Secret       bool    `json:"secret"`
+	Value        *string `json:"value,omitempty"`
 }
 
 // ListLogEntriesParams defines parameters for ListLogEntries.
@@ -305,6 +427,11 @@ type WatchLogEntriesParams struct {
 	View    string  `form:"view" json:"view"`
 	Service *string `form:"service,omitempty" json:"service,omitempty"`
 	After   *string `form:"after,omitempty" json:"after,omitempty"`
+}
+
+// ListResourcePoolsParams defines parameters for ListResourcePools.
+type ListResourcePoolsParams struct {
+	IncludeSystem *bool `form:"includeSystem,omitempty" json:"includeSystem,omitempty"`
 }
 
 // CreateApplicationJSONRequestBody defines body for CreateApplication for application/json ContentType.
@@ -336,6 +463,9 @@ type StopApplicationJSONRequestBody = ActionRequest
 
 // SyncApplicationJSONRequestBody defines body for SyncApplication for application/json ContentType.
 type SyncApplicationJSONRequestBody = ActionRequest
+
+// CreatePoolDeviceJSONRequestBody defines body for CreatePoolDevice for application/json ContentType.
+type CreatePoolDeviceJSONRequestBody = CreatePoolDeviceRequest
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -513,10 +643,24 @@ type ClientInterface interface {
 	HealthReady(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOperation performs a GET /operations/{operation} (the `GetOperation` operationId) request.
-	GetOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WatchOperation performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
-	WatchOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	WatchOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListResourcePools performs a GET /resource-pools (the `ListResourcePools` operationId) request.
+	ListResourcePools(ctx context.Context, params *ListResourcePoolsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreatePoolDeviceWithBody performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request,
+	// with any type of body and a specified content type.
+	CreatePoolDeviceWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreatePoolDevice performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request.
+	// Takes a body of the `application/json` content type.
+	CreatePoolDevice(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteResourcePoolVolume performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+	DeleteResourcePoolVolume(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // ListApplications performs a GET /applications (the `ListApplications` operationId) request.
@@ -891,7 +1035,7 @@ func (c *Client) HealthReady(ctx context.Context, reqEditors ...RequestEditorFn)
 }
 
 // GetOperation performs a GET /operations/{operation} (the `GetOperation` operationId) request.
-func (c *Client) GetOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) GetOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOperationRequest(c.Server, operation)
 	if err != nil {
 		return nil, err
@@ -904,8 +1048,62 @@ func (c *Client) GetOperation(ctx context.Context, operation string, reqEditors 
 }
 
 // WatchOperation performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
-func (c *Client) WatchOperation(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) WatchOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewWatchOperationRequest(c.Server, operation)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListResourcePools performs a GET /resource-pools (the `ListResourcePools` operationId) request.
+func (c *Client) ListResourcePools(ctx context.Context, params *ListResourcePoolsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListResourcePoolsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreatePoolDeviceWithBody performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) CreatePoolDeviceWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreatePoolDeviceRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreatePoolDevice performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) CreatePoolDevice(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreatePoolDeviceRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteResourcePoolVolume performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+func (c *Client) DeleteResourcePoolVolume(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteResourcePoolVolumeRequest(c.Server, volume)
 	if err != nil {
 		return nil, err
 	}
@@ -1727,12 +1925,12 @@ func NewHealthReadyRequest(server string) (*http.Request, error) {
 }
 
 // NewGetOperationRequest constructs an http.Request for the GetOperation method
-func NewGetOperationRequest(server string, operation string) (*http.Request, error) {
+func NewGetOperationRequest(server string, operation OperationID) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1761,12 +1959,12 @@ func NewGetOperationRequest(server string, operation string) (*http.Request, err
 }
 
 // NewWatchOperationRequest constructs an http.Request for the WatchOperation method
-func NewWatchOperationRequest(server string, operation string) (*http.Request, error) {
+func NewWatchOperationRequest(server string, operation OperationID) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "operation", operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -1787,6 +1985,134 @@ func NewWatchOperationRequest(server string, operation string) (*http.Request, e
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListResourcePoolsRequest constructs an http.Request for the ListResourcePools method
+func NewListResourcePoolsRequest(server string, params *ListResourcePoolsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resource-pools")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.IncludeSystem != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "includeSystem", *params.IncludeSystem, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreatePoolDeviceRequest calls the generic CreatePoolDevice builder with application/json body
+func NewCreatePoolDeviceRequest(server string, body CreatePoolDeviceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreatePoolDeviceRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreatePoolDeviceRequestWithBody constructs an http.Request for the CreatePoolDevice method, with any body, and a specified content type
+func NewCreatePoolDeviceRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resource-pools/devices")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteResourcePoolVolumeRequest constructs an http.Request for the DeleteResourcePoolVolume method
+func NewDeleteResourcePoolVolumeRequest(server string, volume string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "volume", volume, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resource-pools/volumes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1976,12 +2302,32 @@ type ClientWithResponsesInterface interface {
 	// GetOperationWithResponse performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*GetOperationResponse, error)
+	GetOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*GetOperationResponse, error)
 
 	// WatchOperationWithResponse performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	WatchOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error)
+	WatchOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error)
+
+	// ListResourcePoolsWithResponse performs a GET /resource-pools (the `ListResourcePools` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ListResourcePoolsWithResponse(ctx context.Context, params *ListResourcePoolsParams, reqEditors ...RequestEditorFn) (*ListResourcePoolsResponse, error)
+
+	// CreatePoolDeviceWithBodyWithResponse performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	CreatePoolDeviceWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePoolDeviceResponse, error)
+
+	// CreatePoolDeviceWithResponse performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	CreatePoolDeviceWithResponse(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePoolDeviceResponse, error)
+
+	// DeleteResourcePoolVolumeWithResponse performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DeleteResourcePoolVolumeWithResponse(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*DeleteResourcePoolVolumeResponse, error)
 }
 
 type ListApplicationsResponse struct {
@@ -2735,6 +3081,129 @@ func (r WatchOperationResponse) ContentType() string {
 	return ""
 }
 
+type ListResourcePoolsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ResourcePools
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListResourcePoolsResponse) GetJSON200() *ResourcePools {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ListResourcePoolsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListResourcePoolsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListResourcePoolsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListResourcePoolsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreatePoolDeviceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *PoolDeviceReference
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreatePoolDeviceResponse) GetJSON201() *PoolDeviceReference {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreatePoolDeviceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreatePoolDeviceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreatePoolDeviceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreatePoolDeviceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteResourcePoolVolumeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PoolDeviceReference
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteResourcePoolVolumeResponse) GetJSON200() *PoolDeviceReference {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteResourcePoolVolumeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteResourcePoolVolumeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteResourcePoolVolumeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteResourcePoolVolumeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // ListApplicationsWithResponse performs a GET /applications (the `ListApplications` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3035,7 +3504,7 @@ func (c *ClientWithResponses) HealthReadyWithResponse(ctx context.Context, reqEd
 // GetOperationWithResponse performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*GetOperationResponse, error) {
+func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*GetOperationResponse, error) {
 	rsp, err := c.GetOperation(ctx, operation, reqEditors...)
 	if err != nil {
 		return nil, err
@@ -3046,12 +3515,56 @@ func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, oper
 // WatchOperationWithResponse performs a GET /operations/{operation}:watch (the `WatchOperation` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) WatchOperationWithResponse(ctx context.Context, operation string, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error) {
+func (c *ClientWithResponses) WatchOperationWithResponse(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*WatchOperationResponse, error) {
 	rsp, err := c.WatchOperation(ctx, operation, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseWatchOperationResponse(rsp)
+}
+
+// ListResourcePoolsWithResponse performs a GET /resource-pools (the `ListResourcePools` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ListResourcePoolsWithResponse(ctx context.Context, params *ListResourcePoolsParams, reqEditors ...RequestEditorFn) (*ListResourcePoolsResponse, error) {
+	rsp, err := c.ListResourcePools(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListResourcePoolsResponse(rsp)
+}
+
+// CreatePoolDeviceWithBodyWithResponse performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CreatePoolDeviceWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePoolDeviceResponse, error) {
+	rsp, err := c.CreatePoolDeviceWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreatePoolDeviceResponse(rsp)
+}
+
+// CreatePoolDeviceWithResponse performs a POST /resource-pools/devices (the `CreatePoolDevice` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CreatePoolDeviceWithResponse(ctx context.Context, body CreatePoolDeviceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePoolDeviceResponse, error) {
+	rsp, err := c.CreatePoolDevice(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreatePoolDeviceResponse(rsp)
+}
+
+// DeleteResourcePoolVolumeWithResponse performs a DELETE /resource-pools/volumes/{volume} (the `DeleteResourcePoolVolume` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DeleteResourcePoolVolumeWithResponse(ctx context.Context, volume string, reqEditors ...RequestEditorFn) (*DeleteResourcePoolVolumeResponse, error) {
+	rsp, err := c.DeleteResourcePoolVolume(ctx, volume, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteResourcePoolVolumeResponse(rsp)
 }
 
 // ParseListApplicationsResponse parses an HTTP response from a ListApplicationsWithResponse call
@@ -3520,6 +4033,90 @@ func ParseWatchOperationResponse(rsp *http.Response) (*WatchOperationResponse, e
 	return response, nil
 }
 
+// ParseListResourcePoolsResponse parses an HTTP response from a ListResourcePoolsWithResponse call
+func ParseListResourcePoolsResponse(rsp *http.Response) (*ListResourcePoolsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListResourcePoolsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ResourcePools
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreatePoolDeviceResponse parses an HTTP response from a CreatePoolDeviceWithResponse call
+func ParseCreatePoolDeviceResponse(rsp *http.Response) (*CreatePoolDeviceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreatePoolDeviceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest PoolDeviceReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteResourcePoolVolumeResponse parses an HTTP response from a DeleteResourcePoolVolumeWithResponse call
+func ParseDeleteResourcePoolVolumeResponse(rsp *http.Response) (*DeleteResourcePoolVolumeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteResourcePoolVolumeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PoolDeviceReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case rsp.StatusCode == 404:
+		break // No content-type
+
+	case rsp.StatusCode == 409:
+		break // No content-type
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
@@ -3575,10 +4172,19 @@ type ServerInterface interface {
 	HealthReady(w http.ResponseWriter, r *http.Request)
 
 	// (GET /operations/{operation})
-	GetOperation(w http.ResponseWriter, r *http.Request, operation string)
+	GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID)
 
 	// (GET /operations/{operation}:watch)
-	WatchOperation(w http.ResponseWriter, r *http.Request, operation string)
+	WatchOperation(w http.ResponseWriter, r *http.Request, operation OperationID)
+
+	// (GET /resource-pools)
+	ListResourcePools(w http.ResponseWriter, r *http.Request, params ListResourcePoolsParams)
+
+	// (POST /resource-pools/devices)
+	CreatePoolDevice(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /resource-pools/volumes/{volume})
+	DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request, volume string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -4114,9 +4720,9 @@ func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.R
 	_ = err
 
 	// ------------- Path parameter "operation" -------------
-	var operation string
+	var operation OperationID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operation", Err: err})
 		return
@@ -4140,9 +4746,9 @@ func (siw *ServerInterfaceWrapper) WatchOperation(w http.ResponseWriter, r *http
 	_ = err
 
 	// ------------- Path parameter "operation" -------------
-	var operation string
+	var operation OperationID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "operation", r.PathValue("operation"), &operation, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operation", Err: err})
 		return
@@ -4150,6 +4756,79 @@ func (siw *ServerInterfaceWrapper) WatchOperation(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.WatchOperation(w, r, operation)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListResourcePools operation middleware
+func (siw *ServerInterfaceWrapper) ListResourcePools(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListResourcePoolsParams
+
+	// ------------- Optional query parameter "includeSystem" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "includeSystem", r.URL.Query(), &params.IncludeSystem, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "includeSystem"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeSystem", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListResourcePools(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePoolDevice operation middleware
+func (siw *ServerInterfaceWrapper) CreatePoolDevice(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePoolDevice(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteResourcePoolVolume operation middleware
+func (siw *ServerInterfaceWrapper) DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "volume" -------------
+	var volume string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "volume", r.PathValue("volume"), &volume, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "volume", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteResourcePoolVolume(w, r, volume)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4281,6 +4960,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health/live", wrapper.HealthLive)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health/ready", wrapper.HealthReady)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/resource-pools", wrapper.ListResourcePools)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/resource-pools/devices", wrapper.CreatePoolDevice)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/resource-pools/volumes/{volume}", wrapper.DeleteResourcePoolVolume)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications", wrapper.ListApplications)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications", wrapper.CreateApplication)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/applications/{application}", wrapper.UnregisterApplication)
@@ -4758,7 +5440,7 @@ func (response HealthReady503Response) VisitHealthReadyResponse(w http.ResponseW
 }
 
 type GetOperationRequestObject struct {
-	Operation string `json:"operation"`
+	Operation OperationID `json:"operation"`
 }
 
 type GetOperationResponseObject interface {
@@ -4780,7 +5462,7 @@ func (response GetOperation200JSONResponse) VisitGetOperationResponse(w http.Res
 }
 
 type WatchOperationRequestObject struct {
-	Operation string `json:"operation"`
+	Operation OperationID `json:"operation"`
 }
 
 type WatchOperationResponseObject interface {
@@ -4828,6 +5510,88 @@ func (response WatchOperation200TexteventStreamResponse) VisitWatchOperationResp
 			return err
 		}
 	}
+}
+
+type ListResourcePoolsRequestObject struct {
+	Params ListResourcePoolsParams
+}
+
+type ListResourcePoolsResponseObject interface {
+	VisitListResourcePoolsResponse(w http.ResponseWriter) error
+}
+
+type ListResourcePools200JSONResponse ResourcePools
+
+func (response ListResourcePools200JSONResponse) VisitListResourcePoolsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePoolDeviceRequestObject struct {
+	Body *CreatePoolDeviceJSONRequestBody
+}
+
+type CreatePoolDeviceResponseObject interface {
+	VisitCreatePoolDeviceResponse(w http.ResponseWriter) error
+}
+
+type CreatePoolDevice201JSONResponse PoolDeviceReference
+
+func (response CreatePoolDevice201JSONResponse) VisitCreatePoolDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteResourcePoolVolumeRequestObject struct {
+	Volume string `json:"volume"`
+}
+
+type DeleteResourcePoolVolumeResponseObject interface {
+	VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error
+}
+
+type DeleteResourcePoolVolume200JSONResponse PoolDeviceReference
+
+func (response DeleteResourcePoolVolume200JSONResponse) VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteResourcePoolVolume404Response struct {
+}
+
+func (response DeleteResourcePoolVolume404Response) VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type DeleteResourcePoolVolume409Response struct {
+}
+
+func (response DeleteResourcePoolVolume409Response) VisitDeleteResourcePoolVolumeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
 }
 
 // StrictServerInterface represents all server handlers.
@@ -4889,6 +5653,15 @@ type StrictServerInterface interface {
 
 	// (GET /operations/{operation}:watch)
 	WatchOperation(ctx context.Context, request WatchOperationRequestObject) (WatchOperationResponseObject, error)
+
+	// (GET /resource-pools)
+	ListResourcePools(ctx context.Context, request ListResourcePoolsRequestObject) (ListResourcePoolsResponseObject, error)
+
+	// (POST /resource-pools/devices)
+	CreatePoolDevice(ctx context.Context, request CreatePoolDeviceRequestObject) (CreatePoolDeviceResponseObject, error)
+
+	// (DELETE /resource-pools/volumes/{volume})
+	DeleteResourcePoolVolume(ctx context.Context, request DeleteResourcePoolVolumeRequestObject) (DeleteResourcePoolVolumeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -5437,7 +6210,7 @@ func (sh *strictHandler) HealthReady(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetOperation operation middleware
-func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, operation string) {
+func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
 	var request GetOperationRequestObject
 
 	request.Operation = operation
@@ -5463,7 +6236,7 @@ func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, op
 }
 
 // WatchOperation operation middleware
-func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, operation string) {
+func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
 	var request WatchOperationRequestObject
 
 	request.Operation = operation
@@ -5488,42 +6261,141 @@ func (sh *strictHandler) WatchOperation(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// ListResourcePools operation middleware
+func (sh *strictHandler) ListResourcePools(w http.ResponseWriter, r *http.Request, params ListResourcePoolsParams) {
+	var request ListResourcePoolsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListResourcePools(ctx, request.(ListResourcePoolsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListResourcePools")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListResourcePoolsResponseObject); ok {
+		if err := validResponse.VisitListResourcePoolsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePoolDevice operation middleware
+func (sh *strictHandler) CreatePoolDevice(w http.ResponseWriter, r *http.Request) {
+	var request CreatePoolDeviceRequestObject
+
+	var body CreatePoolDeviceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePoolDevice(ctx, request.(CreatePoolDeviceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePoolDevice")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePoolDeviceResponseObject); ok {
+		if err := validResponse.VisitCreatePoolDeviceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteResourcePoolVolume operation middleware
+func (sh *strictHandler) DeleteResourcePoolVolume(w http.ResponseWriter, r *http.Request, volume string) {
+	var request DeleteResourcePoolVolumeRequestObject
+
+	request.Volume = volume
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteResourcePoolVolume(ctx, request.(DeleteResourcePoolVolumeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteResourcePoolVolume")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteResourcePoolVolumeResponseObject); ok {
+		if err := validResponse.VisitDeleteResourcePoolVolumeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"YhNNqrsFGK62x6XuSvd/AQAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

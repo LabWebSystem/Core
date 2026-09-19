@@ -119,18 +119,19 @@ CIでも可能な限り同じ`mise`タスクを利用してください。
 
 CLI名は `lwsctl` とします。
 
-許可するコマンドは次の6個だけです。
+許可するコマンドは次の7個だけです。
 
 ```text
 lwsctl start
 lwsctl stop
 lwsctl status
+lwsctl version
 lwsctl rebuild
 lwsctl update
 lwsctl down
 ```
 
-仕様変更が明示されない限り、7個目のコマンドを追加しないでください。
+仕様変更が明示されない限り、8個目のコマンドを追加しないでください。
 
 ### `start`
 
@@ -148,6 +149,10 @@ LWS管理下のランタイムを安全かつ冪等に停止します。
 ### `status`
 
 状態を変更せず、LWSの実行状態を表示します。
+
+### `version`
+
+状態を変更せず、パッケージ管理下のLWSバージョンを表示します。
 
 ### `rebuild`
 
@@ -375,16 +380,10 @@ LAN内利用であっても、入力検証や最小権限を省略してはい�
 関連するlint、test、buildが成功して初めて変更完了とみなします。
 
 ## MemADR運用ポリシー
-
-@MEMADR_WORKFLOW.md
-
-このリポジトリでは、MemADRを開発判断メモリとして使用する。
-
-作業するエージェントは、必ず `MEMADR_WORKFLOW.md` を読み、その内容に従うこと。
-
-特に、次を守ること。
+@
+作業するエージェントは、必ず `MEMADR_WORKFLOW.md` を読み、以下を厳守すること。
 
 - `memory/` に作業ログを書かない
-- 現在も価値がある情報と、過去情報を区別する
-- 古い判断、削除済み機能、無効化済み情報を現在有効な前提として扱わない
-- MemADRレコードを追加または更新した場合は、完了前に `memadr check` と `memadr index` を実行する
+- レコード種別は BUG、ADR、CHG、SUP の4種だけにする
+- `memory/generated/` を手動編集しない
+- レコードを追加または更新したら、完了前に `memadr check` と `memadr index` を実行する

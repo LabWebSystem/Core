@@ -33,10 +33,22 @@ func ValidateRepositoryURL(raw string) error {
 		return NewValidationError("repositoryUrl", "GitHubのHTTPSリポジトリURLだけを指定してください", "INVALID_REPOSITORY_URL")
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.ContainsAny(parts[1], "\\") {
+	if (len(parts) != 2 && !(len(parts) >= 4 && parts[2] == "tree" && strings.Join(parts[3:], "/") != "")) || parts[0] == "" || parts[1] == "" || strings.ContainsAny(parts[1], "\\") {
 		return NewValidationError("repositoryUrl", "GitHubのHTTPSリポジトリURLだけを指定してください", "INVALID_REPOSITORY_URL")
 	}
 	return nil
+}
+
+func RepositoryURLAndRef(raw, fallback string) (string, string) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw, fallback
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) >= 4 && parts[2] == "tree" {
+		return "https://github.com/" + parts[0] + "/" + parts[1], strings.Join(parts[3:], "/")
+	}
+	return strings.TrimRight(raw, "/"), fallback
 }
 
 func ValidateSubdomain(value string) error {
@@ -72,6 +84,7 @@ type ComposeVariable struct {
 	Name       string
 	Required   bool
 	HasDefault bool
+	Default    string
 }
 
 func ValidateComposeVariableValues(variables []ComposeVariable, values map[string]string) error {
@@ -113,7 +126,7 @@ func ExtractComposeVariables(data []byte) ([]ComposeVariable, error) {
 			return nil, err
 		}
 		hasDefault := match[2] == "-" || match[2] == ":-"
-		variables[match[1]] = ComposeVariable{Name: match[1], Required: !hasDefault, HasDefault: hasDefault}
+		variables[match[1]] = ComposeVariable{Name: match[1], Required: !hasDefault, HasDefault: hasDefault, Default: match[3]}
 		offset = end + 1
 	}
 	for _, match := range simpleComposeVariablePattern.FindAllStringSubmatch(text, -1) {

@@ -23,6 +23,7 @@ import {
   ApiError,
   type Application,
   type Configuration,
+  type CreateApplicationInput,
   type LogEntry,
   type LogQuery,
   type Operation,
@@ -48,15 +49,15 @@ const stateLabel = (app: Application) =>
     ? "登録解除済み"
     : app.registrationState === "CONFIGURING"
       ? "設定待ち"
-    : app.reconciling
-      ? "処理中"
-      : app.observedState === "RUNNING"
-        ? "稼働中"
-        : app.observedState === "ERROR"
-          ? "異常"
-          : app.observedState === "UNKNOWN"
-            ? "状態未確認"
-            : "停止中";
+      : app.reconciling
+        ? "処理中"
+        : app.observedState === "RUNNING"
+          ? "稼働中"
+          : app.observedState === "ERROR"
+            ? "異常"
+            : app.observedState === "UNKNOWN"
+              ? "状態未確認"
+              : "停止中";
 const stateTone = (app: Application) =>
   app.reconciling
     ? "busy"
@@ -90,7 +91,7 @@ const operationLabel = (kind?: string) =>
     start: "開始",
     stop: "停止",
     sync: "同期",
-    rebuild: "再構成",
+    rebuild: "リビルド",
     unregister: "登録解除",
     register: "再登録",
     purge: "完全削除",
@@ -100,6 +101,8 @@ const phaseLabel = (phase?: string) =>
     starting: "開始",
     source_prepare: "source準備",
     runtime_prepare: "実行設定",
+    image_pull: "イメージ取得",
+    image_build: "イメージビルド",
     compose_up: "Compose起動",
     publish: "公開設定",
     unregister: "登録解除",
@@ -140,11 +143,7 @@ export function App() {
     if (pending) confirmRef.current?.showModal();
   }, [pending]);
   useEffect(() => {
-    if (
-      !operation?.name ||
-      ["succeeded", "failed", "cancelled"].includes(operation.state)
-    )
-      return;
+    if (!operation?.name || ["succeeded", "failed", "cancelled"].includes(operation.state)) return;
     return api.watchOperation(
       operation.name,
       (next) => {
@@ -167,10 +166,7 @@ export function App() {
           void client.invalidateQueries({ queryKey: ["applications"] });
         }
       },
-      () =>
-        setMessage(
-          "操作の進行状況を再接続できません。しばらくしてから更新してください。",
-        ),
+      () => setMessage("操作の進行状況を再接続できません。しばらくしてから更新してください。"),
     );
   }, [operation?.name, operation?.state, client]);
   useEffect(() => {
@@ -198,14 +194,9 @@ export function App() {
       (entry) => {
         if (entry.service)
           setServices((current) =>
-            current.includes(entry.service!)
-              ? current
-              : [...current, entry.service!].sort(),
+            current.includes(entry.service!) ? current : [...current, entry.service!].sort(),
           );
-        setLogs((current) => [
-          ...current.slice(-(logQuery.limit ?? 200) + 1),
-          entry,
-        ]);
+        setLogs((current) => [...current.slice(-(logQuery.limit ?? 200) + 1), entry]);
       },
     );
   }, [selected?.name, logView, logService, logQuery]);
@@ -218,16 +209,18 @@ export function App() {
     try {
       setMessage(undefined);
       const result = await task();
-      setOperation(await api.operation(result.name));
+      const nextOperation = await api.operation(result.name);
+      setOperation(nextOperation);
+      if (["succeeded", "failed", "cancelled"].includes(nextOperation.state)) {
+        void client.invalidateQueries({ queryKey: ["applications"] });
+      }
       setLogView("task");
     } catch (error) {
       if (error instanceof ApiError && error.status === 409 && selected) {
         try {
           const current = await api.get(appId(selected));
           if (current.reconciling && current.latestOperation) {
-            const activeOperation = await api.operation(
-              current.latestOperation,
-            );
+            const activeOperation = await api.operation(current.latestOperation);
             setOperation(activeOperation);
             setMessage(
               `「${operationLabel(activeOperation.kind)}」が${activeOperation.state === "queued" ? "開始待ち" : "実行中"}です。完了するまでこのアプリの操作はできません。`,
@@ -238,9 +231,7 @@ export function App() {
           /* 競合内容を取得できない場合はAPIのメッセージを表示する。 */
         }
       }
-      setMessage(
-        error instanceof ApiError ? error.message : "通信に失敗しました",
-      );
+      setMessage(error instanceof ApiError ? error.message : "通信に失敗しました");
     }
   };
   const register = useMutation({
@@ -330,9 +321,7 @@ export function App() {
               <button
                 key={app.name}
                 className={
-                  !resourceView && selected?.name === app.name
-                    ? "app-row active"
-                    : "app-row"
+                  !resourceView && selected?.name === app.name ? "app-row active" : "app-row"
                 }
                 onClick={() => {
                   setResourceView(false);
@@ -357,6 +346,7 @@ export function App() {
               loading={pools.isLoading}
               error={pools.isError}
               retry={() => void pools.refetch()}
+              onConfirm={(label, execute, detail) => setPending({ label, execute, detail })}
             />
           ) : selected ? (
             <AppWorkbench
@@ -370,15 +360,10 @@ export function App() {
               onRetry={() => void config.refetch()}
               onAction={action}
               onRun={run}
-              onConfirm={(label, execute, detail) =>
-                setPending({ label, execute, detail })
-              }
+              onConfirm={(label, execute, detail) => setPending({ label, execute, detail })}
             />
           ) : (
-            <RegisterForm
-              busy={register.isPending}
-              onSubmit={(input) => register.mutate(input)}
-            />
+            <RegisterForm busy={register.isPending} onSubmit={(input) => register.mutate(input)} />
           )}
         </section>
         <aside className="activity-pane">
@@ -436,15 +421,83 @@ function RegisterForm({
   onSubmit,
 }: {
   busy: boolean;
-  onSubmit: (input: {
-    repositoryUrl: string;
-    ref: string;
-    subdomain: string;
-  }) => void;
+  onSubmit: (input: CreateApplicationInput) => void;
 }) {
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [ref, setRef] = useState("main");
   const [subdomain, setSubdomain] = useState("test-app");
+  const [composeFile, setComposeFile] = useState("compose.yaml");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [composeFiles, setComposeFiles] = useState<string[]>([]);
+  const [overrideFiles, setOverrideFiles] = useState<string[]>([]);
+  const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const repositoryReady = /^https:\/\/github\.com\/[^/]+\/[^/]+/.test(repositoryUrl);
+  useEffect(() => {
+    const match = repositoryUrl.match(
+      /^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/(.*))?\/?$/,
+    );
+    if (!match) {
+      setBranches([]);
+      setComposeFiles([]);
+      setOverrideFiles([]);
+      setLookupState("idle");
+      return;
+    }
+    const [, owner, name, urlRef] = match;
+    if (urlRef) setRef(decodeURIComponent(urlRef));
+    setLookupState("loading");
+    let active = true;
+    void Promise.all([
+      fetch(`https://api.github.com/repos/${owner}/${name}/branches?per_page=100`).then((r) =>
+        r.ok ? r.json() : [],
+      ),
+      fetch(
+        `https://api.github.com/repos/${owner}/${name}/contents?ref=${encodeURIComponent(urlRef || ref)}`,
+      ).then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([branchData, fileData]) => {
+        if (!active) return;
+        const nextBranches = Array.isArray(branchData)
+          ? branchData.map((item: { name: string }) => item.name)
+          : [];
+        const names = Array.isArray(fileData)
+          ? fileData
+              .map((item: { name: string }) => item.name)
+              .filter((name: string) => /compose.*\.(yaml|yml)$/.test(name))
+          : [];
+        const priority = [
+          "compose.yaml",
+          "compose.yml",
+          "docker-compose.yaml",
+          "docker-compose.yml",
+        ];
+        names.sort(
+          (a: string, b: string) =>
+            (priority.indexOf(a) < 0 ? 99 : priority.indexOf(a)) -
+            (priority.indexOf(b) < 0 ? 99 : priority.indexOf(b)),
+        );
+        setBranches(nextBranches);
+        setComposeFiles(names);
+        setSubdomain(
+          name
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 62) || "app",
+        );
+        if (names.length && !names.includes(composeFile)) setComposeFile(names[0]);
+        setOverrideFiles((current) =>
+          current.filter((file) => names.includes(file) && file !== (names[0] ?? composeFile)),
+        );
+        setLookupState("ready");
+      })
+      .catch(() => {
+        if (active) setLookupState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [repositoryUrl, ref]);
   return (
     <section className="empty-workbench">
       <div className="empty-icon">
@@ -452,14 +505,18 @@ function RegisterForm({
       </div>
       <span className="eyebrow">最初のアプリ</span>
       <h2>台帳にアプリを登録する</h2>
-      <p>
-        GitHub リポジトリの Compose 定義を確認して、LAN 内の URL を準備します。
-      </p>
+      <p>GitHub リポジトリの Compose 定義を確認して、LAN 内の URL を準備します。</p>
       <form
         className="register-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit({ repositoryUrl, ref, subdomain });
+          onSubmit({
+            repositoryUrl,
+            ref,
+            subdomain,
+            ...(overrideFiles.length ? { overrideFiles } : {}),
+            ...(composeFile !== "compose.yaml" ? { composeFile } : {}),
+          });
         }}
       >
         <label>
@@ -472,14 +529,81 @@ function RegisterForm({
             onChange={(e) => setRepositoryUrl(e.target.value)}
           />
         </label>
+        <fieldset className="override-picker">
+          <legend>overrideするComposeファイル（任意）</legend>
+          <small className="field-hint">
+            未選択のまま登録するとoverrideは適用されません。複数選択時は上から順に読み込みます。
+          </small>
+          {composeFiles.filter((file) => file !== composeFile).length ? (
+            composeFiles
+              .filter((file) => file !== composeFile)
+              .map((file) => {
+                const index = overrideFiles.indexOf(file);
+                return (
+                  <div className="override-row" key={file}>
+                    <label className="override-check">
+                      <input
+                        type="checkbox"
+                        checked={index >= 0}
+                        onChange={(event) =>
+                          setOverrideFiles((current) =>
+                            event.target.checked
+                              ? [...current, file]
+                              : current.filter((item) => item !== file),
+                          )
+                        }
+                      />{" "}
+                      {file}
+                    </label>
+                    {index >= 0 && (
+                      <span className="override-actions">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() =>
+                            setOverrideFiles((current) => {
+                              const next = [...current];
+                              [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                              return next;
+                            })
+                          }
+                        >
+                          上へ
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === overrideFiles.length - 1}
+                          onClick={() =>
+                            setOverrideFiles((current) => {
+                              const next = [...current];
+                              [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                              return next;
+                            })
+                          }
+                        >
+                          下へ
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+          ) : (
+            <p className="field-hint">選択可能なoverride Composeファイルはありません。</p>
+          )}
+        </fieldset>
         <div className="form-row">
           <label>
             ブランチまたはタグ
-            <input
-              required
-              value={ref}
-              onChange={(e) => setRef(e.target.value)}
-            />
+            {branches.length ? (
+              <select value={ref} onChange={(e) => setRef(e.target.value)}>
+                {branches.map((branch) => (
+                  <option key={branch}>{branch}</option>
+                ))}
+              </select>
+            ) : (
+              <input required value={ref} onChange={(e) => setRef(e.target.value)} />
+            )}
           </label>
           <label>
             公開名
@@ -491,12 +615,40 @@ function RegisterForm({
             />
           </label>
         </div>
-        <button className="primary" disabled={busy}>
-          {busy ? (
-            <LoaderCircle className="spin" size={18} />
+        <label>
+          使用するComposeファイル
+          {repositoryReady ? (
+            <select
+              value={composeFile}
+              onChange={(e) => {
+                const next = e.target.value;
+                setComposeFile(next);
+                setOverrideFiles((current) => current.filter((file) => file !== next));
+              }}
+              disabled={lookupState === "loading"}
+            >
+              {(composeFiles.length
+                ? composeFiles
+                : ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]
+              ).map((file) => (
+                <option key={file}>{file}</option>
+              ))}
+            </select>
           ) : (
-            <CirclePlus size={18} />
+            <input value={composeFile} readOnly aria-label="使用するComposeファイル" />
           )}
+          <small className="field-hint">
+            優先順位: compose.yaml → compose.yml → docker-compose.yaml → docker-compose.yml
+          </small>
+        </label>
+        {lookupState === "loading" && <p className="field-hint">リポジトリを確認しています…</p>}
+        {lookupState === "error" && (
+          <p className="field-hint error-text">
+            リポジトリ情報を取得できません。URLと公開設定を確認してください。
+          </p>
+        )}
+        <button className="primary" disabled={busy}>
+          {busy ? <LoaderCircle className="spin" size={18} /> : <CirclePlus size={18} />}
           検証して登録
         </button>
       </form>
@@ -509,17 +661,20 @@ function ResourcePoolView({
   loading,
   error,
   retry,
+  onConfirm,
 }: {
   pools?: ResourcePools;
   loading: boolean;
   error: boolean;
   retry: () => void;
+  onConfirm: (label: string, execute: () => Promise<{ name: string }>, detail?: string) => void;
 }) {
   const [deviceName, setDeviceName] = useState("");
   const [candidate, setCandidate] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showSystem, setShowSystem] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const visiblePools = useQuery({
     queryKey: ["resource-pools", showSystem],
     queryFn: () => api.resourcePools(showSystem),
@@ -549,7 +704,7 @@ function ResourcePoolView({
     {
       title: "Network",
       rows: pools?.networks ?? [],
-      note: "アプリごとのedge network。公開経路を分離します。",
+      note: "edge networkとCompose本来のネットワークを分けて表示します。",
     },
     {
       title: "Device",
@@ -579,20 +734,12 @@ function ResourcePoolView({
             placeholder="LWSデバイス名"
             onChange={(e) => setDeviceName(e.target.value)}
           />
-          <select
-            value={candidate}
-            onChange={(e) => setCandidate(e.target.value)}
-          >
+          <select value={candidate} onChange={(e) => setCandidate(e.target.value)}>
             <option value="">検出済みデバイスを選択</option>
             {candidates.map((item) => (
-              <option
-                key={`${item.stableId}:${item.currentPath}`}
-                value={item.stableId}
-              >
+              <option key={`${item.stableId}:${item.currentPath}`} value={item.stableId}>
                 {item.name} · {item.currentPath}
-                {item.metadata.identity === "usb topology"
-                  ? "（serialなし）"
-                  : ""}
+                {item.metadata.identity === "usb topology" ? "（serialなし）" : ""}
               </option>
             ))}
           </select>
@@ -609,11 +756,7 @@ function ResourcePoolView({
                   setCandidate("");
                   retry();
                 })
-                .catch((e) =>
-                  setSaveError(
-                    e instanceof ApiError ? e.message : "登録できません",
-                  ),
-                )
+                .catch((e) => setSaveError(e instanceof ApiError ? e.message : "登録できません"))
                 .finally(() => setSaving(false));
             }}
           >
@@ -646,25 +789,75 @@ function ResourcePoolView({
           <p className="settings-note">{group.note}</p>
           <div className="pool-list">
             {group.rows.length ? (
-              group.rows.map((row, index) => (
-                <div className="pool-row" key={`${group.title}-${index}`}>
-                  <code>{"name" in row ? row.name : ""}</code>
-                  <span>
-                    {"applicationName" in row
-                      ? row.applicationName
-                      : "currentPath" in row
-                        ? `${row.status} · ${row.currentPath || "未接続"}`
-                        : "managed"}
-                  </span>
-                  {"stableId" in row && <small>{row.stableId}</small>}
-                </div>
-              ))
+              (group.title === "Network" ? ["edge", "compose"] : [undefined]).flatMap((kind) =>
+                group.rows
+                  .filter(
+                    (row) =>
+                      (!("kind" in row) ? kind === undefined : row.kind === kind) ||
+                      kind === undefined,
+                  )
+                  .map((row, index) => (
+                    <div className="pool-row" key={`${group.title}-${kind ?? "all"}-${index}`}>
+                      <code>{"name" in row ? row.name : ""}</code>
+                      <span>
+                        {group.title === "Network" && (
+                          <b className="pool-kind">
+                            {"kind" in row && row.kind === "edge" ? "edge" : "Compose"}
+                          </b>
+                        )}
+                        {"applicationName" in row
+                          ? row.applicationName
+                          : "currentPath" in row
+                            ? `${row.status} · ${row.currentPath || "未接続"}`
+                            : "managed"}
+                      </span>
+                      {group.title === "Volume" && "deletable" in row && (
+                        <span className="pool-status">
+                          <b className={row.inUse ? "is-used" : "is-free"}>
+                            {row.inUse ? "使用中" : "未使用"}
+                          </b>
+                          <button
+                            className="pool-delete"
+                            disabled={!row.deletable}
+                            title={row.inUse ? "使用中のVolumeは削除できません" : "Volumeを削除"}
+                            onClick={() => {
+                              setDeleteError("");
+                              onConfirm(
+                                "Volumeを削除しますか？",
+                                () =>
+                                  api
+                                    .deleteResourcePoolVolume(row.name)
+                                    .then(() => ({ name: row.name }))
+                                    .then((result) => {
+                                      void visiblePools.refetch();
+                                      return result;
+                                    })
+                                    .catch((error) => {
+                                      setDeleteError(
+                                        error instanceof ApiError
+                                          ? error.message
+                                          : "Volumeを削除できません",
+                                      );
+                                      throw error;
+                                    }),
+                                `対象: ${row.name}\n${row.inUse ? "現在使用中のため削除できません。" : "未使用のLWS管理Volumeです。"}`,
+                              );
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            削除
+                          </button>
+                        </span>
+                      )}
+                      {"stableId" in row && <small>{row.stableId}</small>}
+                    </div>
+                  )),
+              )
             ) : (
-              <p className="settings-note">
-                登録済みの{group.title}はありません。
-              </p>
+              <p className="settings-note">登録済みの{group.title}はありません。</p>
             )}
           </div>
+          {deleteError && <p className="settings-note error-note">{deleteError}</p>}
         </section>
       ))}
     </section>
@@ -692,27 +885,29 @@ function AppWorkbench({
   onRetry: () => void;
   onAction: (kind: "start" | "stop" | "sync" | "rebuild" | "register") => void;
   onRun: (task: () => Promise<{ name: string }>) => void;
-  onConfirm: (
-    label: string,
-    execute: () => Promise<{ name: string }>,
-    detail?: string,
-  ) => void;
+  onConfirm: (label: string, execute: () => Promise<{ name: string }>, detail?: string) => void;
 }) {
-  const [values, setValues] = useState<
-    Record<string, { value: string; secret: boolean }>
-  >({});
+  const [values, setValues] = useState<Record<string, { value: string; secret: boolean }>>({});
   const [removed, setRemoved] = useState<string[]>([]);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
   const [newSecret, setNewSecret] = useState(false);
   const [deviceValues, setDeviceValues] = useState<Record<string, string>>({});
+  const [publicService, setPublicService] = useState("");
+  const [publicPort, setPublicPort] = useState(0);
   const variables = configuration?.variables ?? [];
+  useEffect(() => {
+    if (configuration) {
+      setPublicService(configuration.publicService ?? configuration.manifestPublicService ?? "");
+      setPublicPort(configuration.publicPort ?? configuration.manifestPublicPort ?? 0);
+    }
+  }, [configuration]);
   const rows = [
     ...variables
       .filter((item) => !removed.includes(item.name))
       .map((item) => ({
         ...item,
-        value: values[item.name]?.value ?? item.value ?? "",
+        value: values[item.name]?.value ?? item.value ?? item.defaultValue ?? "",
         edited: Boolean(values[item.name]),
       })),
     ...(newName
@@ -730,19 +925,13 @@ function AppWorkbench({
       : []),
   ];
   const disabled =
-    app.reconciling ||
-    operation?.state === "queued" ||
-    operation?.state === "running";
+    app.reconciling || operation?.state === "queued" || operation?.state === "running";
   const unregistered = app.registrationState === "UNREGISTERED";
-  const actionTitle = disabled
-    ? "実行中の操作が完了するまで待ってください"
-    : undefined;
+  const actionTitle = disabled ? "実行中の操作が完了するまで待ってください" : undefined;
   const save = () =>
     Object.fromEntries(
       rows
-        .filter(
-          (row) => row.value || (row.isSecret && row.configured && !row.edited),
-        )
+        .filter((row) => row.value || (row.isSecret && row.configured && !row.edited))
         .map((row) => [
           row.name,
           row.isSecret && row.configured && !row.edited
@@ -753,15 +942,13 @@ function AppWorkbench({
   const bindings = (configuration?.devices ?? []).map((device) => ({
     service: device.service,
     targetPath: device.targetPath,
-    deviceId:
-      deviceValues[`${device.service}\x00${device.targetPath}`] ??
-      device.deviceId ??
-      "",
+    deviceId: deviceValues[`${device.service}\x00${device.targetPath}`] ?? device.deviceId ?? "",
   }));
-  const changed = rows
-    .filter((row) => row.edited || !row.configured)
-    .map((row) => row.name);
+  const changed = rows.filter((row) => row.edited || !row.configured).map((row) => row.name);
   const changeDetail = `${changed.length ? `追加・更新: ${changed.join("、")}` : "追加・更新はありません"}${removed.length ? `\n削除: ${removed.join("、")}` : ""}\nsecret の現在値は表示・送信されず、未変更の値は保持されます。`;
+  const publicArgs: [] | [string, number] = configuration?.webInterfaces?.length
+    ? [publicService, publicPort]
+    : [];
   const resourcePending = configLoading || (!configuration && !configError);
   const resourceError = configError && !configuration;
   const resourceText = (value: string) =>
@@ -776,62 +963,38 @@ function AppWorkbench({
             {publicUrl(app)} <ExternalLink size={14} />
           </a>
         </div>
-        <span className={`state-pill ${stateTone(app)}`}>
-          {stateLabel(app)}
-        </span>
+        <span className={`state-pill ${stateTone(app)}`}>{stateLabel(app)}</span>
       </header>
       <div className="action-strip" aria-label="アプリ操作">
         {unregistered ? (
-          <button
-            disabled={disabled}
-            title={actionTitle}
-            onClick={() => onAction("register")}
-          >
+          <button disabled={disabled} title={actionTitle} onClick={() => onAction("register")}>
             <CirclePlus size={16} />
             再登録
           </button>
         ) : (
           <>
-            <button
-              disabled={disabled}
-              title={actionTitle}
-              onClick={() => onAction("start")}
-            >
+            <button disabled={disabled} title={actionTitle} onClick={() => onAction("start")}>
               <Play size={16} />
               開始
             </button>
             {app.registrationState !== "CONFIGURING" && (
-              <button
-                disabled={disabled}
-                title={actionTitle}
-                onClick={() => onAction("stop")}
-              >
+              <button disabled={disabled} title={actionTitle} onClick={() => onAction("stop")}>
                 <Square size={16} />
                 停止
               </button>
             )}
-            <button
-              disabled={disabled}
-              title={actionTitle}
-              onClick={() => onAction("sync")}
-            >
+            <button disabled={disabled} title={actionTitle} onClick={() => onAction("sync")}>
               <RotateCw size={16} />
               同期
             </button>
-            <button
-              disabled={disabled}
-              title={actionTitle}
-              onClick={() => onAction("rebuild")}
-            >
+            <button disabled={disabled} title={actionTitle} onClick={() => onAction("rebuild")}>
               <Settings2 size={16} />
-              再構成
+              リビルド
             </button>
             <button
               disabled={disabled}
               title={actionTitle}
-              onClick={() =>
-                onConfirm("登録を解除する", () => api.unregister(app))
-              }
+              onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}
             >
               <FileCog size={16} />
               登録解除
@@ -842,11 +1005,7 @@ function AppWorkbench({
           className="danger-outline"
           disabled={disabled}
           title={actionTitle}
-          onClick={() =>
-            onConfirm("アプリと保存データを完全に削除する", () =>
-              api.purge(app),
-            )
-          }
+          onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}
         >
           <Trash2 size={16} />
           完全削除
@@ -860,6 +1019,10 @@ function AppWorkbench({
         <div>
           <span>参照</span>
           <code>{app.ref}</code>
+        </div>
+        <div>
+          <span>Composeファイル</span>
+          <code>{app.composeFile ?? "compose.yaml"}</code>
         </div>
         <div>
           <span>実行状態</span>
@@ -880,10 +1043,7 @@ function AppWorkbench({
           <time>{new Date(app.observedAt).toLocaleString("ja-JP")}</time>
         </div>
       </section>
-      <section
-        className="settings-section resource-section"
-        aria-label="Dockerリソース"
-      >
+      <section className="settings-section resource-section" aria-label="Dockerリソース">
         <div className="section-heading">
           <div>
             <span className="eyebrow">Docker リソース</span>
@@ -903,16 +1063,14 @@ function AppWorkbench({
               <p>
                 {resourceText(
                   configuration?.volumes?.length
-                    ? configuration.volumes
-                        .map((volume) => volume.name)
-                        .join("、")
+                    ? configuration.volumes.map((volume) => volume.name).join("、")
                     : "名前付きVolumeはありません",
                 )}
               </p>
               <small>
                 {resourceError
                   ? "設定を取得できません。再試行してください。"
-                  : "停止・再構成・登録解除でも保持され、完全削除時だけ削除されます。"}
+                  : "停止・リビルド・登録解除でも保持され、完全削除時だけ削除されます。"}
               </small>
             </div>
           </article>
@@ -921,15 +1079,12 @@ function AppWorkbench({
             <div>
               <strong>Network</strong>
               <p>
-                <code>
-                  {resourceText(configuration?.network?.name ?? "確認中")}
-                </code>
+                <code>{resourceText(configuration?.network?.name ?? "確認中")}</code>
               </p>
               <small>
                 {resourceError
                   ? "設定を取得できません。再試行してください。"
-                  : (configuration?.network?.purpose ??
-                    "公開経路を分離しています")}
+                  : (configuration?.network?.purpose ?? "公開経路を分離しています")}
               </small>
             </div>
           </article>
@@ -966,32 +1121,63 @@ function AppWorkbench({
             disabled={disabled || unregistered || configLoading || configError}
             onClick={() =>
               onConfirm(
-                "環境設定を更新する",
+                app.registrationState === "CONFIGURING" ? "アプリを登録する" : "環境設定を更新する",
                 () =>
                   api.saveConfiguration(
                     app,
                     save(),
                     bindings.filter((binding) => binding.deviceId),
+                    ...publicArgs,
                   ),
                 changeDetail,
               )
             }
           >
-            保存
+            {app.registrationState === "CONFIGURING" ? "登録" : "保存"}
           </button>
         </div>
         {configLoading ? (
           <p>設定を読み込んでいます</p>
         ) : configError ? (
-          <p className="settings-note">
-            設定を取得できません。再試行してください。
-          </p>
+          <p className="settings-note">設定を取得できません。再試行してください。</p>
         ) : (
           <>
             <p className="settings-note">
               Compose が参照する変数を管理します。secret
               の現在値は表示せず、未変更なら安全に保持します。
             </p>
+            {configuration?.webInterfaces?.length ? (
+              <div className="interface-setting">
+                <label>
+                  公開するWebインターフェース
+                  <select
+                    disabled={disabled || unregistered}
+                    value={`${publicService}:${publicPort}`}
+                    onChange={(event) => {
+                      const [service, port] = event.target.value.split(":");
+                      setPublicService(service);
+                      setPublicPort(Number(port));
+                    }}
+                  >
+                    {(configuration?.webInterfaces ?? []).map((iface) => (
+                      <option
+                        key={`${iface.service}:${iface.port}`}
+                        value={`${iface.service}:${iface.port}`}
+                      >
+                        {iface.service}:{iface.port}
+                        {iface.service === configuration?.manifestPublicService &&
+                        iface.port === configuration?.manifestPublicPort
+                          ? "（manifestの既定値）"
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <small>
+                  manifestの公開先が初期選択されています。開発用サービスへ切り替える場合だけ変更してください。
+                </small>
+              </div>
+            ) : null}
             {configuration?.devices?.length ? (
               <div className="device-binding-list">
                 {configuration.devices.map((device) => {
@@ -1106,6 +1292,12 @@ function AppWorkbench({
                 secret
               </label>
             </div>
+            {configuration?.effectiveCompose ? (
+              <details className="override-preview">
+                <summary>マージ後の完全なComposeを確認</summary>
+                <pre>{configuration.effectiveCompose}</pre>
+              </details>
+            ) : null}
           </>
         )}
       </section>
@@ -1132,9 +1324,7 @@ function OperationView({ operation }: { operation?: Operation }) {
                     : "失敗"}
           </strong>
           <small>{operation.name}</small>
-          {operation.phase && (
-            <small>段階: {phaseLabel(operation.phase)}</small>
-          )}
+          {operation.phase && <small>段階: {phaseLabel(operation.phase)}</small>}
           <time>
             {operation.createdAt
               ? `開始: ${new Date(operation.createdAt).toLocaleString("ja-JP")}`
@@ -1188,9 +1378,7 @@ function LogPane({
   const applyQuery = () =>
     onQueryChange({
       limit: Math.max(1, Math.min(500, Number(draft.limit) || 200)),
-      startAt: draft.startAt
-        ? new Date(draft.startAt).toISOString()
-        : undefined,
+      startAt: draft.startAt ? new Date(draft.startAt).toISOString() : undefined,
       endAt: draft.endAt ? new Date(draft.endAt).toISOString() : undefined,
     });
   return (
@@ -1215,9 +1403,7 @@ function LogPane({
             min="1"
             max="500"
             value={draft.limit}
-            onChange={(event) =>
-              setDraft({ ...draft, limit: event.target.value })
-            }
+            onChange={(event) => setDraft({ ...draft, limit: event.target.value })}
           />
         </label>
         <label>
@@ -1225,9 +1411,7 @@ function LogPane({
           <input
             type="datetime-local"
             value={draft.startAt}
-            onChange={(event) =>
-              setDraft({ ...draft, startAt: event.target.value })
-            }
+            onChange={(event) => setDraft({ ...draft, startAt: event.target.value })}
           />
         </label>
         <label>
@@ -1235,9 +1419,7 @@ function LogPane({
           <input
             type="datetime-local"
             value={draft.endAt}
-            onChange={(event) =>
-              setDraft({ ...draft, endAt: event.target.value })
-            }
+            onChange={(event) => setDraft({ ...draft, endAt: event.target.value })}
           />
         </label>
         <button onClick={applyQuery}>再読込</button>
@@ -1247,9 +1429,7 @@ function LogPane({
           対象コンテナ
           <select
             value={service ?? ""}
-            onChange={(event) =>
-              onServiceChange(event.target.value || undefined)
-            }
+            onChange={(event) => onServiceChange(event.target.value || undefined)}
           >
             <option value="">全てのコンテナ</option>
             {services.map((item) => (
@@ -1262,9 +1442,7 @@ function LogPane({
       )}
       <ol className="log-list" aria-live="polite">
         {displayEntries.length ? (
-          displayEntries.map((item) => (
-            <LogRow key={item.entry.id} item={item} view={view} />
-          ))
+          displayEntries.map((item) => <LogRow key={item.entry.id} item={item} view={view} />)
         ) : (
           <li className="log-empty">{labels[view]}はまだありません。</li>
         )}
@@ -1281,11 +1459,7 @@ export function groupLogEntries(entries: LogEntry[]): DisplayLog[] {
     const lines = [logBody(entry.message)];
     let json: string | undefined;
     if (/^[{[]/.test(lines[0].trim())) {
-      for (
-        let next = index;
-        next < entries.length && next < index + 100;
-        next += 1
-      ) {
+      for (let next = index; next < entries.length && next < index + 100; next += 1) {
         if (next > index) {
           const candidate = entries[next];
           if (

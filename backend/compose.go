@@ -3,12 +3,139 @@ package backend
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+type ComposeSource struct {
+	Path string
+	Data []byte
+}
+
+// ReadComposeSourcesはメインComposeと、指定順のoverrideを同じ順序で読み取る。
+func ReadComposeSources(sourceRoot, composeFile string, overrideFiles []string) ([]ComposeSource, error) {
+	files := append([]string{composeFile}, overrideFiles...)
+	result := make([]ComposeSource, 0, len(files))
+	for _, file := range files {
+		if !containsComposeFile(file) {
+			return nil, NewValidationError("composeFile", "Composeファイル名が不正です", "INVALID_ARGUMENT")
+		}
+		path := filepath.Join(sourceRoot, file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("Composeを読み取れません: %w", err)
+		}
+		result = append(result, ComposeSource{Path: path, Data: data})
+	}
+	return result, nil
+}
+
+func MergeComposeVariables(sources []ComposeSource) ([]ComposeVariable, error) {
+	byName := map[string]ComposeVariable{}
+	for _, source := range sources {
+		variables, err := ExtractComposeVariables(source.Data)
+		if err != nil {
+			return nil, err
+		}
+		for _, variable := range variables {
+			byName[variable.Name] = variable
+		}
+	}
+	result := make([]ComposeVariable, 0, len(byName))
+	for _, variable := range byName {
+		result = append(result, variable)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result, nil
+}
+
+type WebInterface struct {
+	Service string
+	Port    int
+}
+
+func ComposeHasService(sources []ComposeSource, name string) bool {
+	for _, source := range sources {
+		var model struct {
+			Services map[string]any `yaml:"services"`
+		}
+		if yaml.Unmarshal(source.Data, &model) == nil {
+			if _, ok := model.Services[name]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func ComposeWebInterfaces(sources []ComposeSource) ([]WebInterface, error) {
+	seen := map[string]bool{}
+	result := []WebInterface{}
+	for _, source := range sources {
+		var model struct {
+			Services map[string]struct {
+				Ports  []any `yaml:"ports"`
+				Expose []any `yaml:"expose"`
+			} `yaml:"services"`
+		}
+		if err := yaml.Unmarshal(source.Data, &model); err != nil {
+			return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+		}
+		for service, definition := range model.Services {
+			portValues := append(append([]any{}, definition.Ports...), definition.Expose...)
+			for _, raw := range portValues {
+				port, ok := composeTargetPort(raw)
+				if !ok || port < 1 || port > 65535 {
+					continue
+				}
+				key := fmt.Sprintf("%s:%d", service, port)
+				if !seen[key] {
+					seen[key] = true
+					result = append(result, WebInterface{Service: service, Port: port})
+				}
+			}
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Service == result[j].Service {
+			return result[i].Port < result[j].Port
+		}
+		return result[i].Service < result[j].Service
+	})
+	return result, nil
+}
+
+func composeTargetPort(raw any) (int, bool) {
+	switch value := raw.(type) {
+	case string:
+		value = strings.SplitN(value, "/", 2)[0]
+		parts := strings.Split(value, ":")
+		value = parts[len(parts)-1]
+		port, err := strconv.Atoi(value)
+		return port, err == nil
+	case map[string]any:
+		target, ok := value["target"]
+		if !ok {
+			return 0, false
+		}
+		switch port := target.(type) {
+		case int:
+			return port, true
+		case int64:
+			return int(port), true
+		case uint64:
+			return int(port), true
+		case float64:
+			return int(port), port == float64(int(port))
+		}
+	}
+	return 0, false
+}
 
 var forbiddenComposeKeys = map[string]string{"include": "外部Composeのincludeは許可されていません", "extends": "Composeのextendsは許可されていません", "env_file": "env_fileは許可されていません", "label_file": "label_fileは許可されていません", "volumes_from": "volumes_fromは許可されていません", "privileged": "privilegedは許可されていません", "network_mode": "host networkは許可されていません", "pid": "host PIDは許可されていません", "ipc": "host IPCは許可されていません", "tmpfs": "tmpfsは許可されていません", "configs": "ファイル型configsは許可されていません", "secrets": "ファイル型secretsは許可されていません", "additional_contexts": "追加build contextは許可されていません"}
 
@@ -20,8 +147,63 @@ func ValidateComposeSource(root string, data []byte) error {
 	if err := walkCompose(node.Content, root); err != nil {
 		return err
 	}
+	if err := rejectSourceBindMounts(data); err != nil {
+		return err
+	}
+	if err := validateComposeWatchPaths(root, data); err != nil {
+		return err
+	}
 	if _, err := ComposeDeviceAttachments(data); err != nil {
 		return err
+	}
+	return nil
+}
+
+// rejectSourceBindMountsはDocker daemonが読むhost pathへの依存を、正規化や
+// 自動置換より前に拒否する。アプリの永続領域はLWS所有Named Volumeだけを使う。
+func rejectSourceBindMounts(data []byte) error {
+	var model struct {
+		Services map[string]struct {
+			Volumes []any `yaml:"volumes"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	for service, definition := range model.Services {
+		for _, volume := range definition.Volumes {
+			if isBindMount(volume) {
+				return NewValidationError("services."+service+".volumes", "host bind mountまたは匿名volumeは許可されていません。LWS所有のNamed Volumeを使用してください", "BIND_MOUNT_FORBIDDEN")
+			}
+		}
+	}
+	return nil
+}
+
+// validateComposeWatchPathsは、開発時の同期元をアプリsource内に限定する。
+// Watchはhost bind mountの代替であり、ホスト固有のpathを受け入れる仕組みではない。
+func validateComposeWatchPaths(root string, data []byte) error {
+	var model struct {
+		Services map[string]struct {
+			Develop struct {
+				Watch []struct {
+					Path string `yaml:"path"`
+				} `yaml:"watch"`
+			} `yaml:"develop"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	for service, definition := range model.Services {
+		for _, watch := range definition.Develop.Watch {
+			if watch.Path == "" {
+				return NewValidationError("services."+service+".develop.watch.path", "Compose Watchのpathを指定してください", "INVALID_COMPOSE")
+			}
+			if err := ValidateProjectPath(root, watch.Path); err != nil {
+				return NewValidationError("services."+service+".develop.watch.path", "Compose Watchのpathはプロジェクトrootからの相対pathで指定してください", "PATH_OUTSIDE_PROJECT_ROOT")
+			}
+		}
 	}
 	return nil
 }
@@ -120,6 +302,9 @@ func validateEffectiveService(name string, service map[string]any) error {
 			continue
 		}
 		if key == "ports" {
+			if ports, ok := value.([]any); ok && len(ports) == 0 {
+				continue
+			}
 			return NewValidationError(field+".ports", "host portは許可されていません", "BIND_MOUNT_FORBIDDEN")
 		}
 		if enabled, ok := value.(bool); !ok || enabled {
@@ -216,14 +401,40 @@ func rejectExternalResources(model map[string]any, ownedNetwork string) error {
 func isBindMount(volume any) bool {
 	switch value := volume.(type) {
 	case string:
-		source := strings.SplitN(value, ":", 2)[0]
-		return !strings.Contains(value, ":") || source == "." || source == ".." || strings.HasPrefix(source, "./") || strings.HasPrefix(source, "../") || filepath.IsAbs(source) || strings.HasPrefix(source, "~")
+		parts := splitVolumeSpec(value)
+		if len(parts) == 1 {
+			return true
+		}
+		source := parts[0]
+		return !strings.Contains(value, ":") || strings.Contains(source, "${") || source == "." || source == ".." || strings.HasPrefix(source, "./") || strings.HasPrefix(source, "../") || filepath.IsAbs(source) || strings.HasPrefix(source, "~")
 	case map[string]any:
 		kind, _ := value["type"].(string)
 		return kind != "volume" || value["source"] == nil
 	default:
 		return true
 	}
+}
+
+func splitVolumeSpec(value string) []string {
+	parts := []string{}
+	start := 0
+	depth := 0
+	for index, char := range value {
+		switch char {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ':':
+			if depth == 0 {
+				parts = append(parts, value[start:index])
+				start = index + 1
+			}
+		}
+	}
+	return append(parts, value[start:])
 }
 
 func ProjectPath(root, candidate string) string {
@@ -244,7 +455,7 @@ func NamedVolumeNames(data []byte) ([]string, error) {
 		for _, raw := range service.Volumes {
 			switch value := raw.(type) {
 			case string:
-				parts := strings.SplitN(value, ":", 2)
+				parts := splitVolumeSpec(value)
 				if len(parts) == 2 && !isBindMount(parts[0]+":/target") {
 					names[parts[0]] = true
 				}
@@ -278,6 +489,77 @@ func ComposeServiceNames(data []byte) ([]string, error) {
 	names := make([]string, 0, len(model.Services))
 	for name := range model.Services {
 		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// ComposeServiceNetworkNames returns the networks already used by a service.
+// The generated public-network override must keep these connections so that
+// internal service discovery (for example web -> api) continues to work.
+func ComposeServiceNetworkNames(data []byte, service string) ([]string, error) {
+	var model struct {
+		Services map[string]struct {
+			Networks any `yaml:"networks"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	item, ok := model.Services[service]
+	if !ok {
+		return nil, NewValidationError("services."+service, "公開serviceがComposeにありません", "INVALID_COMPOSE")
+	}
+	names := []string{}
+	switch networks := item.Networks.(type) {
+	case map[string]any:
+		for name := range networks {
+			names = append(names, name)
+		}
+	case []any:
+		for _, value := range networks {
+			if name, ok := value.(string); ok {
+				names = append(names, name)
+			}
+		}
+	default:
+		// Compose creates the implicit default network when none is declared.
+		names = append(names, "default")
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// ComposeServiceNetworkNamesFromSources resolves a service's networks from
+// the last Compose source that defines it, preserving override semantics.
+func ComposeServiceNetworkNamesFromSources(sources []ComposeSource, service string) ([]string, error) {
+	for i := len(sources) - 1; i >= 0; i-- {
+		if names, err := ComposeServiceNetworkNames(sources[i].Data, service); err == nil {
+			return names, nil
+		}
+	}
+	return nil, NewValidationError("services."+service, "公開serviceがComposeにありません", "INVALID_COMPOSE")
+}
+
+func ComposeNetworkNames(data []byte, project string) ([]string, error) {
+	var model struct {
+		Networks map[string]struct {
+			Name string `yaml:"name"`
+		} `yaml:"networks"`
+	}
+	if err := yaml.Unmarshal(data, &model); err != nil {
+		return nil, NewValidationError("compose", "Compose YAMLが不正です", "INVALID_COMPOSE")
+	}
+	if len(model.Networks) == 0 {
+		return []string{project + "_default"}, nil
+	}
+	names := make([]string, 0, len(model.Networks))
+	for key, network := range model.Networks {
+		if network.Name != "" {
+			names = append(names, network.Name)
+		} else {
+			names = append(names, project+"_"+key)
+		}
 	}
 	sort.Strings(names)
 	return names, nil

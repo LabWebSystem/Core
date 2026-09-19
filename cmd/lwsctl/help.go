@@ -15,15 +15,17 @@ LWSのライフサイクルをDocker Composeで管理します。
   stop       LWS管理下の実行環境を安全かつ冪等に停止します。
   down       LWS管理下の実行環境を停止して削除します。
   status     設定済みのベースドメインと実行環境の状態を表示します。
+  version    lwsctlのバージョンを表示します。
   rebuild    生成設定を検証し、LWS実行環境を再構成します。
   update     パッケージと対応するイメージを更新し、起動中の場合だけ再起動します。
 
 startのオプション:
-  -d, --domain ドメイン  ベースドメインを指定します（例: example.internal）。
+  -d, --domain ドメイン  ベースドメインを指定します（例: example.internal、localhost）。
                          設定済みの値と異なる場合は、確認後にルーティング設定を再生成します。
   -f, --force              ドメイン変更時の確認を省略します。
 
 downのオプション:
+  -r, --recursive          子のアプリcontainerも停止・削除します。
       --purge  設定・状態・永続データも削除します。確認が必要です。
   -f, --force  --purge実行時の確認を省略します。
 
@@ -47,24 +49,27 @@ LWSを起動します。設定がない場合はベースドメインを入力�
 設定済みのドメインを変更すると、DNSとReverse Proxyの設定を再生成します。
 
 オプション:
-  -d, --domain ドメイン  ベースドメインを指定します（例: example.internal）。
+  -d, --domain ドメイン  ベースドメインを指定します（例: example.internal、localhost）。
   -f, --force              設定済みドメインを変更する際の確認を省略します。
   -h, --help               このヘルプを表示します。
 `)
 	case "stop":
-		fmt.Fprint(w, "使い方: lwsctl stop\n\nLWS管理下のDocker Compose実行環境を安全かつ冪等に停止します。\n")
+		fmt.Fprint(w, "使い方: lwsctl stop [-r|--recursive]\n\nLWS管理下のDocker Compose実行環境を安全かつ冪等に停止します。\n\nオプション:\n  -r, --recursive  子のアプリcontainerも停止します。\n  -h, --help       このヘルプを表示します。\n")
 	case "down":
-		fmt.Fprint(w, `使い方: lwsctl down [--purge] [--force]
+		fmt.Fprint(w, `使い方: lwsctl down [--recursive] [--purge] [--force]
 
 LWS実行環境を停止して削除します。通常は設定と永続データを保持します。パッケージの削除はAPT/DNFで行ってください。
 
 オプション:
+  -r, --recursive  子のアプリcontainerも停止・削除します。
       --purge  設定・状態・永続データも削除します。確認が必要です。
   -f, --force  --purge実行時の確認を省略します。
   -h, --help   このヘルプを表示します。
 `)
 	case "status":
-		fmt.Fprint(w, "使い方: lwsctl status\n\n設定済みのベースドメインとDocker Compose実行環境の状態を表示します。状態は変更しません。\n")
+		fmt.Fprint(w, "使い方: lwsctl status\n\nlwsctlのバージョン、設定済みのベースドメインとDocker Compose実行環境の状態を表示します。状態は変更しません。\n")
+	case "version":
+		fmt.Fprint(w, "使い方: lwsctl version\n\nlwsctlのバージョンを表示します。状態は変更しません。\n")
 	case "rebuild":
 		fmt.Fprint(w, "使い方: lwsctl rebuild\n\n設定を検証し、LWS実行環境と生成設定を再構成します。パッケージは再インストールしません。\n")
 	case "update":
