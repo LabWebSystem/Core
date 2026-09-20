@@ -481,6 +481,11 @@ test_release_selected_components() {
 printf 'git %s\n' "$*" >>"${LWS_DEPLOY_TEST_LOG:?}"
 
 case "$*" in
+  *'status --short')
+    if [ "${LWS_DEPLOY_TEST_DIRTY:-}" = 1 ]; then
+      printf ' M dashboard/src/api/schema.ts\n'
+    fi
+    ;;
   *'branch --show-current')
     printf 'main\n'
     ;;
@@ -517,6 +522,18 @@ esac
 EOF
 
   chmod +x "$fake_bin/git" "$fake_bin/gh"
+
+  : >"$deploy_log"
+  if PATH="$fake_bin:$PATH" \
+    LWS_DEPLOY_TEST_LOG="$deploy_log" \
+    LWS_DEPLOY_TEST_DIRTY=1 \
+    LWS_TEST_CORE_VERSION="$core_version" \
+    LWS_TEST_SDK_VERSION="$sdk_version" \
+      "$ROOT/scripts/release.sh" core >/dev/null 2>&1; then
+    printf '未コミット変更のあるリリースを受理しました\n' >&2
+    return 1
+  fi
+  ! grep -qF 'push origin' "$deploy_log"
 
   PATH="$fake_bin:$PATH" \
   LWS_DEPLOY_TEST_LOG="$deploy_log" \

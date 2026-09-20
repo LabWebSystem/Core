@@ -251,7 +251,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                operation: string;
+                operation: components["schemas"]["OperationID"];
             };
             cookie?: never;
         };
@@ -269,7 +269,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                operation: string;
+                operation: components["schemas"]["OperationID"];
             };
             cookie?: never;
         };
@@ -333,11 +333,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Format: uuid
+         * @description Operationの一意なID。Operation作成APIが返すname（operations/{operation}）のoperation部分を指定します。
+         * @example 550e8400-e29b-41d4-a716-446655440000
+         */
+        OperationID: string;
+        /**
+         * @description Operationのリソース名。
+         * @example operations/550e8400-e29b-41d4-a716-446655440000
+         */
+        OperationName: string;
         OperationReference: {
-            name: string;
+            name: components["schemas"]["OperationName"];
         };
         OperationResource: {
-            name: string;
+            name: components["schemas"]["OperationName"];
             kind: string;
             /** @enum {string} */
             state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -998,7 +1009,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                operation: string;
+                operation: components["schemas"]["OperationID"];
             };
             cookie?: never;
         };
@@ -1020,7 +1031,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                operation: string;
+                operation: components["schemas"]["OperationID"];
             };
             cookie?: never;
         };

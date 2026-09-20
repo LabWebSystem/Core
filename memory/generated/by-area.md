@@ -166,6 +166,7 @@
 
 ## release
 - BUG-005 | VERIFIED | release | checkoutなしのReleaseジョブでリポジトリを解決できない
+- CHG-092 | SHIPPED | release | リリース前に生成物と作業ツリーを検査する
 
 ## test
 - BUG-010 | VERIFIED | test | テストがCoreバージョンを変更したまま終了する

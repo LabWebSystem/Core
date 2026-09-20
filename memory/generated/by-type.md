@@ -135,6 +135,7 @@
 - CHG-089 | SHIPPED | Backend / Infrastructure | DashboardホストからSwagger UIを公開する
 - CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
 - CHG-091 | SHIPPED | lwsctl | lwsctlにバージョン表示コマンドを追加する
+- CHG-092 | SHIPPED | release | リリース前に生成物と作業ツリーを検査する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

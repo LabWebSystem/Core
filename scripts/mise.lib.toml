@@ -69,4 +69,8 @@ run = "scripts/generate-backend.sh"
 
 [check-openapi]
 description = "OpenAPI生成物の差分を検査"
-run = "scripts/generate-backend.sh && git diff --exit-code -- backend/openapi.gen.go"
+run = [
+  "scripts/generate-backend.sh",
+  "npm --prefix dashboard run generate:api",
+  "git diff --exit-code -- backend/openapi.gen.go dashboard/src/api/schema.ts",
+]

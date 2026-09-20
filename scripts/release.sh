@@ -23,6 +23,17 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "$1 CLIが必要です"
 }
 
+check_release_state() {
+  mise run check-openapi || die 'OpenAPI生成物が最新ではありません。生成物をコミットしてからリリースしてください'
+
+  local changes
+  changes="$(git -C "$ROOT" status --short)"
+  if [[ -n "$changes" ]]; then
+    printf '未コミットの変更があるためリリースを中止しました:\n%s\n' "$changes" >&2
+    exit 1
+  fi
+}
+
 parse_args() {
   (($# > 0)) || {
     usage >&2
@@ -187,6 +198,8 @@ main() {
   parse_args "$@"
   require_command git
   require_command gh
+  require_command mise
+  check_release_state
   validate_repository_state
 
   local repository

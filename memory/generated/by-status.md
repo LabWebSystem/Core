@@ -112,6 +112,7 @@
 - CHG-089 | SHIPPED | Backend / Infrastructure | DashboardホストからSwagger UIを公開する
 - CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
 - CHG-091 | SHIPPED | lwsctl | lwsctlにバージョン表示コマンドを追加する
+- CHG-092 | SHIPPED | release | リリース前に生成物と作業ツリーを検査する
 
 ## SUPERSEDED
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
