@@ -1,5 +1,26 @@
 # 変更履歴
 
+## v0.1.11 - 2026-09-20
+
+### 【機能追加】
+
+- Dashboardから環境変数、secret、名前付きVolume、edge network、デバイスプールを管理できるようにした。設定未完了のアプリは自動起動せず、設定完了後に起動できるようにした。
+- BackendでOpenAPI仕様とSwagger UIを公開し、BackendホストとDashboardホストの両方から確認できるようにした。
+- `lwsctl version`を追加し、パッケージ管理下のLWSバージョンを単独で確認できるようにした。`stop`・`down`の再帰操作と`localhost`ベースドメインにも対応した。
+
+### 【バグ修正】
+
+- アプリ起動・再構成時に公開経路が反映されない問題を修正した。
+- 公開serviceの既存networkが失われ、内部APIやWebSocketへ接続できなくなる問題を修正した。
+- アプリのリビルドで最新イメージを取得せず、既存containerを再利用する問題を修正した。
+- Operationのpath parameterとresource nameをUUID v4形式として検証するようにした。
+
+### 【仕様変更】
+
+- 登録アプリのhost bind mountと匿名Volumeを拒否し、LWS所有Named Volumeだけを永続データとして扱うようにした。
+- Backend内のDocker Compose pluginをv5.5.0へ固定し、検証可能なCompose仕様を統一した。
+- リリース前にOpenAPI生成物を生成・検査し、未コミット変更がある場合はタグpush前にリリースを停止するようにした。
+
 ## v0.1.10 - 2026-09-03
 
 ### 【機能追加】
