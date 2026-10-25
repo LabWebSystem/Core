@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ func TestWriteConfigIsPrivate(t *testing.T) {
 		installationID: "installation",
 		publicAddress:  "192.0.2.10",
 	}
-	if err := app.writeConfig("example.internal"); err != nil {
+	if err := app.writeConfig("home.local"); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(app.configFile())
@@ -32,7 +33,7 @@ func TestLoadConfigRejectsInsecureFile(t *testing.T) {
 	if err := os.MkdirAll(app.paths.configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(app.configFile(), []byte("LWS_BASE_DOMAIN=example.internal\nLWS_VERSION=0.1.0\nLWS_INSTALLATION_ID=installation\nLWS_PUBLIC_ADDRESS=192.0.2.10\n"), 0644); err != nil {
+	if err := os.WriteFile(app.configFile(), []byte("LWS_BASE_DOMAIN=home.local\nLWS_VERSION=0.1.0\nLWS_INSTALLATION_ID=installation\nLWS_PUBLIC_ADDRESS=192.0.2.10\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := app.loadConfig(); err == nil {
@@ -44,13 +45,29 @@ func TestStartRejectsOccupiedRequiredPortsBeforeCompose(t *testing.T) {
 	old := requiredPortProbe
 	t.Cleanup(func() { requiredPortProbe = old })
 	requiredPortProbe = func(network, address string) error {
-		if network == "tcp" && address == ":53" {
+		if network == "udp" && address == ":5353" {
 			return errPortOccupied
 		}
 		return nil
 	}
-	app := &application{domain: "example.internal"}
+	app := &application{domain: "home.local"}
 	if err := app.checkRequiredPorts(); err == nil {
 		t.Fatal("使用中の必須ポートを受け付けました")
+	}
+}
+
+func TestRequiredPortsAreHTTPAndMDNSOnly(t *testing.T) {
+	old := requiredPortProbe
+	t.Cleanup(func() { requiredPortProbe = old })
+	var got []string
+	requiredPortProbe = func(network, address string) error {
+		got = append(got, network+"/"+address)
+		return nil
+	}
+	if err := (&application{}).checkRequiredPorts(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "tcp/:80,udp/:5353" {
+		t.Fatalf("確認対象ポート=%v", got)
 	}
 }

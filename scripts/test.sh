@@ -56,7 +56,7 @@ EOF
 
   chmod +x "$TMP/bin/docker"
 
-  # CI runner上のDNS resolverなどに53番ポートを占有されていても、
+  # CI runner上の既存mDNSサービスが5353番を使用していても、
   # CLIのライフサイクルテストは「空いているホスト」を決定的に再現する。
   cat >"$TMP/bin/ss" <<'EOF'
 #!/bin/sh
@@ -173,17 +173,17 @@ test_lifecycle() {
   test ! -s "$TMP/docker.log"
 
   "$LWSCTL" start \
-    --domain example.internal
+    --domain home.local
 
   grep -qx \
-    'LWS_BASE_DOMAIN=example.internal' \
+    'LWS_BASE_DOMAIN=home.local' \
     "$TMP/etc/config.env"
 
   grep -Eq '^LWS_INSTALLATION_ID=[0-9a-f-]{36}$' "$TMP/etc/config.env"
   grep -Eq '^LWS_PUBLIC_ADDRESS=[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' "$TMP/etc/config.env"
 
   grep -qF \
-    'up -d --remove-orphans | LWS_BASE_DOMAIN=example.internal LWS_VERSION=0.1.2' \
+    'up -d --remove-orphans | LWS_BASE_DOMAIN=home.local LWS_VERSION=0.1.2' \
     "$TMP/docker.log"
 
   "$LWSCTL" stop
@@ -196,35 +196,38 @@ test_lifecycle() {
 test_domain_change() {
   ! printf 'n\n' |
     "$LWSCTL" start \
-      --domain changed.internal \
+      --domain changed.local \
       >/dev/null 2>&1
 
   grep -qx \
-    'LWS_BASE_DOMAIN=example.internal' \
+    'LWS_BASE_DOMAIN=home.local' \
     "$TMP/etc/config.env"
 
   "$LWSCTL" start \
-    --domain changed.internal \
+    --domain changed.local \
     --force
 
   grep -qx \
-    'LWS_BASE_DOMAIN=changed.internal' \
+    'LWS_BASE_DOMAIN=changed.local' \
     "$TMP/etc/config.env"
 }
 
-test_localhost_domain() {
-  "$LWSCTL" start \
-    --domain localhost \
-    --force \
-    >/dev/null
+test_non_local_domain_rejected() {
+  if "$LWSCTL" start --domain localhost >/dev/null 2>&1; then
+    printf 'localhostをベースドメインとして受理しました\n' >&2
+    return 1
+  fi
+  grep -qx 'LWS_BASE_DOMAIN=changed.local' "$TMP/etc/config.env"
+}
 
-  grep -qx \
-    'LWS_BASE_DOMAIN=localhost' \
-    "$TMP/etc/config.env"
+test_legacy_domain_migration() {
+  sed -i 's/LWS_BASE_DOMAIN=changed.local/LWS_BASE_DOMAIN=legacy.internal/' "$TMP/etc/config.env"
+  "$LWSCTL" start --domain migrated.local --force >/dev/null
+  grep -qx 'LWS_BASE_DOMAIN=migrated.local' "$TMP/etc/config.env"
 }
 
 test_config_migration() {
-  printf 'LWS_BASE_DOMAIN=changed.internal\nLWS_VERSION=0.1.2\n' >"$TMP/etc/config.env"
+  printf 'LWS_BASE_DOMAIN=changed.local\nLWS_VERSION=0.1.2\n' >"$TMP/etc/config.env"
   LWS_PUBLIC_ADDRESS=192.0.2.10 "$LWSCTL" status >"$TMP/status-migrated"
   grep -Eq '^LWS_INSTALLATION_ID=[0-9a-f-]{36}$' "$TMP/etc/config.env"
   grep -qx 'LWS_PUBLIC_ADDRESS=192.0.2.10' "$TMP/etc/config.env"
@@ -244,11 +247,11 @@ test_update() {
     "$TMP/etc/config.env"
 
   grep -qF \
-    'pull | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'pull | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
   grep -qF \
-    'config --images | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'config --images | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
   grep -qF \
@@ -269,7 +272,7 @@ test_update_running() {
   unset LWS_TEST_RUNNING_SERVICES
 
   grep -qF \
-    'up -d --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'up -d --remove-orphans | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 }
 
@@ -282,7 +285,7 @@ test_update_with_current_images() {
   unset LWS_TEST_IMAGE_PRESENT
 
   grep -qF \
-    'config --images | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'config --images | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
   grep -qF \
@@ -290,7 +293,7 @@ test_update_with_current_images() {
     "$TMP/docker.log"
 
   ! grep -qF \
-    'pull | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'pull | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 }
 
@@ -302,7 +305,7 @@ test_down() {
     "$TMP/down"
 
   grep -qF \
-    'down --remove-orphans | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'down --remove-orphans | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
   test -f "$TMP/etc/config.env"
@@ -312,13 +315,13 @@ test_down() {
     --force
 
   grep -qF \
-    'down --remove-orphans --volumes | LWS_BASE_DOMAIN=changed.internal LWS_VERSION=0.2.0' \
+    'down --remove-orphans --volumes | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
   ! grep -qF 'owned-app-container' "$TMP/docker.log"
 
   "$LWSCTL" start \
-    --domain changed.internal \
+    --domain changed.local \
     --force \
     >/dev/null
 
@@ -346,7 +349,7 @@ test_down() {
   test -f "$TMP/etc/config.env"
 
   "$LWSCTL" start \
-    --domain changed.internal \
+    --domain changed.local \
     --force \
     >/dev/null
 
@@ -595,7 +598,8 @@ main() {
     test_update_before_start
     test_lifecycle
     test_domain_change
-    test_localhost_domain
+    test_non_local_domain_rejected
+    test_legacy_domain_migration
     test_config_migration
     test_update
     test_update_running

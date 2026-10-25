@@ -389,7 +389,7 @@ export interface components {
             /** @enum {string} */
             level: "debug" | "info" | "warn" | "error";
             /** @enum {string} */
-            component: "backend" | "caddy" | "coredns" | "dashboard" | "application";
+            component: "backend" | "caddy" | "coredns" | "avahi" | "dashboard" | "application";
             applicationId?: string;
             operationId?: string;
             service?: string;

@@ -6,7 +6,6 @@ services:
       LWS_INSTALLATION_ID: dashboard-dev
       LWS_PUBLIC_ADDRESS: 127.0.0.1
       LWS_CADDY_CONTAINER: lws-dashboard-dev-caddy-1
-      LWS_COREDNS_CONTAINER: lws-dashboard-dev-coredns-1
       LWS_ALLOWED_ORIGIN: http://dashboard.lws.localhost:18180
 
   dashboard:

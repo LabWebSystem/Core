@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+hosts=/var/lib/lws/generated/hosts
+while [ ! -f "$hosts" ]; do
+    sleep 1
+done
+ln -sf "$hosts" /etc/avahi/hosts
+exec avahi-daemon --no-chroot --debug

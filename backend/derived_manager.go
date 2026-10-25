@@ -9,13 +9,13 @@ import (
 )
 
 type DerivedManager struct {
-	DB               *sql.DB
-	GeneratedDir     string
-	BaseDomain       string
-	PublicAddress    string
-	Docker           *DockerResources
-	CaddyContainer   string
-	CoreDNSContainer string
+	DB             *sql.DB
+	GeneratedDir   string
+	BaseDomain     string
+	PublicAddress  string
+	Docker         *DockerResources
+	CaddyContainer string
+	AvahiContainer string
 }
 
 const (
@@ -72,9 +72,11 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 			restore()
 			return err
 		}
-		if err := m.Docker.VerifyInfrastructureContainer(ctx, m.CoreDNSContainer); err != nil {
-			restore()
-			return err
+		if m.AvahiContainer != "" {
+			if err := m.Docker.VerifyInfrastructureContainer(ctx, m.AvahiContainer); err != nil {
+				restore()
+				return err
+			}
 		}
 		if err := m.Docker.ValidateCaddyfile(ctx); err != nil {
 			restore()
@@ -90,10 +92,13 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 			restore()
 			return err
 		}
-		if err := m.Docker.ReloadCoreDNS(ctx, m.CoreDNSContainer); err != nil {
-			restore()
-			_ = m.Docker.ReloadCaddy(ctx)
-			return err
+		if m.AvahiContainer != "" {
+			if err := m.Docker.RestartAvahi(ctx, m.AvahiContainer); err != nil {
+				restore()
+				_ = m.Docker.ReloadCaddy(ctx)
+				_ = m.Docker.RestartAvahi(ctx, m.AvahiContainer)
+				return err
+			}
 		}
 	}
 	return nil

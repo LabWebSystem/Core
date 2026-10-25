@@ -70,7 +70,7 @@ func main() {
 		}
 		derived.Docker = runtime.Docker
 		derived.CaddyContainer = runtime.Docker.CaddyContainer
-		derived.CoreDNSContainer = os.Getenv("LWS_COREDNS_CONTAINER")
+		derived.AvahiContainer = os.Getenv("LWS_AVAHI_CONTAINER")
 		runtime.Derived = derived
 		go func() {
 			for attempt := 0; attempt < 60; attempt++ {

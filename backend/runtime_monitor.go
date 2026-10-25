@@ -240,8 +240,8 @@ func (m *RuntimeMonitor) entryFor(labels map[string]string, containerName, messa
 		switch labels[composeServiceLabel] {
 		case "caddy":
 			component = "caddy"
-		case "coredns":
-			component = "coredns"
+		case "avahi":
+			component = "avahi"
 		case "dashboard":
 			component = "dashboard"
 		}
@@ -313,7 +313,7 @@ func (w *runtimeLogWriter) write(message string) {
 }
 
 func (m *RuntimeMonitor) associateHost(ctx context.Context, entry *StoredLogEntry) {
-	if entry.ApplicationID != "" || m.DB == nil || m.BaseDomain == "" || (entry.Component != "caddy" && entry.Component != "coredns" && entry.Component != "backend") {
+	if entry.ApplicationID != "" || m.DB == nil || m.BaseDomain == "" || (entry.Component != "caddy" && entry.Component != "avahi" && entry.Component != "backend") {
 		return
 	}
 	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain FROM applications`)

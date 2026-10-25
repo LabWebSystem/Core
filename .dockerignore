@@ -5,3 +5,7 @@
 !backend/**
 !version/
 !version/**
+!infrastructure/
+!infrastructure/Dockerfile.avahi
+!infrastructure/avahi-daemon.conf
+!infrastructure/avahi-entrypoint

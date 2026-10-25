@@ -31,11 +31,11 @@ LWSは、パッケージ配布をGitHub Releases、Docker image配布をGHCR、S
 Backend
   ├─ SQLite ── アプリ定義、設定、Operation、ログ
   ├─ Git / Compose / Docker ── アプリの取得・検証・実行
-  └─ 生成設定 ── CoreDNS hosts、Caddyfile、アプリoverride
+  └─ 生成設定 ── Avahi用hosts、Caddyfile、アプリoverride
 
 Infrastructure
   ├─ Caddy ── HTTP公開入口
-  ├─ CoreDNS ── LWSドメインの名前解決
+  ├─ Avahi ── LWSの`.local`名をmDNS広告
   └─ Docker Compose ── LWSと登録アプリの実行基盤
 ```
 

@@ -18,6 +18,7 @@
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
+- ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -101,6 +102,7 @@
 - CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
+- SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
 
 ## Backend / Docker Compose
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
@@ -124,6 +126,12 @@
 
 ## Documentation
 - CHG-086 | SHIPPED | Documentation | 現行実装に合わせて文書の正本と状態を整理する
+
+## Infrastructure / Backend / CLI / release
+- CHG-094 | SHIPPED | Infrastructure / Backend / CLI / release | AvahiコンテナでLWSのmDNSを提供する
+
+## Infrastructure / release
+- CHG-093 | SUPERSEDED | Infrastructure / release | CoreDNSへmDNS対応を追加する
 
 ## backend
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う

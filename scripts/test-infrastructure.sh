@@ -3,16 +3,42 @@ set -Eeuo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROJECT="lws-it-$$"
+readonly AVAHI_IMAGE="${PROJECT}-avahi:local"
 TMP="$(mktemp -d)"
 
 cleanup() {
   docker compose -p "$PROJECT" -f "$TMP/compose.yaml" down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker volume rm "${PROJECT}_owned" "${PROJECT}_foreign" >/dev/null 2>&1 || true
+  docker image rm "$AVAHI_IMAGE" >/dev/null 2>&1 || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
 
 mkdir -p "$TMP/generated"
+cat >"$TMP/generated/hosts" <<'EOF'
+192.0.2.10 api.home.local
+192.0.2.10 dashboard.home.local
+192.0.2.10 app-a.home.local
+EOF
+
+docker build --network=host -f "$ROOT/infrastructure/Dockerfile.avahi" -t "$AVAHI_IMAGE" "$ROOT" >/dev/null
+docker run --rm --entrypoint avahi-daemon "$AVAHI_IMAGE" --version >/dev/null
+set +e
+timeout --foreground 4s docker run --rm --network bridge --cap-add NET_ADMIN --cap-add NET_RAW \
+  --volume "$TMP/generated/hosts:/var/lib/lws/generated/hosts:ro" "$AVAHI_IMAGE" \
+  >"$TMP/avahi.log" 2>&1
+avahi_status=$?
+set -e
+if [[ "$avahi_status" -ne 124 ]] || ! grep -q 'Server startup complete' "$TMP/avahi.log"; then
+  cat "$TMP/avahi.log" >&2
+  printf 'Avahiが隔離ネットワークで起動しませんでした\n' >&2
+  exit 1
+fi
+if grep -Eq 'coredns|:53(/|:|\")' "$ROOT/infrastructure/compose.yaml"; then
+  printf 'Composeに旧DNSサービスまたは53番ポートが残っています\n' >&2
+  exit 1
+fi
+
 cat >"$TMP/generated/Caddyfile" <<'EOF'
 {
   auto_https off
@@ -22,17 +48,6 @@ http://app-a.example.test {
 }
 http://app-b.example.test {
   reverse_proxy app-b:80
-}
-EOF
-cat >"$TMP/generated/hosts" <<'EOF'
-127.0.0.1 app-a.example.test
-127.0.0.1 app-b.example.test
-EOF
-cat >"$TMP/Corefile" <<'EOF'
-.:53 {
-  hosts /var/lib/lws/generated/hosts {
-    fallthrough
-  }
 }
 EOF
 cat >"$TMP/compose.yaml" <<'EOF'
@@ -45,20 +60,6 @@ services:
     volumes:
       - ${TEST_ROOT}/generated:/etc/caddy:ro
     networks: [internal, edge-a, edge-b]
-    labels:
-      com.labwebsystem.owner: lws
-      com.labwebsystem.installation-id: integration
-
-  coredns:
-    image: coredns/coredns:1.12.4
-    command: -conf /etc/coredns/Corefile
-    ports:
-      - "18553:53/tcp"
-      - "18553:53/udp"
-    volumes:
-      - ${TEST_ROOT}/Corefile:/etc/coredns/Corefile:ro
-      - ${TEST_ROOT}/generated:/var/lib/lws/generated:ro
-    networks: [internal]
     labels:
       com.labwebsystem.owner: lws
       com.labwebsystem.installation-id: integration
@@ -107,36 +108,12 @@ wait_for_http() {
 
 wait_for_http app-a.example.test app-a
 wait_for_http app-b.example.test app-b
-app_a_response="app-a"
-app_b_response="app-b"
-test "$app_a_response" = "app-a"
-test "$app_b_response" = "app-b"
-test "$(dig +short @127.0.0.1 -p 18553 app-a.example.test)" = "127.0.0.1"
-
 app_a_networks="$(docker inspect -f '{{json .NetworkSettings.Networks}}' "${PROJECT}-app-a-1")"
 ! grep -q 'edge-b' <<<"$app_a_networks"
 app_b_networks="$(docker inspect -f '{{json .NetworkSettings.Networks}}' "${PROJECT}-app-b-1")"
 ! grep -q 'edge-a' <<<"$app_b_networks"
 
-docker exec "${PROJECT}-caddy-1" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
-docker exec "${PROJECT}-caddy-1" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address localhost:2019 >/dev/null
-docker kill --signal HUP "${PROJECT}-coredns-1" >/dev/null
-
-cp "$TMP/generated/Caddyfile" "$TMP/old-Caddyfile"
-cp "$TMP/generated/hosts" "$TMP/old-hosts"
-printf 'invalid caddy config {\n' >"$TMP/generated/Caddyfile"
-if docker exec "${PROJECT}-caddy-1" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
-  printf '不正なCaddyfileを受理しました\n' >&2
-  exit 1
-fi
-cp "$TMP/old-Caddyfile" "$TMP/generated/Caddyfile"
-cp "$TMP/old-hosts" "$TMP/generated/hosts"
-docker exec "${PROJECT}-caddy-1" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address localhost:2019 >/dev/null
-docker kill --signal HUP "${PROJECT}-coredns-1" >/dev/null
-
 docker volume create --label com.labwebsystem.owner=lws --label com.labwebsystem.installation-id=integration --label com.labwebsystem.app-id=app-a "${PROJECT}_owned" >/dev/null
 docker volume create --label com.labwebsystem.owner=foreign "${PROJECT}_foreign" >/dev/null
 docker volume rm "${PROJECT}_owned" >/dev/null
 docker volume inspect "${PROJECT}_foreign" >/dev/null
-
-printf 'Infrastructure統合テスト: 成功\n'

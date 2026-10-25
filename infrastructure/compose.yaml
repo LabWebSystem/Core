@@ -13,7 +13,7 @@ services:
       LWS_DATABASE_PATH: /var/lib/lws/database.sqlite
       LWS_SECRET_KEY_PATH: /etc/lws/secret.key
       LWS_CADDY_CONTAINER: ${LWS_CADDY_CONTAINER:-lws-caddy-1}
-      LWS_COREDNS_CONTAINER: ${LWS_COREDNS_CONTAINER:-lws-coredns-1}
+      LWS_AVAHI_CONTAINER: ${LWS_AVAHI_CONTAINER:-lws-avahi-1}
     volumes:
       # DB、アプリsource、生成設定をNamed Volumeに保持する。登録アプリの
       # Composeではhost bind mountを許可しないため、アプリ領域の共有は不要である。
@@ -61,16 +61,13 @@ services:
       com.labwebsystem.owner: lws
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
 
-  coredns:
-    image: coredns/coredns:1.12.4@sha256:986f04c2e15e147d00bdd51e8c51bcef3644b13ff806be7d2ff1b261d6dfbae1
-    command: -conf /etc/coredns/Corefile
-    ports:
-      - "${LWS_DNS_PORT:-53}:53/tcp"
-      - "${LWS_DNS_PORT:-53}:53/udp"
+  avahi:
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-avahi:${LWS_VERSION:-0.1.0}@${LWS_AVAHI_DIGEST:-sha256:0000000000000000000000000000000000000000000000000000000000000000}
+    network_mode: host
+    restart: unless-stopped
+    cap_add: [NET_ADMIN, NET_RAW]
     volumes:
-      - ./Corefile:/etc/coredns/Corefile:ro
-      - lws-generated:/var/lib/lws/generated
-    networks: [lws-internal]
+      - lws-generated:/var/lib/lws/generated:ro
     labels:
       com.labwebsystem.owner: lws
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}

@@ -25,8 +25,8 @@ LWS本体の隔離環境を準備する
     ${compose}=    Replace String    ${compose}    lws-internal    ${project}-internal
     ${compose}=    Replace String    ${compose}    context: ..    context: ${WORKSPACE}
     ${compose}=    Evaluate    __import__('re').sub(r'(?m)^\\s*image: ghcr[.]io/.*lws-backend.*\\n', '', $compose)
+    ${compose}=    Evaluate    __import__('re').sub(r'(?m)^(\s*image:\s*)ghcr[.]io/.*lws-avahi:.*$', r'\1lws-avahi-qa:local', $compose)
     ${compose_file}=    Set Variable    ${qa_root}/compose.yaml
-    Copy File    ${WORKSPACE}/infrastructure/Corefile    ${qa_root}/Corefile
     Create File    ${compose_file}    ${compose}
     Set Environment Variable    LWS_CONFIG_DIR    ${qa_root}/etc
     Set Environment Variable    LWS_STATE_DIR    ${qa_root}/state
@@ -34,16 +34,18 @@ LWS本体の隔離環境を準備する
     Set Environment Variable    LWS_COMPOSE_FILE    ${compose_file}
     Set Environment Variable    LWS_COMPOSE_PROJECT    ${project}
     Set Environment Variable    LWS_CADDY_CONTAINER    ${project}-caddy-1
-    Set Environment Variable    LWS_COREDNS_CONTAINER    ${project}-coredns-1
-    ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|53)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
-    Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、53/tcp、53/udp)が既に使用されています。
+    Set Environment Variable    LWS_AVAHI_CONTAINER    ${project}-avahi-1
+    ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|5353)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
+    Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、5353/udp)が既に使用されています。
+    ${avahi_build}=    Run Process    docker    build    --network=host    --file    ${WORKSPACE}/infrastructure/Dockerfile.avahi    --tag    lws-avahi-qa:local    ${WORKSPACE}
+    Should Be Equal As Integers    ${avahi_build.rc}    0
 
 LWS本体を停止して隔離環境を削除する
     Run Keyword If    $QA_ROOT    Run Process    ${LWSCTL}    down    --purge    --force
     Run Keyword If    $QA_ROOT    Remove Directory    ${QA_ROOT}    recursive=True
 
 LWSを起動する
-    ${result}=    Run Process    ${LWSCTL}    start    --domain    qa.example.internal
+    ${result}=    Run Process    ${LWSCTL}    start    --domain    qa.example.local
     Log    stdout=${result.stdout} stderr=${result.stderr}
     Should Be Equal As Integers    ${result.rc}    0
 

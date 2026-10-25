@@ -7,7 +7,7 @@ Library    String
 *** Keywords ***
 APIの接続を設定する
     ${base}=    Get Environment Variable    LWS_QA_BASE_URL    http://127.0.0.1/api/v1
-    ${domain}=    Get Environment Variable    LWS_QA_BASE_DOMAIN    example.internal
+    ${domain}=    Get Environment Variable    LWS_QA_BASE_DOMAIN    example.local
     ${headers}=    Create Dictionary    Host=api.${domain}
     Create Session    lws    ${base}    headers=${headers}
     Set Suite Variable    ${LWS_QA_BASE_URL}    ${base}

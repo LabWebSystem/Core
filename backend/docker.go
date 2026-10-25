@@ -90,12 +90,12 @@ func (d *DockerResources) ReloadCaddy(ctx context.Context) error {
 	return nil
 }
 
-func (d *DockerResources) ReloadCoreDNS(ctx context.Context, container string) error {
+func (d *DockerResources) RestartAvahi(ctx context.Context, container string) error {
 	if container == "" {
-		return fmt.Errorf("CoreDNS containerが設定されていません")
+		return fmt.Errorf("Avahi containerが設定されていません")
 	}
-	if _, err := d.Runner.Run(ctx, "docker", "kill", "--signal", "HUP", container); err != nil {
-		return fmt.Errorf("CoreDNSを再読込できません")
+	if _, err := d.Runner.Run(ctx, "docker", "restart", container); err != nil {
+		return fmt.Errorf("Avahiを再起動できません")
 	}
 	return nil
 }

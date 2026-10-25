@@ -222,7 +222,7 @@ components:
         cursor: { type: string }
         occurredAt: { type: string, format: date-time }
         level: { type: string, enum: [debug, info, warn, error] }
-        component: { type: string, enum: [backend, caddy, coredns, dashboard, application] }
+        component: { type: string, enum: [backend, caddy, coredns, avahi, dashboard, application] }
         applicationId: { type: string }
         operationId: { type: string }
         service: { type: string }

@@ -20,7 +20,7 @@ LWSのライフサイクルをDocker Composeで管理します。
   update     パッケージと対応するイメージを更新し、起動中の場合だけ再起動します。
 
 startのオプション:
-  -d, --domain ドメイン  ベースドメインを指定します（例: example.internal、localhost）。
+  -d, --domain ドメイン  ベースドメインを指定します（例: home.local）。
                          設定済みの値と異なる場合は、確認後にルーティング設定を再生成します。
   -f, --force              ドメイン変更時の確認を省略します。
 
@@ -33,8 +33,8 @@ downのオプション:
   -h, --help  このヘルプを表示します。コマンドの後ろに指定すると、そのコマンドの詳細を表示します。
 
 使用例:
-  sudo lwsctl start --domain example.internal
-  sudo lwsctl start -d new.internal --force
+  sudo lwsctl start --domain home.local
+  sudo lwsctl start -d new.home.local --force
   sudo lwsctl status
   sudo lwsctl down --purge --force
 `)
@@ -49,7 +49,7 @@ LWSを起動します。設定がない場合はベースドメインを入力�
 設定済みのドメインを変更すると、DNSとReverse Proxyの設定を再生成します。
 
 オプション:
-  -d, --domain ドメイン  ベースドメインを指定します（例: example.internal、localhost）。
+  -d, --domain ドメイン  ベースドメインを指定します（例: home.local）。
   -f, --force              設定済みドメインを変更する際の確認を省略します。
   -h, --help               このヘルプを表示します。
 `)
