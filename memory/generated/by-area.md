@@ -19,6 +19,7 @@
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
 - ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -103,6 +104,9 @@
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 - SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
+
+## Backend / Dashboard / Infrastructure / documentation
+- CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する
 
 ## Backend / Docker Compose
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない

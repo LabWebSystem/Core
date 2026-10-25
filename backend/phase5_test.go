@@ -54,7 +54,7 @@ func TestListApplicationsReturnsApplicationContract(t *testing.T) {
 	if len(response.Applications) != 1 {
 		t.Fatalf("一覧件数=%d", len(response.Applications))
 	}
-	for _, field := range []string{"name", "subdomain", "repositoryUrl", "ref", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
+	for _, field := range []string{"name", "subdomain", "repositoryUrl", "ref", "isSystem", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
 		if _, ok := response.Applications[0][field]; !ok {
 			t.Fatalf("一覧Applicationの必須項目がありません: %s", field)
 		}

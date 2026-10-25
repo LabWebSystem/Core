@@ -26,7 +26,7 @@ LWSは、パッケージ配布をGitHub Releases、Docker image配布をGHCR、S
 ```text
 利用者
   ├─ lwsctl ── LWS本体のCompose lifecycle
-  └─ Dashboard ── Backend API経由のアプリ管理
+  └─ Dashboard ── 登録アプリと同じ公開経路でBackend API経由のアプリ管理
 
 Backend
   ├─ SQLite ── アプリ定義、設定、Operation、ログ
@@ -36,8 +36,10 @@ Backend
 Infrastructure
   ├─ Caddy ── HTTP公開入口
   ├─ Avahi ── LWSの`.local`名をmDNS広告
-  └─ Docker Compose ── LWSと登録アプリの実行基盤
+  └─ Docker Compose ── 基盤、システムアプリ、登録アプリの実行基盤
 ```
+
+Dashboardは基盤Compose serviceではなく、Backendが登録する削除不可のシステムアプリです。Dashboard imageはLWSリリースに含まれ、通常アプリと同じCompose・edge network・Caddy経路で実行されます。
 
 BackendだけがDocker socketを使います。登録アプリにはsocketを渡さず、アプリごとのedge networkとLWS所有labelで操作範囲を分離します。
 

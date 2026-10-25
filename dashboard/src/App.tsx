@@ -332,8 +332,10 @@ export function App() {
               >
                 <span className={`dot ${stateTone(app)}`} />
                 <span>
-                  <strong>{app.subdomain}</strong>
-                  <small>{stateLabel(app)}</small>
+                  <strong>{app.isSystem ? "LWS Dashboard" : app.subdomain}</strong>
+                  <small>
+                    {app.isSystem ? `システムアプリ · ${stateLabel(app)}` : stateLabel(app)}
+                  </small>
                 </span>
               </button>
             ))}
@@ -957,8 +959,8 @@ function AppWorkbench({
     <section className="app-workbench">
       <header className="app-heading">
         <div>
-          <span className="eyebrow">公開アプリ</span>
-          <h2>{app.subdomain}</h2>
+          <span className="eyebrow">{app.isSystem ? "LWSシステムアプリ" : "公開アプリ"}</span>
+          <h2>{app.isSystem ? "Dashboard" : app.subdomain}</h2>
           <a href={publicUrl(app)} target="_blank" rel="noreferrer">
             {publicUrl(app)} <ExternalLink size={14} />
           </a>
@@ -983,42 +985,48 @@ function AppWorkbench({
                 停止
               </button>
             )}
-            <button disabled={disabled} title={actionTitle} onClick={() => onAction("sync")}>
-              <RotateCw size={16} />
-              同期
-            </button>
+            {!app.isSystem && (
+              <button disabled={disabled} title={actionTitle} onClick={() => onAction("sync")}>
+                <RotateCw size={16} />
+                同期
+              </button>
+            )}
             <button disabled={disabled} title={actionTitle} onClick={() => onAction("rebuild")}>
               <Settings2 size={16} />
               リビルド
             </button>
-            <button
-              disabled={disabled}
-              title={actionTitle}
-              onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}
-            >
-              <FileCog size={16} />
-              登録解除
-            </button>
+            {!app.isSystem && (
+              <button
+                disabled={disabled}
+                title={actionTitle}
+                onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}
+              >
+                <FileCog size={16} />
+                登録解除
+              </button>
+            )}
           </>
         )}
-        <button
-          className="danger-outline"
-          disabled={disabled}
-          title={actionTitle}
-          onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}
-        >
-          <Trash2 size={16} />
-          完全削除
-        </button>
+        {!app.isSystem && (
+          <button
+            className="danger-outline"
+            disabled={disabled}
+            title={actionTitle}
+            onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}
+          >
+            <Trash2 size={16} />
+            完全削除
+          </button>
+        )}
       </div>
       <section className="details-grid">
         <div>
           <span>リポジトリ</span>
-          <code>{app.repositoryUrl}</code>
+          <code>{app.isSystem ? "LWS組み込みイメージ" : app.repositoryUrl}</code>
         </div>
         <div>
           <span>参照</span>
-          <code>{app.ref}</code>
+          <code>{app.isSystem ? "LWSバージョンに追従" : app.ref}</code>
         </div>
         <div>
           <span>Composeファイル</span>
@@ -1116,26 +1124,31 @@ function AppWorkbench({
             <span className="eyebrow">環境設定</span>
             <h3>変数</h3>
           </div>
-          <button
-            className="primary small"
-            disabled={disabled || unregistered || configLoading || configError}
-            onClick={() =>
-              onConfirm(
-                app.registrationState === "CONFIGURING" ? "アプリを登録する" : "環境設定を更新する",
-                () =>
-                  api.saveConfiguration(
-                    app,
-                    save(),
-                    bindings.filter((binding) => binding.deviceId),
-                    ...publicArgs,
-                  ),
-                changeDetail,
-              )
-            }
-          >
-            {app.registrationState === "CONFIGURING" ? "登録" : "保存"}
-          </button>
+          {!app.isSystem && (
+            <button
+              className="primary small"
+              disabled={disabled || unregistered || configLoading || configError}
+              onClick={() =>
+                onConfirm(
+                  app.registrationState === "CONFIGURING"
+                    ? "アプリを登録する"
+                    : "環境設定を更新する",
+                  () =>
+                    api.saveConfiguration(
+                      app,
+                      save(),
+                      bindings.filter((binding) => binding.deviceId),
+                      ...publicArgs,
+                    ),
+                  changeDetail,
+                )
+              }
+            >
+              {app.registrationState === "CONFIGURING" ? "登録" : "保存"}
+            </button>
+          )}
         </div>
+        {app.isSystem && <p className="settings-note">Dashboardの設定はLWSが管理します。</p>}
         {configLoading ? (
           <p>設定を読み込んでいます</p>
         ) : configError ? (
@@ -1151,7 +1164,7 @@ function AppWorkbench({
                 <label>
                   公開するWebインターフェース
                   <select
-                    disabled={disabled || unregistered}
+                    disabled={disabled || unregistered || app.isSystem}
                     value={`${publicService}:${publicPort}`}
                     onChange={(event) => {
                       const [service, port] = event.target.value.split(":");
@@ -1192,7 +1205,7 @@ function AppWorkbench({
                         Compose hint: {device.sourceHint} · {device.permissions}
                       </small>
                       <select
-                        disabled={disabled || unregistered}
+                        disabled={disabled || unregistered || app.isSystem}
                         value={selected}
                         onChange={(event) =>
                           setDeviceValues((current) => ({
@@ -1221,7 +1234,7 @@ function AppWorkbench({
                   <code>{row.name}</code>
                   <input
                     aria-label={row.name}
-                    disabled={disabled || unregistered}
+                    disabled={disabled || unregistered || app.isSystem}
                     type={row.isSecret ? "password" : "text"}
                     value={row.value}
                     placeholder={

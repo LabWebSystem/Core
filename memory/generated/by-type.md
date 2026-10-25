@@ -19,6 +19,7 @@
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
 - ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
 
 ## BUG
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
@@ -139,6 +140,7 @@
 - CHG-092 | SHIPPED | release | リリース前に生成物と作業ツリーを検査する
 - CHG-093 | SUPERSEDED | Infrastructure / release | CoreDNSへmDNS対応を追加する
 - CHG-094 | SHIPPED | Infrastructure / Backend / CLI / release | AvahiコンテナでLWSのmDNSを提供する
+- CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す

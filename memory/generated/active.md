@@ -17,6 +17,7 @@
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
 - ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない

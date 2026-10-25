@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 11 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,8 +35,48 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 11 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
+	}
+}
+
+func TestSystemDashboardIsSeededAndCannotBeDeleted(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	root := t.TempDir()
+	id, err := EnsureSystemDashboard(context.Background(), db, root, "installation-test", "0.1.0", "example/dashboard:0.1.0", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var subdomain, desired string
+	var isSystem int
+	if err := db.QueryRow(`SELECT subdomain,desired_state,is_system FROM applications WHERE id=?`, id).Scan(&subdomain, &desired, &isSystem); err != nil {
+		t.Fatal(err)
+	}
+	if subdomain != "dashboard" || desired != "RUNNING" || isSystem != 1 {
+		t.Fatalf("Dashboard登録値が不正です: subdomain=%q desired=%q is_system=%d", subdomain, desired, isSystem)
+	}
+	if _, err := db.Exec(`DELETE FROM applications WHERE id=?`, id); err == nil {
+		t.Fatal("システムDashboardを削除できてしまいました")
+	}
+	if _, err := os.Stat(filepath.Join(root, id, "source", "compose.yaml")); err != nil {
+		t.Fatalf("生成Composeがありません: %v", err)
+	}
+	if info, err := os.Stat(filepath.Join(root, id, "runtime")); err != nil || !info.IsDir() {
+		t.Fatalf("runtime領域がありません: info=%v err=%v", info, err)
+	}
+}
+
+func TestEffectiveComposeAllowsBindVolumesOnlyForSystemApplications(t *testing.T) {
+	compose := []byte(`{"services":{"web":{"image":"example","volumes":[{"type":"bind","source":"/source","target":"/app"}]}}}`)
+	if err := ValidateEffectiveComposeWithOwnedNetwork(compose, "web", 80, "lws-app-edge"); err == nil {
+		t.Fatal("通常アプリのbind mountを許可しました")
+	}
+	if err := validateEffectiveCompose(compose, "web", 80, "lws-app-edge", true); err != nil {
+		t.Fatalf("Dashboard開発用volumeを拒否しました: %v", err)
 	}
 }
 
@@ -349,12 +389,14 @@ func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
 }
 
 func TestDerivedDashboardRoute(t *testing.T) {
-	hosts := GenerateHosts("example.local", "192.0.2.1", nil)
+	dashboard := PublishedApplication{AppID: "dashboard-id", Subdomain: "dashboard", Service: "web", Port: 80, IsSystem: true}
+	apps := []PublishedApplication{dashboard}
+	hosts := GenerateHosts("example.local", "192.0.2.1", apps)
 	if !strings.Contains(hosts, "192.0.2.1 dashboard.example.local\n") {
 		t.Fatalf("dashboard host is missing: %s", hosts)
 	}
-	caddy := GenerateCaddyfile("example.local", nil)
-	for _, want := range []string{"http://dashboard.example.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy dashboard:80", "header_up Host api.example.local"} {
+	caddy := GenerateCaddyfile("example.local", apps)
+	for _, want := range []string{"http://dashboard.example.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy lws-dashboard-id:80", "header_up Host api.example.local"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("dashboard route is missing %q: %s", want, caddy)
 		}

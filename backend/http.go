@@ -122,7 +122,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, compose_file, override_files, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
+	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, compose_file, override_files, desired_state, observed_state, registration_state, latest_error, updated_at, is_system FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ一覧を取得できません", "")
 		return
@@ -131,7 +131,8 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 	items := []map[string]any{}
 	for rows.Next() {
 		var id, sub, repo, ref, composeFile, overrideFiles, desired, observed, state, latestError, updated string
-		if err := rows.Scan(&id, &sub, &repo, &ref, &composeFile, &overrideFiles, &desired, &observed, &state, &latestError, &updated); err != nil {
+		var isSystem int
+		if err := rows.Scan(&id, &sub, &repo, &ref, &composeFile, &overrideFiles, &desired, &observed, &state, &latestError, &updated, &isSystem); err != nil {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
@@ -151,6 +152,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		items = append(items, map[string]any{
 			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "composeFile": composeFile,
 			"overrideFiles": overrides,
+			"isSystem":      isSystem != 0,
 			"desiredState":  desired, "observedState": observed, "registrationState": state,
 			"observedAt": time.Now().UTC().Format(time.RFC3339Nano), "reconciling": activeOperation != "",
 			"latestOperation": operationResourceName(latestOperation), "etag": fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed))),

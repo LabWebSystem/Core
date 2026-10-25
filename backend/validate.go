@@ -55,6 +55,9 @@ func ValidateSubdomain(value string) error {
 	if !subdomainPattern.MatchString(value) {
 		return NewValidationError("subdomain", "subdomainが不正です", "INVALID_SUBDOMAIN")
 	}
+	if value == "dashboard" {
+		return NewValidationError("subdomain", "dashboardはLWS Dashboard用に予約されています", "RESERVED_SUBDOMAIN")
+	}
 	return nil
 }
 

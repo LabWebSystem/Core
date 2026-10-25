@@ -24,7 +24,7 @@ const (
 )
 
 func (m *DerivedManager) Sync(ctx context.Context) error {
-	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,COALESCE(NULLIF(public_service,''),manifest_service),CASE WHEN public_port > 0 THEN public_port ELSE manifest_port END FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
+	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,COALESCE(NULLIF(public_service,''),manifest_service),CASE WHEN public_port > 0 THEN public_port ELSE manifest_port END,is_system FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
 	if err != nil {
 		return err
 	}
@@ -32,11 +32,11 @@ func (m *DerivedManager) Sync(ctx context.Context) error {
 	apps := []PublishedApplication{}
 	for rows.Next() {
 		var id, sub, service string
-		var port int
-		if err := rows.Scan(&id, &sub, &service, &port); err != nil {
+		var port, isSystem int
+		if err := rows.Scan(&id, &sub, &service, &port, &isSystem); err != nil {
 			return err
 		}
-		apps = append(apps, PublishedApplication{AppID: id, Subdomain: sub, Service: service, Port: port})
+		apps = append(apps, PublishedApplication{AppID: id, Subdomain: sub, Service: service, Port: port, IsSystem: isSystem != 0})
 	}
 	if err := rows.Err(); err != nil {
 		return err

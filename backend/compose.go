@@ -251,14 +251,14 @@ func walkCompose(nodes []*yaml.Node, root string) error {
 }
 
 func ValidateEffectiveCompose(data []byte, publicService string, publicPort int) error {
-	return validateEffectiveCompose(data, publicService, publicPort, "")
+	return validateEffectiveCompose(data, publicService, publicPort, "", false)
 }
 
 func ValidateEffectiveComposeWithOwnedNetwork(data []byte, publicService string, publicPort int, ownedNetwork string) error {
-	return validateEffectiveCompose(data, publicService, publicPort, ownedNetwork)
+	return validateEffectiveCompose(data, publicService, publicPort, ownedNetwork, false)
 }
 
-func validateEffectiveCompose(data []byte, publicService string, publicPort int, ownedNetwork string) error {
+func validateEffectiveCompose(data []byte, publicService string, publicPort int, ownedNetwork string, allowSystemVolumes bool) error {
 	if publicPort < 1 || publicPort > 65535 {
 		return NewValidationError("public.port", "公開portが不正です", "INVALID_PUBLIC_PORT")
 	}
@@ -281,14 +281,14 @@ func validateEffectiveCompose(data []byte, publicService string, publicPort int,
 		if !ok {
 			return NewValidationError("services."+name, "service定義が不正です", "INVALID_COMPOSE")
 		}
-		if err := validateEffectiveService(name, service); err != nil {
+		if err := validateEffectiveService(name, service, allowSystemVolumes); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateEffectiveService(name string, service map[string]any) error {
+func validateEffectiveService(name string, service map[string]any, allowSystemVolumes bool) error {
 	field := "services." + name
 	for _, key := range []string{"privileged", "tmpfs", "network_mode", "pid", "ipc", "ports"} {
 		value, exists := service[key]
@@ -312,9 +312,11 @@ func validateEffectiveService(name string, service map[string]any) error {
 		}
 	}
 	if volumes, ok := service["volumes"].([]any); ok {
-		for _, volume := range volumes {
-			if isBindMount(volume) {
-				return NewValidationError(field+".volumes", "bind mountまたは匿名volumeは許可されていません", "BIND_MOUNT_FORBIDDEN")
+		if !allowSystemVolumes {
+			for _, volume := range volumes {
+				if isBindMount(volume) {
+					return NewValidationError(field+".volumes", "bind mountまたは匿名volumeは許可されていません", "BIND_MOUNT_FORBIDDEN")
+				}
 			}
 		}
 	}

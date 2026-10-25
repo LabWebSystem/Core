@@ -38,6 +38,10 @@ if grep -Eq 'coredns|:53(/|:|\")' "$ROOT/infrastructure/compose.yaml"; then
   printf 'Composeに旧DNSサービスまたは53番ポートが残っています\n' >&2
   exit 1
 fi
+if grep -Eq '^  dashboard:' "$ROOT/infrastructure/compose.yaml"; then
+  printf 'Dashboardが基盤Compose serviceとして残っています\n' >&2
+  exit 1
+fi
 
 cat >"$TMP/generated/Caddyfile" <<'EOF'
 {

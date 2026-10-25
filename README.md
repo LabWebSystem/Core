@@ -142,7 +142,7 @@ mise run dev-dashboard-build # 初回またはBackend変更時に再ビルドし
 
 ### Dashboardを実際に操作する
 
-`mise run dev-dashboard`は、`dashboard/src`をマウントしたVite開発サーバーを`dashboard.lws.localhost:18180`で公開します。保存したUI変更はHMRで即時反映され、Caddyの同一Originプロキシを通じて実Backendへ接続します。通常のLWSとは別のCompose project、volume、networkと、80/5353番以外のportを使用します。
+`mise run dev-dashboard`は、Backendがシステムアプリとして登録するVite開発サーバーへ`dashboard.lws.localhost:18180`で接続します。`dashboard/src`をマウントするため、保存したUI変更はHMRで即時反映されます。通常のLWSとは別のCompose project、volume、networkと、80/5353番以外のportを使用します。
 
 初回起動時、または`backend/`・Dockerfile・Compose構成を変更したときだけ、先に`mise run dev-dashboard-build`でBackendを再ビルドします。BackendのGoモジュール・コンパイルキャッシュはBuildKitで再利用します。`dashboard/src`だけの変更には再ビルド不要です。
 
