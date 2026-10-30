@@ -14,7 +14,7 @@ LWSは、信頼できる研究室・家庭内LANで、GitHubまたはZIPのDocke
 | API契約 | `backend/openapi.yaml` | [Backend仕様書](Backend仕様書.md) |
 | アプリ契約 | 選択したComposeと任意の`lws.manifest.yaml` | [Infrastructure仕様書](Infrastructure仕様書.md) |
 | DNS・Reverse Proxy・Compose override | SQLiteから生成する派生物 | [Infrastructure仕様書](Infrastructure仕様書.md) |
-| LWS本体のライフサイクル | `lwsctl`の6コマンド | [利用マニュアル](LWS%20v0.1.11利用マニュアル.md) |
+| LWS本体のライフサイクル | `lwsctl`の7コマンド | [利用マニュアル](LWS%20v0.1.12利用マニュアル.md) |
 | 実行環境 | Docker Compose | [Infrastructure仕様書](Infrastructure仕様書.md) |
 | 開発・検証タスク | `mise` | [品質ゲート仕様](品質ゲート統合実装計画.md) |
 | 受け入れテスト | `qa/suites/`のRobot Framework | [機能テストルール](機能テストルール.md) |
@@ -81,4 +81,4 @@ GitHub Actions
 
 ## 現在の範囲
 
-Core v0.1.11は開発版です。Dashboardの基本的なアプリ管理画面は実装済みですが、TypeScript SDKと一部の実環境受け入れシナリオは開発中です。APIの認証・認可はなく、LWSは信頼できるLAN内で利用します。
+Core v0.1.12ではGitHub・ZIPからのアプリ取り込み、任意manifest、Avahiによる`.local` mDNS、保護されたDashboardシステムアプリを利用できます。TypeScript SDKと一部の実環境受け入れシナリオは開発中です。APIの認証・認可はなく、LWSは信頼できるLAN内で利用します。

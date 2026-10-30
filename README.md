@@ -4,7 +4,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 アプリはGitHubリポジトリまたはZIPファイルから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> このリポジトリのCore開発版は v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。公開済みリリースの最新タグは v0.1.10 です。
+> Core v0.1.12を公開しました。GitHubまたはZIPからのアプリ登録、`.local` mDNSによる公開に対応しています。TypeScript SDKは開発中です。
 
 ## できること
 
@@ -81,7 +81,7 @@ sudo lwsctl down --purge
 
 通常の`stop`と`down`はLWS本体だけを対象にします。子のアプリも対象にする場合は`-r`または`--recursive`を追加します。`down --recursive --purge`では、子のアプリのLWS所有volumeも削除します。
 
-詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.12利用マニュアル.md)を参照してください。
 
 ## アプリを公開する
 
@@ -200,7 +200,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 
 ## 関連資料
 
-- [利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)
+- [利用マニュアル](docs/LWS%20v0.1.12利用マニュアル.md)
 - [設計概要](docs/LabWebSystem設計概要.md)
 - [Infrastructure仕様書](docs/Infrastructure仕様書.md)
 - [Backend仕様書](docs/Backend仕様書.md)
