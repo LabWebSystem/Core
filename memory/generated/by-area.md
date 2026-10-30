@@ -18,7 +18,9 @@
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
-- ADR-016 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
+- ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
+- ADR-018 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -102,10 +104,14 @@
 - CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
-- SUP-002 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+- SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
+- SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+
+## Backend / Dashboard / Infrastructure / documentation
+- CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する
 
 ## Backend / Dashboard / アプリ登録
-- CHG-094 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
+- CHG-097 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
 
 ## Backend / Docker Compose
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
@@ -121,7 +127,7 @@
 - CHG-084 | SHIPPED | Backend / Runtime / Dashboard | アプリのリビルドをイメージ更新から強制再作成まで一貫させる
 
 ## Backend / manifest
-- CHG-093 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
+- CHG-096 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
 
 ## Backend HTTP API
 - CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
@@ -132,6 +138,12 @@
 
 ## Documentation
 - CHG-086 | SHIPPED | Documentation | 現行実装に合わせて文書の正本と状態を整理する
+
+## Infrastructure / Backend / CLI / release
+- CHG-094 | SHIPPED | Infrastructure / Backend / CLI / release | AvahiコンテナでLWSのmDNSを提供する
+
+## Infrastructure / release
+- CHG-093 | SUPERSEDED | Infrastructure / release | CoreDNSへmDNS対応を追加する
 
 ## backend
 - BUG-013 | VERIFIED | backend | 未作成edge networkをDockerエラーとして扱う

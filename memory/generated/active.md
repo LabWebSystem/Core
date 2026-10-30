@@ -15,7 +15,9 @@
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
-- ADR-016 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
+- ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
+- ADR-018 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない
@@ -39,4 +41,5 @@
 - BUG-021 | VERIFIED | backend-runtime | アプリのリビルドで最新イメージを反映しない
 - BUG-022 | VERIFIED | Backend / Infrastructure | DashboardホストのSwagger UIがBackendへ転送されない
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
-- SUP-002 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+- SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
+- SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える

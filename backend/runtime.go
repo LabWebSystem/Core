@@ -102,16 +102,48 @@ func (e *RuntimeExecutor) ReconcileStartup(ctx context.Context) error {
 	if err := e.ReconcileActive(ctx); err != nil {
 		return err
 	}
+	rows, err := e.DB.QueryContext(ctx, `SELECT id FROM applications WHERE is_system=1 AND registration_state='ACTIVE' AND desired_state='RUNNING' ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	var systemApplications []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		systemApplications = append(systemApplications, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, id := range systemApplications {
+		if err := e.Run(ctx, Operation{ApplicationID: id, Kind: "START"}); err != nil {
+			return fmt.Errorf("システムアプリ%sを起動できません: %w", id, err)
+		}
+	}
 	return e.syncDerived(ctx)
 }
 
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
 	var repo, ref, sourceKind, state, desired, previousName, previousDescription, previousRevision, manifestService, composeFile, overrideFilesJSON, previousService string
 	var previousPort, manifestPort int
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,source_kind,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port,public_service,public_port,compose_file,override_files FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &sourceKind, &state, &desired, &previousName, &previousDescription, &previousRevision, &manifestService, &manifestPort, &previousService, &previousPort, &composeFile, &overrideFilesJSON); err != nil {
+	var isSystem int
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,source_kind,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port,public_service,public_port,compose_file,override_files,is_system FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &sourceKind, &state, &desired, &previousName, &previousDescription, &previousRevision, &manifestService, &manifestPort, &previousService, &previousPort, &composeFile, &overrideFilesJSON, &isSystem); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
 	}
 	storedService, storedPort, storedCompose := previousService, previousPort, composeFile
+	if isSystem != 0 {
+		switch op.Kind {
+		case "CREATE", "SYNC", "UPDATE", "UNREGISTER", "REGISTER", "PURGE", "CONFIGURE":
+			return fmt.Errorf("システムアプリにはこの操作を実行できません")
+		}
+	}
 	if previousService == "" {
 		previousService, previousPort = manifestService, manifestPort
 	}
@@ -766,7 +798,11 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	if override == "" {
 		return ValidateEffectiveCompose(out, service, port)
 	}
-	return ValidateEffectiveComposeWithOwnedNetwork(out, service, port, EdgeNetworkName(id))
+	var isSystem int
+	if err := e.DB.QueryRowContext(ctx, `SELECT is_system FROM applications WHERE id=?`, id).Scan(&isSystem); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	return validateEffectiveCompose(out, service, port, EdgeNetworkName(id), isSystem != 0)
 }
 
 // GenerateEffectiveComposeは、利用者が選択したCompose群とLWS overrideを

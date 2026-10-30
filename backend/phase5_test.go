@@ -54,7 +54,7 @@ func TestListApplicationsReturnsApplicationContract(t *testing.T) {
 	if len(response.Applications) != 1 {
 		t.Fatalf("一覧件数=%d", len(response.Applications))
 	}
-	for _, field := range []string{"name", "subdomain", "repositoryUrl", "ref", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
+	for _, field := range []string{"name", "subdomain", "repositoryUrl", "ref", "isSystem", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
 		if _, ok := response.Applications[0][field]; !ok {
 			t.Fatalf("一覧Applicationの必須項目がありません: %s", field)
 		}
@@ -92,13 +92,13 @@ func TestConfigurationRequiresExistingApplication(t *testing.T) {
 	}
 }
 
-func TestInfrastructureImagesArePinnedAndRequiredPortsAreFixed(t *testing.T) {
+func TestInfrastructureImagesArePinnedAndUsesMDNSOnly(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "infrastructure", "compose.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(data)
-	for _, image := range []string{"lws-backend:", "lws-dashboard:", "caddy:", "coredns/coredns:"} {
+	for _, image := range []string{"lws-backend:", "lws-dashboard:", "caddy:", "lws-avahi:"} {
 		found := false
 		for _, line := range strings.Split(text, "\n") {
 			if strings.Contains(line, image) && strings.Contains(line, "@") && strings.Contains(line, "sha256:") {
@@ -110,15 +110,35 @@ func TestInfrastructureImagesArePinnedAndRequiredPortsAreFixed(t *testing.T) {
 			t.Fatalf("固定digestのimageがありません: %s", image)
 		}
 	}
-	for _, port := range []string{"\"${LWS_HTTP_PORT:-80}:80\"", "\"${LWS_DNS_PORT:-53}:53/tcp\"", "\"${LWS_DNS_PORT:-53}:53/udp\""} {
+	for _, port := range []string{"\"${LWS_HTTP_PORT:-80}:80\"", "network_mode: host", "lws-generated:/var/lib/lws/generated:ro"} {
 		if !strings.Contains(text, port) {
 			t.Fatalf("必須公開portが固定されていません: %s", port)
 		}
 	}
-	for _, variable := range []string{"LWS_BACKEND_DIGEST", "LWS_DASHBOARD_DIGEST"} {
+	for _, variable := range []string{"LWS_BACKEND_DIGEST", "LWS_DASHBOARD_DIGEST", "LWS_AVAHI_DIGEST"} {
 		if !strings.Contains(text, variable+":-") {
 			t.Fatalf("リリースdigestの注入点がありません: %s", variable)
 		}
+	}
+	if strings.Contains(text, "coredns:") || strings.Contains(text, "LWS_COREDNS_DIGEST") || strings.Contains(text, ":53/tcp") || strings.Contains(text, ":53/udp") {
+		t.Fatal("通常DNSのサービスや53番公開が残っています")
+	}
+}
+
+func TestAvahiImageAndComposePublishGeneratedMDNSHosts(t *testing.T) {
+	dockerfile, err := os.ReadFile(filepath.Join("..", "infrastructure", "Dockerfile.avahi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dockerfile), "avahi-daemon") {
+		t.Fatal("Avahi daemonを含むイメージではありません")
+	}
+	entrypoint, err := os.ReadFile(filepath.Join("..", "infrastructure", "avahi-entrypoint"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(entrypoint), "/var/lib/lws/generated/hosts") {
+		t.Fatal("Backend生成hostsをAvahiへ渡していません")
 	}
 }
 

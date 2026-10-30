@@ -225,6 +225,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "RUNNING",
         observedState: "RUNNING",
         registrationState: "ACTIVE",
@@ -239,6 +240,29 @@ describe("Dashboard デバッグルーム", () => {
     expect(await screen.findByText("台帳にアプリを登録する")).toBeTruthy();
   });
 
+  it("システムDashboardを表示し、登録解除と削除の操作を出さない", async () => {
+    apiMock.list.mockResolvedValue([
+      {
+        name: "applications/system-dashboard",
+        subdomain: "dashboard",
+        repositoryUrl: "",
+        ref: "0.1.0",
+        isSystem: true,
+        desiredState: "RUNNING",
+        observedState: "RUNNING",
+        registrationState: "ACTIVE",
+        observedAt: "2026-08-23T00:00:00Z",
+        reconciling: false,
+        etag: "system-tag",
+      },
+    ]);
+    renderApp();
+    await screen.findByText("LWSシステムアプリ");
+    expect(screen.getByRole("button", { name: "停止" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "完全削除" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "登録解除" })).toBeNull();
+  });
+
   it("登録解除済みアプリを表示し、再登録と完全削除を選べる", async () => {
     apiMock.list.mockResolvedValue([
       {
@@ -246,6 +270,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "STOPPED",
         observedState: "STOPPED",
         registrationState: "UNREGISTERED",
@@ -288,6 +313,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "RUNNING",
         observedState: "RUNNING",
         registrationState: "ACTIVE",
@@ -312,6 +338,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "STOPPED",
         observedState: "STOPPED",
         registrationState: "UNREGISTERED",
@@ -345,6 +372,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "RUNNING",
         observedState: "ERROR",
         registrationState: "ACTIVE",
@@ -374,6 +402,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "RUNNING",
         observedState: "RUNNING",
         registrationState: "ACTIVE",
@@ -402,6 +431,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "RUNNING",
         observedState: "RUNNING",
         registrationState: "ACTIVE",
@@ -472,6 +502,7 @@ describe("Dashboard デバッグルーム", () => {
         subdomain: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
+        isSystem: false,
         desiredState: "STOPPED",
         observedState: "STOPPED",
         registrationState: "CONFIGURING",

@@ -10,7 +10,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 - GitHubリポジトリまたはZIPファイルにあるWebアプリを登録する
 - Docker Composeでアプリを起動・停止・更新する
-- `app-name.example.internal`の形でアプリごとのURLを公開する
+- `app-name.example.local`の形でアプリごとのURLを公開する
 - アプリの設定値、secret、ログ、実行状態を管理する
 - アプリごとの名前付きVolume、edge Network、デバイス割り当てを設定する
 - `dashboard.<base-domain>`のDashboardから、アプリを日本語で登録・操作する
@@ -23,10 +23,10 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 - Ubuntu系またはAlmaLinux系のLinux
 - 現在のリリース成果物はamd64（RPMではx86_64）向け
 - Docker EngineとDocker Compose plugin
-- 空いている80/tcp、53/tcp、53/udpポート
+- 空いている80/tcp、5353/udpポート
 - GitHub Releasesへ接続できるネットワーク
 
-LAN内の端末からアプリ名でアクセスするには、端末がLWSのDNSを使うようにDHCPまたはDNSを設定します。
+LAN内の端末からアプリ名でアクセスするには、端末のmDNSを有効にし、LWSホストと同じLANへ接続します。ルーターのDNS設定は不要です。
 
 ### インストール
 
@@ -43,16 +43,22 @@ curl -fsSL https://raw.githubusercontent.com/LabWebSystem/Core/main/scripts/inst
 ベースドメインを決めて起動します。
 
 ```sh
-sudo lwsctl start --domain example.internal
+sudo lwsctl start --domain example.local
 sudo lwsctl status
 ```
 
-ベースドメインには`localhost`も指定できます。
+ベースドメインは`.local`で終わる名前を指定します。mDNSを通さないネットワークを越えた名前解決には対応しません。
+
+以前のベースドメインから移行する場合は、次のように新しい名前を指定します。
+
+```sh
+sudo lwsctl start --domain home.local --force
+```
 
 たとえば、`reserve`というアプリは次のURLで公開されます。
 
 ```text
-reserve.example.internal
+reserve.example.local
 ```
 
 ## LWSを操作する
@@ -139,7 +145,7 @@ mise run dev-dashboard-build # 初回またはBackend変更時に再ビルドし
 
 ### Dashboardを実際に操作する
 
-`mise run dev-dashboard`は、`dashboard/src`をマウントしたVite開発サーバーを`dashboard.lws.localhost:18180`で公開します。保存したUI変更はHMRで即時反映され、Caddyの同一Originプロキシを通じて実Backendへ接続します。通常のLWSとは別のCompose project、volume、networkと、80/53番以外のportを使用します。
+`mise run dev-dashboard`は、Backendがシステムアプリとして登録するVite開発サーバーへ`dashboard.lws.localhost:18180`で接続します。`dashboard/src`をマウントするため、保存したUI変更はHMRで即時反映されます。通常のLWSとは別のCompose project、volume、networkと、80/5353番以外のportを使用します。
 
 初回起動時、または`backend/`・Dockerfile・Compose構成を変更したときだけ、先に`mise run dev-dashboard-build`でBackendを再ビルドします。BackendのGoモジュール・コンパイルキャッシュはBuildKitで再利用します。`dashboard/src`だけの変更には再ビルド不要です。
 

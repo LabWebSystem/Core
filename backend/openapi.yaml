@@ -101,7 +101,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UpdateApplicationRequest'
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリの公開名と参照先は変更できません } }
     delete:
       operationId: unregisterApplication
       requestBody:
@@ -109,7 +109,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ActionRequest' }
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリは登録解除できません } }
   /applications/{application}:start:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     post:
@@ -145,7 +145,7 @@ paths:
     post:
       operationId: purgeApplication
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PurgeRequest' } } } }
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリはpurgeできません } }
   /applications/{application}/configuration:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     get: { operationId: getConfiguration, responses: { '200': { description: 設定取得, content: { application/json: { schema: { $ref: '#/components/schemas/ConfigurationResponse' } } } }, '404': { description: 未検出 } } }
@@ -157,7 +157,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ConfigurationRequest'
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリの設定は変更できません } }
   /applications/{application}/imports:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     post:
@@ -167,7 +167,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/UpdateImportRequest' }
-      responses: { '202': { description: 更新Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: 更新Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリは更新できません } }
   /operations/{operation}:
     parameters: [{ name: operation, in: path, required: true, schema: { $ref: '#/components/schemas/OperationID' } }]
     get: { operationId: getOperation, responses: { '200': { description: Operation取得, content: { application/json: { schema: { $ref: '#/components/schemas/OperationResource' } } } } } }
@@ -275,7 +275,7 @@ components:
         updatedAt: { type: string, format: date-time }
     Application:
       type: object
-      required: [name, subdomain, repositoryUrl, ref, desiredState, observedState, registrationState, observedAt, reconciling, etag]
+      required: [name, subdomain, repositoryUrl, ref, isSystem, desiredState, observedState, registrationState, observedAt, reconciling, etag]
       properties:
         name: { type: string, pattern: '^applications/.+$' }
         composeFile: { type: string }
@@ -284,6 +284,7 @@ components:
         repositoryUrl: { type: string }
         ref: { type: string }
         sourceKind: { type: string, enum: [github, zip] }
+        isSystem: { type: boolean }
         desiredState: { type: string }
         observedState: { type: string }
         registrationState: { type: string, enum: [ACTIVE, CONFIGURING, UNREGISTERED] }
@@ -305,7 +306,7 @@ components:
         cursor: { type: string }
         occurredAt: { type: string, format: date-time }
         level: { type: string, enum: [debug, info, warn, error] }
-        component: { type: string, enum: [backend, caddy, coredns, dashboard, application] }
+        component: { type: string, enum: [backend, caddy, coredns, avahi, dashboard, application] }
         applicationId: { type: string }
         operationId: { type: string }
         service: { type: string }

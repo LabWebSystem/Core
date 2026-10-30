@@ -462,6 +462,7 @@ export interface components {
             ref: string;
             /** @enum {string} */
             sourceKind?: "github" | "zip";
+            isSystem: boolean;
             desiredState: string;
             observedState: string;
             /** @enum {string} */
@@ -484,7 +485,7 @@ export interface components {
             /** @enum {string} */
             level: "debug" | "info" | "warn" | "error";
             /** @enum {string} */
-            component: "backend" | "caddy" | "coredns" | "dashboard" | "application";
+            component: "backend" | "caddy" | "coredns" | "avahi" | "dashboard" | "application";
             applicationId?: string;
             operationId?: string;
             service?: string;
@@ -949,6 +950,13 @@ export interface operations {
                     "application/json": components["schemas"]["OperationReference"];
                 };
             };
+            /** @description システムアプリは登録解除できません */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     updateApplication: {
@@ -974,6 +982,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OperationReference"];
                 };
+            };
+            /** @description システムアプリの公開名と参照先は変更できません */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1131,6 +1146,13 @@ export interface operations {
                     "application/json": components["schemas"]["OperationReference"];
                 };
             };
+            /** @description システムアプリはpurgeできません */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getConfiguration: {
@@ -1186,6 +1208,13 @@ export interface operations {
                     "application/json": components["schemas"]["OperationReference"];
                 };
             };
+            /** @description システムアプリの設定は変更できません */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     updateApplicationImport: {
@@ -1211,6 +1240,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OperationReference"];
                 };
+            };
+            /** @description システムアプリは更新できません */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

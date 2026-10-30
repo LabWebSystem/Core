@@ -27,12 +27,15 @@ prepare() {
 render_compose() {
   local backend_default='sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2'
   local dashboard_default='sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4'
+  local avahi_default='sha256:0000000000000000000000000000000000000000000000000000000000000000'
   local backend_digest="${LWS_BACKEND_DIGEST:-$backend_default}"
   local dashboard_digest="${LWS_DASHBOARD_DIGEST:-$dashboard_default}"
+  local avahi_digest="${LWS_AVAHI_DIGEST:-$avahi_default}"
 
   sed \
     -e "s|\\\${LWS_BACKEND_DIGEST:-$backend_default}|$backend_digest|g" \
     -e "s|\\\${LWS_DASHBOARD_DIGEST:-$dashboard_default}|$dashboard_digest|g" \
+    -e "s|\\\${LWS_AVAHI_DIGEST:-$avahi_default}|$avahi_digest|g" \
     "$ROOT/infrastructure/compose.yaml" \
     >"$WORK/compose.yaml"
 }
@@ -52,10 +55,6 @@ prepare_deb_tree() {
   install -m 0644 \
     "$WORK/compose.yaml" \
     "$WORK/deb/usr/share/lws/compose.yaml"
-
-  install -m 0644 \
-    "$ROOT/infrastructure/Corefile" \
-    "$WORK/deb/usr/share/lws/Corefile"
 
   install -m 0755 \
     "$ROOT/scripts/install.sh" \
@@ -128,7 +127,6 @@ build_rpm() {
 
   install -m 0755 "$WORK/lwsctl" "$rpm_root/SOURCES/lwsctl"
   install -m 0644 "$WORK/compose.yaml" "$rpm_root/SOURCES/compose.yaml"
-  install -m 0644 "$ROOT/infrastructure/Corefile" "$rpm_root/SOURCES/Corefile"
   install -m 0755 "$ROOT/scripts/install.sh" "$rpm_root/SOURCES/install.sh"
 
   printf '%s\n' "$VERSION" >"$rpm_root/SOURCES/version"

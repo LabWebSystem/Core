@@ -23,16 +23,16 @@ LWSを使うと、次のことができます。
 LWSの起動時にベースドメインを一つ設定します。
 
 ```text
-example.internal
+example.local
 ```
 
 登録したアプリにはサブドメインを割り当てます。例えば`予約システム`に`reserve`を割り当てると、次のURLでアクセスできます。
 
 ```text
-reserve.example.internal
+reserve.example.local
 ```
 
-Dashboardは`dashboard.example.internal`で開きます。URLの名前解決はLWSのDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用する端末がLWSホストのDNSを使うよう、LAN側のDHCPまたは端末のDNS設定を整えてください。
+Dashboardは`dashboard.example.local`で開きます。名前解決はmDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用端末とLWSホストが同じLAN上にあり、端末のmDNSが有効である必要があります。
 
 ## 利用を始める
 
@@ -43,14 +43,14 @@ Ubuntu系では`.deb`、AlmaLinux系では`.rpm`を使ってインストール�
 ### 2. LWSを初回起動する
 
 ```sh
-sudo lwsctl start --domain example.internal
+sudo lwsctl start --domain example.local
 ```
 
 初回起動時に、ベースドメインとLWSの実行環境が準備されます。
 
-ベースドメインには`localhost`も指定できます。
+ベースドメインは`.local`で終わる名前を指定します。
 
-起動前に、ホストの80番ポートと53番ポート（TCP/UDP）が空いている必要があります。
+起動前に、ホストの80/tcpと5353/udpが空いている必要があります。既にmDNSサービスが動作している場合は停止せず、LWSを起動できません。
 
 ### 3. 状態を確認する
 
@@ -131,11 +131,11 @@ DashboardでGitHubのURLとref、またはZIPと公開subdomainを指定し、�
 APIを直接使う場合の最小例は次のとおりです。
 
 ```sh
-curl -X POST http://api.example.internal/api/v1/applications \
+curl -X POST http://api.example.local/api/v1/applications \
   -H 'Content-Type: application/json' \
   -d '{"repositoryUrl":"https://github.com/example/app","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}'
 
-curl http://api.example.internal/api/v1/operations/<operation-id>
+curl http://api.example.local/api/v1/operations/<operation-id>
 ```
 
 変更操作は`202`とOperation名を返します。完了状態はOperation APIまたはSSEで確認します。

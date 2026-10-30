@@ -160,7 +160,7 @@ func TestRuntimeMonitorCollectsOnlyOwnedApplicationContainer(t *testing.T) {
 		{ID: "owned", Name: "web", TTY: true, Labels: map[string]string{ownerLabel: "lws", installationIDLabel: "installation", applicationIDLabel: "app", composeServiceLabel: "web"}},
 		{ID: "outside", Name: "outside", TTY: true, Labels: map[string]string{ownerLabel: "other", installationIDLabel: "installation"}},
 	}}
-	monitor := NewRuntimeMonitor(source, store, db, "installation", "example.internal", nil)
+	monitor := NewRuntimeMonitor(source, store, db, "installation", "example.local", nil)
 	monitor.RetryDelay = time.Hour
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

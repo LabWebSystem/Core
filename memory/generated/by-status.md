@@ -17,11 +17,14 @@
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
-- ADR-016 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
+- ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
+- ADR-018 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
 
 ## ACTIVE
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
-- SUP-002 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+- SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
+- SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
 
 ## SHIPPED
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
@@ -114,13 +117,16 @@
 - CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
 - CHG-091 | SHIPPED | lwsctl | lwsctlにバージョン表示コマンドを追加する
 - CHG-092 | SHIPPED | release | リリース前に生成物と作業ツリーを検査する
-- CHG-093 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
-- CHG-094 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
+- CHG-094 | SHIPPED | Infrastructure / Backend / CLI / release | AvahiコンテナでLWSのmDNSを提供する
+- CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する
+- CHG-096 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
+- CHG-097 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
 
 ## SUPERSEDED
 - ADR-002 | SUPERSEDED | - | InfrastructureとBackendの正本およびアプリ実行方式
 - CHG-009 | SUPERSEDED | - | デプロイからSDKをGitHub Packagesへ公開する
 - CHG-052 | SUPERSEDED | - | Robot FTプレースホルダーを実行可能な検証へ置換する
+- CHG-093 | SUPERSEDED | Infrastructure / release | CoreDNSへmDNS対応を追加する
 
 ## VERIFIED
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
