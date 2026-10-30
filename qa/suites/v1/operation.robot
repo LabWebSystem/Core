@@ -52,6 +52,6 @@ FT-V1-057 Backend再起動後に未完了Operationを整理する
     未実装の受け入れテストとして記録する    FT-V1-057
 
 FT-V1-058 障害時に有効状態を保護する
-    [Documentation]    DB・Docker・network・Caddy・CoreDNS障害時にOperationを失敗させ既存状態を不要に変更しない。
+    [Documentation]    DB・Docker・network・Caddy・Avahi障害時にOperationを失敗させ既存状態を不要に変更しない。
     [Tags]    FT-V1-058    planned    workflow    v1
     未実装の受け入れテストとして記録する    FT-V1-058

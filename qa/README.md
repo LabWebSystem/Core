@@ -6,6 +6,8 @@
 
 ## 実行
 
+ZIP取り込みのブラウザ・Backend・Docker連携は`mise run test-import-e2e`を実行する。一意なinstallation IDとCompose projectを使い、テスト専用container、network、volumeを終了時に削除する。必要な`caddy:2.10-alpine` imageがなければ取得し、テストが取得した未使用のimageだけを整理する。
+
 ```sh
 mise run qa
 ```
@@ -26,7 +28,7 @@ Robot Frameworkは`output.xml`、`log.html`、`report.html`を生成する。
 
 ```sh
 LWS_QA_BASE_URL=http://127.0.0.1/api/v1 \
-LWS_QA_BASE_DOMAIN=example.internal \
+LWS_QA_BASE_DOMAIN=example.local \
 LWS_QA_REPOSITORY_URL=https://github.com/example/lws-valid \
 mise run qa-live
 ```
@@ -39,7 +41,7 @@ LWSの起動・停止・再構成を実際のDocker Composeで確認する場合
 mise run qa-lifecycle
 ```
 
-このテストはホストのDockerと80/tcp、53/tcp、53/udpを使用するため、専用のテスト環境で実行する。結果は`test/result/robot-lifecycle/`へ出力される。
+このテストはホストのDockerと80/tcp、5353/udpを使用するため、専用のテスト環境で実行する。既存のmDNSサービスがある場合は停止せず、安全のためテストをSKIPする。結果は`test/result/robot-lifecycle/`へ出力される。
 
 ## ドキュメント生成
 

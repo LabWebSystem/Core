@@ -11,6 +11,8 @@ export type CreateApplicationInput = Omit<
   components["schemas"]["CreateApplicationRequest"],
   "requestId"
 >;
+export type ImportInspection = components["schemas"]["ImportInspection"];
+export type UpdateImportInput = Omit<components["schemas"]["UpdateImportRequest"], "requestId">;
 type OperationEvent = {
   type: Operation["state"];
   data?: { message?: string; phase?: string };
@@ -38,6 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } | null;
     throw new ApiError(body?.error?.message ?? "操作を完了できませんでした", response.status);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -58,6 +61,24 @@ export const api = {
     }),
   create: (input: CreateApplicationInput) =>
     request<{ name: string }>("/applications", {
+      method: "POST",
+      body: JSON.stringify({ ...input, requestId: requestId() }),
+    }),
+  prepareGitImport: (repositoryUrl: string, ref: string) =>
+    request<ImportInspection>("/imports/github", {
+      method: "POST",
+      body: JSON.stringify({ repositoryUrl, ref }),
+    }),
+  prepareZipImport: (file: File) =>
+    request<ImportInspection>("/imports/zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/zip" },
+      body: file,
+    }),
+  discardImport: (id: string) =>
+    request<void>(`/imports/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  updateImport: (app: Application, input: UpdateImportInput) =>
+    request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}/imports`, {
       method: "POST",
       body: JSON.stringify({ ...input, requestId: requestId() }),
     }),

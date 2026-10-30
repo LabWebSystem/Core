@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 12 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,8 +35,48 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 12 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
+	}
+}
+
+func TestSystemDashboardIsSeededAndCannotBeDeleted(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	root := t.TempDir()
+	id, err := EnsureSystemDashboard(context.Background(), db, root, "installation-test", "0.1.0", "example/dashboard:0.1.0", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var subdomain, desired string
+	var isSystem int
+	if err := db.QueryRow(`SELECT subdomain,desired_state,is_system FROM applications WHERE id=?`, id).Scan(&subdomain, &desired, &isSystem); err != nil {
+		t.Fatal(err)
+	}
+	if subdomain != "dashboard" || desired != "RUNNING" || isSystem != 1 {
+		t.Fatalf("Dashboard登録値が不正です: subdomain=%q desired=%q is_system=%d", subdomain, desired, isSystem)
+	}
+	if _, err := db.Exec(`DELETE FROM applications WHERE id=?`, id); err == nil {
+		t.Fatal("システムDashboardを削除できてしまいました")
+	}
+	if _, err := os.Stat(filepath.Join(root, id, "source", "compose.yaml")); err != nil {
+		t.Fatalf("生成Composeがありません: %v", err)
+	}
+	if info, err := os.Stat(filepath.Join(root, id, "runtime")); err != nil || !info.IsDir() {
+		t.Fatalf("runtime領域がありません: info=%v err=%v", info, err)
+	}
+}
+
+func TestEffectiveComposeAllowsBindVolumesOnlyForSystemApplications(t *testing.T) {
+	compose := []byte(`{"services":{"web":{"image":"example","volumes":[{"type":"bind","source":"/source","target":"/app"}]}}}`)
+	if err := ValidateEffectiveComposeWithOwnedNetwork(compose, "web", 80, "lws-app-edge"); err == nil {
+		t.Fatal("通常アプリのbind mountを許可しました")
+	}
+	if err := validateEffectiveCompose(compose, "web", 80, "lws-app-edge", true); err != nil {
+		t.Fatalf("Dashboard開発用volumeを拒否しました: %v", err)
 	}
 }
 
@@ -236,12 +276,12 @@ func TestValidateRequestIDRequiresUUIDv4(t *testing.T) {
 }
 
 func TestValidateBaseDomain(t *testing.T) {
-	for _, value := range []string{"example.internal", "lab.example.internal"} {
+	for _, value := range []string{"home.local", "lab.home.local", "lws.localhost"} {
 		if err := ValidateBaseDomain(value); err != nil {
 			t.Errorf("有効なbase domainを拒否しました: %q: %v", value, err)
 		}
 	}
-	for _, value := range []string{"", "example", ".example.internal", "example.internal.", "https://example.internal", "bad domain", "example..internal"} {
+	for _, value := range []string{"", "example", "example.internal", ".home.local", "home.local.", "https://home.local", "bad domain", "example..local"} {
 		if err := ValidateBaseDomain(value); err == nil {
 			t.Errorf("不正なbase domainを受理しました: %q", value)
 		}
@@ -273,6 +313,48 @@ func TestValidateManifest(t *testing.T) {
 	}
 	if err := ValidateEffectiveComposeWithOwnedNetwork(owned, "web", 3000, "lws-other-edge"); err == nil {
 		t.Fatal("foreign edge network accepted")
+	}
+}
+
+func TestManifestComposeFile(t *testing.T) {
+	base := "apiVersion: lws/v1\nmetadata:\n  name: Demo\n  description: test\npublic:\n  service: web\n  port: 3000\n"
+	manifest, err := ValidateManifest([]byte(base + "composeFile: docker-compose.prod.yml\n"))
+	if err != nil || manifest.ComposeFile != "docker-compose.prod.yml" {
+		t.Fatalf("Compose指定を読み取れません: %+v %v", manifest, err)
+	}
+	for _, filename := range []string{"../compose.yaml", "app.yaml", "/tmp/compose.yaml"} {
+		if _, err := ValidateManifest([]byte(base + "composeFile: " + filename + "\n")); err == nil {
+			t.Fatalf("不正なCompose指定を受理しました: %s", filename)
+		}
+	}
+}
+
+type manifestComposeRunner struct{}
+
+func (manifestComposeRunner) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+	dest := args[len(args)-1]
+	if err := os.MkdirAll(dest, 0700); err != nil {
+		return nil, err
+	}
+	files := map[string]string{
+		"lws.manifest.yaml":       "apiVersion: lws/v1\ncomposeFile: docker-compose.prod.yml\nmetadata:\n  name: Demo\n  description: test\npublic:\n  service: web\n  port: 3000\n",
+		"compose.yaml":            "services:\n  web:\n    image: example\n",
+		"docker-compose.prod.yml": "services:\n  web:\n    image: example\n",
+	}
+	for name, contents := range files {
+		if err := os.WriteFile(filepath.Join(dest, name), []byte(contents), 0600); err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+func TestCloneUsesManifestComposeUnlessExplicitlySelected(t *testing.T) {
+	for _, tc := range []struct{ requested, want string }{{"", "docker-compose.prod.yml"}, {"compose.yaml", "compose.yaml"}} {
+		got, err := CloneAndValidateWithCompose(context.Background(), manifestComposeRunner{}, "https://github.com/a/b", "main", tc.requested, filepath.Join(t.TempDir(), "source"))
+		if err != nil || got != tc.want {
+			t.Fatalf("Compose選択: got %q want %q: %v", got, tc.want, err)
+		}
 	}
 }
 func TestValidateProjectPath(t *testing.T) {
@@ -329,19 +411,19 @@ func TestHTTPRejectsOrigin(t *testing.T) {
 }
 
 func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
-	s := &Server{AllowedHost: "api.example.internal", AllowedOrigin: "http://dashboard.example.internal"}
+	s := &Server{AllowedHost: "api.example.local", AllowedOrigin: "http://dashboard.example.local"}
 	allowed := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	request.Host = "api.example.internal"
-	request.Header.Set("Origin", "http://dashboard.example.internal")
+	request.Host = "api.example.local"
+	request.Header.Set("Origin", "http://dashboard.example.local")
 	s.Handler().ServeHTTP(allowed, request)
 	if allowed.Code != http.StatusOK {
 		t.Fatalf("dashboard origin status=%d body=%s", allowed.Code, allowed.Body.String())
 	}
 	rejected := httptest.NewRecorder()
 	request = httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	request.Host = "api.example.internal"
-	request.Header.Set("Origin", "http://other.example.internal")
+	request.Host = "api.example.local"
+	request.Header.Set("Origin", "http://other.example.local")
 	s.Handler().ServeHTTP(rejected, request)
 	if rejected.Code != http.StatusForbidden {
 		t.Fatalf("unexpected origin status=%d", rejected.Code)
@@ -349,12 +431,14 @@ func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
 }
 
 func TestDerivedDashboardRoute(t *testing.T) {
-	hosts := GenerateHosts("example.internal", "192.0.2.1", nil)
-	if !strings.Contains(hosts, "192.0.2.1 dashboard.example.internal\n") {
+	dashboard := PublishedApplication{AppID: "dashboard-id", Subdomain: "dashboard", Service: "web", Port: 80, IsSystem: true}
+	apps := []PublishedApplication{dashboard}
+	hosts := GenerateHosts("example.local", "192.0.2.1", apps)
+	if !strings.Contains(hosts, "192.0.2.1 dashboard.example.local\n") {
 		t.Fatalf("dashboard host is missing: %s", hosts)
 	}
-	caddy := GenerateCaddyfile("example.internal", nil)
-	for _, want := range []string{"http://dashboard.example.internal", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy dashboard:80", "header_up Host api.example.internal"} {
+	caddy := GenerateCaddyfile("example.local", apps)
+	for _, want := range []string{"http://dashboard.example.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy lws-dashboard-id:80", "header_up Host api.example.local"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("dashboard route is missing %q: %s", want, caddy)
 		}
@@ -363,9 +447,9 @@ func TestDerivedDashboardRoute(t *testing.T) {
 
 func TestHTTPRejectsUnexpectedHost(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	r.Host = "bad.example.internal"
+	r.Host = "bad.example.local"
 	rr := httptest.NewRecorder()
-	(&Server{AllowedHost: "api.example.internal"}).Handler().ServeHTTP(rr, r)
+	(&Server{AllowedHost: "api.example.local"}).Handler().ServeHTTP(rr, r)
 	if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "HOST_FORBIDDEN") {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -1091,11 +1175,11 @@ func TestUnregisterApplicationIsHandedToWorker(t *testing.T) {
 
 func TestDerivedConfigIsAtomic(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "hosts")
-	if err := WriteAtomic(p, []byte(GenerateHosts("example.internal", "192.0.2.1", []PublishedApplication{{Subdomain: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
+	if err := WriteAtomic(p, []byte(GenerateHosts("example.local", "192.0.2.1", []PublishedApplication{{Subdomain: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(p)
-	if !strings.Contains(string(data), "app.example.internal") {
+	if !strings.Contains(string(data), "app.example.local") {
 		t.Fatal(string(data))
 	}
 }
@@ -1109,7 +1193,7 @@ func TestDerivedManagerUsesManifestPublication(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
-	manager := &DerivedManager{DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.internal", PublicAddress: "192.0.2.10"}
+	manager := &DerivedManager{DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.local", PublicAddress: "192.0.2.10"}
 	if err := manager.Sync(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -1158,9 +1242,9 @@ func TestDerivedManagerValidatesAndReloadsInfrastructure(t *testing.T) {
 	}
 	runner := &recordingRunner{output: []byte(`[{"Id":"infra","Name":"infra","Config":{"Labels":{"com.labwebsystem.owner":"lws","com.labwebsystem.installation-id":"installation"}}}]`)}
 	manager := &DerivedManager{
-		DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.internal", PublicAddress: "192.0.2.10",
+		DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.local", PublicAddress: "192.0.2.10",
 		Docker:         NewDockerResources(runner, "installation"),
-		CaddyContainer: "caddy-container", CoreDNSContainer: "coredns-container",
+		CaddyContainer: "caddy-container", AvahiContainer: "avahi-container",
 	}
 	if err := manager.Sync(context.Background()); err != nil {
 		t.Fatal(err)
@@ -1171,7 +1255,7 @@ func TestDerivedManagerValidatesAndReloadsInfrastructure(t *testing.T) {
 	}
 	if !strings.Contains(joined, "exec caddy-container caddy validate --config /var/lib/lws/generated/Caddyfile --adapter caddyfile") ||
 		!strings.Contains(joined, "exec caddy-container caddy reload --config /var/lib/lws/generated/Caddyfile --adapter caddyfile --address localhost:2019") ||
-		!strings.Contains(joined, "kill --signal HUP coredns-container") {
+		!strings.Contains(joined, "restart avahi-container") {
 		t.Fatalf("infrastructure reload was not performed: %s", joined)
 	}
 }
@@ -1193,7 +1277,7 @@ func TestDerivedManagerKeepsPreviousFilesWhenCaddyValidationFails(t *testing.T) 
 		t.Fatal(err)
 	}
 	runner := &failingInfrastructureRunner{failOn: "caddy validate"}
-	manager := &DerivedManager{DB: db, GeneratedDir: dir, BaseDomain: "example.internal", PublicAddress: "192.0.2.10", Docker: NewDockerResources(runner, "installation"), CaddyContainer: "caddy", CoreDNSContainer: "coredns"}
+	manager := &DerivedManager{DB: db, GeneratedDir: dir, BaseDomain: "home.local", PublicAddress: "192.0.2.10", Docker: NewDockerResources(runner, "installation"), CaddyContainer: "caddy", AvahiContainer: "avahi"}
 	if err := manager.Sync(context.Background()); err == nil {
 		t.Fatal("Caddyfile検証失敗を成功扱いしました")
 	}
@@ -1205,7 +1289,7 @@ func TestDerivedManagerKeepsPreviousFilesWhenCaddyValidationFails(t *testing.T) 
 	}
 }
 
-func TestDerivedManagerKeepsPreviousFilesWhenCoreDNSReloadFails(t *testing.T) {
+func TestDerivedManagerKeepsPreviousFilesWhenAvahiRestartFails(t *testing.T) {
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -1221,10 +1305,10 @@ func TestDerivedManagerKeepsPreviousFilesWhenCoreDNSReloadFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Caddyfile"), []byte("old caddy\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	runner := &failingInfrastructureRunner{failOn: "kill --signal HUP"}
-	manager := &DerivedManager{DB: db, GeneratedDir: dir, BaseDomain: "example.internal", PublicAddress: "192.0.2.10", Docker: NewDockerResources(runner, "installation"), CaddyContainer: "caddy", CoreDNSContainer: "coredns"}
+	runner := &failingInfrastructureRunner{failOn: "restart avahi"}
+	manager := &DerivedManager{DB: db, GeneratedDir: dir, BaseDomain: "home.local", PublicAddress: "192.0.2.10", Docker: NewDockerResources(runner, "installation"), CaddyContainer: "caddy", AvahiContainer: "avahi"}
 	if err := manager.Sync(context.Background()); err == nil {
-		t.Fatal("CoreDNS再読込失敗を成功扱いしました")
+		t.Fatal("Avahi再起動失敗を成功扱いしました")
 	}
 	for name, want := range map[string]string{"hosts": "old hosts\n", "Caddyfile": "old caddy\n"} {
 		got, readErr := os.ReadFile(filepath.Join(dir, name))
@@ -1283,6 +1367,9 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES('app-id','app','https://github.com/a/b','main','web',3000,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
 	e := &RuntimeExecutor{DB: db, Root: dir, Runner: r}
 	if err := e.reconcile(context.Background(), "app-id", source, runtime, "up", "-d"); err != nil {
 		t.Fatal(err)
@@ -1520,6 +1607,9 @@ func TestRuntimeRejectsEffectiveComposeBeforeUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES('app-id','app','https://github.com/a/b','main','web',3000,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
 	e := &RuntimeExecutor{DB: db, Root: dir, Runner: r}
 	err = e.reconcile(context.Background(), "app-id", source, runtime, "up", "-d")
 	if err == nil {

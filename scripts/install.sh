@@ -157,7 +157,7 @@ main() {
 
   "$PACKAGE_MANAGER" install -y "$package_file"
 
-  printf 'LWSをインストールしました。実行例: sudo lwsctl start --domain example.internal\n'
+  printf 'LWSをインストールしました。実行例: sudo lwsctl start --domain home.local\n'
 }
 
 main "$@"

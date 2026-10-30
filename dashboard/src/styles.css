@@ -11,7 +11,8 @@ body {
   min-width: 320px;
 }
 button,
-input {
+input,
+.register-form select {
   font: inherit;
 }
 button {
@@ -213,6 +214,36 @@ button:disabled {
   font-size: 0.76rem;
   font-weight: 700;
 }
+.source-picker {
+  display: flex;
+  gap: 20px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.source-picker legend {
+  color: #516273;
+  font-size: 0.76rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.register-form .source-picker label,
+.register-form .override-check {
+  display: flex;
+  align-items: center;
+}
+.source-picker input {
+  width: auto;
+}
+.import-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.zip-update {
+  max-width: 560px;
+  padding: 20px 0;
+}
 .field-hint {
   color: #607283;
   font-size: 0.72rem;
@@ -267,7 +298,8 @@ button:disabled {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-input {
+input,
+.register-form select {
   width: 100%;
   padding: 10px;
   border: 1px solid #c5d0c9;
@@ -275,9 +307,17 @@ input {
   background: white;
   color: #162334;
 }
-input:focus {
+input:focus,
+.register-form select:focus {
   outline: 2px solid #4e9a7b;
   outline-offset: 1px;
+}
+.import-actions button:not(.primary),
+.zip-update > .register-form > button:not(.primary) {
+  padding: 10px 14px;
+  border: 1px solid #c5d0c9;
+  background: #fff;
+  color: #294739;
 }
 .primary {
   display: inline-flex;

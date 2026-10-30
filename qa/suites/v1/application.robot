@@ -29,7 +29,7 @@ FT-V1-022 manifest指定のserviceとportで公開する
     未実装の受け入れテストとして記録する    FT-V1-022
 
 FT-V1-023 不正manifestをDocker実行前に拒否する
-    [Documentation]    manifest不在・破損・schema違反でDockerを実行せず既存状態を保持する。
+    [Documentation]    manifestの破損・schema違反でDockerを実行せず既存状態を保持する。
     [Tags]    FT-V1-023    live    planned    workflow    v1
     ${repository}=    Get Environment Variable    LWS_QA_INVALID_MANIFEST_URL    https://github.com/test/lws-invalid-manifest
     ${body}=    Create Dictionary    repositoryUrl=${repository}    ref=main    subdomain=invalid-manifest    requestId=550e8400-e29b-41d4-a716-446655440223

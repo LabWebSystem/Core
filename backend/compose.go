@@ -3,6 +3,7 @@ package backend
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +18,28 @@ type ComposeSource struct {
 	Data []byte
 }
 
+func readComposeFile(root, name string) ([]byte, error) {
+	path := filepath.Join(root, name)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 4<<20 {
+		return nil, fmt.Errorf("Composeファイルを読み取れないかサイズが大きすぎます")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("Composeを読み取れません")
+	}
+	defer file.Close()
+	info, err = file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 4<<20 {
+		return nil, fmt.Errorf("Composeファイルを読み取れないかサイズが大きすぎます")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, (4<<20)+1))
+	if err != nil || len(data) > 4<<20 {
+		return nil, fmt.Errorf("Composeファイルを読み取れないかサイズが大きすぎます")
+	}
+	return data, nil
+}
+
 // ReadComposeSourcesはメインComposeと、指定順のoverrideを同じ順序で読み取る。
 func ReadComposeSources(sourceRoot, composeFile string, overrideFiles []string) ([]ComposeSource, error) {
 	files := append([]string{composeFile}, overrideFiles...)
@@ -26,7 +49,7 @@ func ReadComposeSources(sourceRoot, composeFile string, overrideFiles []string) 
 			return nil, NewValidationError("composeFile", "Composeファイル名が不正です", "INVALID_ARGUMENT")
 		}
 		path := filepath.Join(sourceRoot, file)
-		data, err := os.ReadFile(path)
+		data, err := readComposeFile(sourceRoot, file)
 		if err != nil {
 			return nil, fmt.Errorf("Composeを読み取れません: %w", err)
 		}
@@ -55,8 +78,8 @@ func MergeComposeVariables(sources []ComposeSource) ([]ComposeVariable, error) {
 }
 
 type WebInterface struct {
-	Service string
-	Port    int
+	Service string `json:"service"`
+	Port    int    `json:"port"`
 }
 
 func ComposeHasService(sources []ComposeSource, name string) bool {
@@ -251,14 +274,14 @@ func walkCompose(nodes []*yaml.Node, root string) error {
 }
 
 func ValidateEffectiveCompose(data []byte, publicService string, publicPort int) error {
-	return validateEffectiveCompose(data, publicService, publicPort, "")
+	return validateEffectiveCompose(data, publicService, publicPort, "", false)
 }
 
 func ValidateEffectiveComposeWithOwnedNetwork(data []byte, publicService string, publicPort int, ownedNetwork string) error {
-	return validateEffectiveCompose(data, publicService, publicPort, ownedNetwork)
+	return validateEffectiveCompose(data, publicService, publicPort, ownedNetwork, false)
 }
 
-func validateEffectiveCompose(data []byte, publicService string, publicPort int, ownedNetwork string) error {
+func validateEffectiveCompose(data []byte, publicService string, publicPort int, ownedNetwork string, allowSystemVolumes bool) error {
 	if publicPort < 1 || publicPort > 65535 {
 		return NewValidationError("public.port", "公開portが不正です", "INVALID_PUBLIC_PORT")
 	}
@@ -281,14 +304,14 @@ func validateEffectiveCompose(data []byte, publicService string, publicPort int,
 		if !ok {
 			return NewValidationError("services."+name, "service定義が不正です", "INVALID_COMPOSE")
 		}
-		if err := validateEffectiveService(name, service); err != nil {
+		if err := validateEffectiveService(name, service, allowSystemVolumes); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateEffectiveService(name string, service map[string]any) error {
+func validateEffectiveService(name string, service map[string]any, allowSystemVolumes bool) error {
 	field := "services." + name
 	for _, key := range []string{"privileged", "tmpfs", "network_mode", "pid", "ipc", "ports"} {
 		value, exists := service[key]
@@ -312,9 +335,11 @@ func validateEffectiveService(name string, service map[string]any) error {
 		}
 	}
 	if volumes, ok := service["volumes"].([]any); ok {
-		for _, volume := range volumes {
-			if isBindMount(volume) {
-				return NewValidationError(field+".volumes", "bind mountまたは匿名volumeは許可されていません", "BIND_MOUNT_FORBIDDEN")
+		if !allowSystemVolumes {
+			for _, volume := range volumes {
+				if isBindMount(volume) {
+					return NewValidationError(field+".volumes", "bind mountまたは匿名volumeは許可されていません", "BIND_MOUNT_FORBIDDEN")
+				}
 			}
 		}
 	}
