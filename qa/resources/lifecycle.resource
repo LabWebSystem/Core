@@ -42,7 +42,7 @@ LWS本体の隔離環境を準備する
     Should Be Equal As Integers    ${avahi_build.rc}    0    Avahi image buildに失敗: stdout=${avahi_build.stdout} stderr=${avahi_build.stderr}
 
 LWS本体を停止して隔離環境を削除する
-    Run Keyword If    $QA_ROOT    Run Process    ${LWSCTL}    down    --purge    --force
+    Run Keyword If    $QA_ROOT    Run Process    ${LWSCTL}    down    --purge    --force    --recursive
     Run Keyword If    $QA_ROOT    Remove Directory    ${QA_ROOT}    recursive=True
 
 LWSを起動する
