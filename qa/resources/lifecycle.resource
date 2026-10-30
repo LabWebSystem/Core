@@ -25,7 +25,7 @@ LWS本体の隔離環境を準備する
     ${compose}=    Replace String    ${compose}    lws-internal    ${project}-internal
     ${compose}=    Replace String    ${compose}    context: ..    context: ${WORKSPACE}
     ${compose}=    Evaluate    __import__('re').sub(r'(?m)^\\s*image: ghcr[.]io/.*lws-backend.*\\n', '', $compose)
-    ${compose}=    Evaluate    __import__('re').sub(r'(?m)^ *image: ghcr[.]io/.*lws-avahi:.*$', '    image: lws-avahi-qa:local', $compose)
+    ${compose}=    Evaluate    __import__('re').sub(r'(?m)^ *image: ghcr[.]io/.*lws-avahi:.*$', lambda line: (' ' * 4) + 'image: lws-avahi-qa:local', $compose)
     Should Contain    ${compose}    image: lws-avahi-qa:local
     ${compose_file}=    Set Variable    ${qa_root}/compose.yaml
     Create File    ${compose_file}    ${compose}
