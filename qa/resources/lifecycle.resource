@@ -37,7 +37,7 @@ LWS本体の隔離環境を準備する
     Set Environment Variable    LWS_AVAHI_CONTAINER    ${project}-avahi-1
     ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|5353)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
     Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、5353/udp)が既に使用されています。
-    ${avahi_build}=    Run Process    docker    build    --network=host    --file    ${WORKSPACE}/infrastructure/Dockerfile.avahi    --tag    lws-avahi-qa:local    ${WORKSPACE}
+    ${avahi_build}=    Run Process    docker    build    --network    host    --file    ${WORKSPACE}/infrastructure/Dockerfile.avahi    --tag    lws-avahi-qa:local    ${WORKSPACE}
     Should Be Equal As Integers    ${avahi_build.rc}    0
 
 LWS本体を停止して隔離環境を削除する
