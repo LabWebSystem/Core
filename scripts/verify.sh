@@ -78,6 +78,8 @@ run_step() {
   append_record "$id" 'FAIL' "$description" "$elapsed"
   LOGS+=("$id|$description|$log")
   print_item "$id" 'FAIL' "$description" "$elapsed" >&2
+  printf '検証ログ (%s):\n' "$id" >&2
+  sed 's/\r$//' "$log" >&2
   return 1
 }
 
