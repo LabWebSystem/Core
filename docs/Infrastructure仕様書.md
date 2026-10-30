@@ -52,7 +52,7 @@
 - Caddyのedge network接続はBackendがDocker APIで行い、Backend起動後はSQLiteの正本から再調整する。
 - Docker daemonのアドレスプールは、想定アプリ数に必要なbridge network数を運用者が確保する。枯渇時は登録・起動を失敗させ、既存アプリを変更しない。
 - `config.env`には`LWS_BASE_DOMAIN`、`LWS_VERSION`、`LWS_INSTALLATION_ID`、`LWS_PUBLIC_ADDRESS`を保存する。初回`lwsctl start --domain`はデフォルト経路のIPv4を保存し、`LWS_PUBLIC_ADDRESS`があれば優先する。IPを一意に決められなければ失敗する。
-- Backendは起動時および状態変更後に、SQLiteの有効アプリ一覧からhostsとCaddyfileを一時ファイルへ生成しatomic renameする。hostsは`api.<base-domain>`と各アプリURLを`LWS_PUBLIC_ADDRESS`へ対応付ける。Dashboardも`dashboard.<base-domain>`のシステムアプリとして一覧に含める。Caddyfileは登録アプリと同じedge network上のDashboardへ転送し、Dashboardの`/api/v1`だけBackendへ中継して`api.<base-domain>`のHostを渡す。
+- Backendは起動時および状態変更後に、SQLiteの有効アプリ一覧からhostsとCaddyfileを一時ファイルへ生成しatomic renameする。hostsは`api-<base-domain-prefix>.local`と各アプリURLを`LWS_PUBLIC_ADDRESS`へ対応付ける。Dashboardも`dashboard-<base-domain-prefix>.local`のシステムアプリとして一覧に含める。Caddyfileは登録アプリと同じedge network上のDashboardへ転送し、Dashboardの`/api/v1`だけBackendへ中継して同じAPIホストのHostを渡す。
 - Dashboard imageはLWSリリース成果物として配布するが、基盤Compose serviceにはしない。Backendが起動時にシステムアプリとして状態表へ登録し、通常アプリと同じCompose runtime、edge network、Reverse Proxy経路で起動する。Dashboardは初期状態で起動し、他アプリと同様に開始・停止できる。システムアプリはAPIとDB制約で削除・登録解除できない。
 - Avahiは生成hostsの更新後、所有確認済みコンテナを再起動して静的レコードを再読込する。Caddyは生成volume上のCaddyfileを検証後、所有確認済みコンテナのadmin APIへ`caddy reload`を実行して無停止再読込する。反映に失敗した場合は生成ファイルを復元する。
 - Avahiはホストネットワーク上で動作し、UDP 5353で`.local`レコードをmDNS広告する。Backendが生成する`hosts`を静的ホスト定義として使い、ルーターDNSや通常のDNS問い合わせは扱わない。
@@ -98,7 +98,7 @@ public:
 | `public.service` | `^[a-z][a-z0-9_-]{0,62}$` |
 | `public.port` | 1〜65535の整数 |
 
-manifestの表示情報はComposeのトップレベル`name`と無関係である。公開subdomainは登録時にBackendへ与え、manifestには書かない。
+manifestの表示情報はComposeのトップレベル`name`と無関係である。公開appNameは登録時にBackendへ与え、manifestには書かない。公開名とベースドメイン末尾ラベル以外をハイフンで連結し、末尾ラベルとの間だけドットを置く。
 
 ## 6. Composeの実行と検証
 

@@ -141,34 +141,38 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		return e.syncDerived(ctx)
 	case "UPDATE":
 		var request struct {
-			Ref       string `json:"ref"`
-			Subdomain string `json:"subdomain"`
+			Ref     string `json:"ref"`
+			AppName string `json:"appName"`
 		}
 		if err := json.Unmarshal([]byte(op.Payload), &request); err != nil {
 			return fmt.Errorf("更新内容が不正です")
 		}
-		var oldSubdomain, oldRef string
-		if err := e.DB.QueryRowContext(ctx, `SELECT subdomain,git_ref FROM applications WHERE id=?`, op.ApplicationID).Scan(&oldSubdomain, &oldRef); err != nil {
+		var oldAppName, oldRef string
+		if err := e.DB.QueryRowContext(ctx, `SELECT app_name,git_ref FROM applications WHERE id=?`, op.ApplicationID).Scan(&oldAppName, &oldRef); err != nil {
 			return fmt.Errorf("アプリ情報を取得できません")
 		}
-		newRef, newSubdomain := oldRef, oldSubdomain
+		newRef, newAppName := oldRef, oldAppName
 		if request.Ref != "" {
 			newRef = request.Ref
 		}
-		if request.Subdomain != "" {
-			newSubdomain = request.Subdomain
+		if request.AppName != "" {
+			newAppName = request.AppName
 		}
 		if err := ValidateRef(newRef); err != nil {
 			return err
 		}
-		if err := ValidateSubdomain(newSubdomain); err != nil {
+		if e.Derived != nil {
+			if err := ValidateAppNameForDomain(newAppName, e.Derived.BaseDomain); err != nil {
+				return err
+			}
+		} else if err := ValidateAppName(newAppName); err != nil {
 			return err
 		}
-		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, newSubdomain, newRef, op.ApplicationID); err != nil {
+		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET app_name=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, newAppName, newRef, op.ApplicationID); err != nil {
 			return err
 		}
 		if err := e.Run(ctx, Operation{ApplicationID: op.ApplicationID, Kind: "SYNC"}); err != nil {
-			_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, oldSubdomain, oldRef, op.ApplicationID)
+			_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET app_name=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, oldAppName, oldRef, op.ApplicationID)
 			return err
 		}
 		return nil

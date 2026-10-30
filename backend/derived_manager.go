@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/LabWebSystem/Core/internal/hostname"
 )
 
 type DerivedManager struct {
@@ -24,19 +27,31 @@ const (
 )
 
 func (m *DerivedManager) Sync(ctx context.Context) error {
-	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain,COALESCE(NULLIF(public_service,''),manifest_service),CASE WHEN public_port > 0 THEN public_port ELSE manifest_port END,is_system FROM applications WHERE registration_state='ACTIVE' ORDER BY subdomain`)
+	rows, err := m.DB.QueryContext(ctx, `SELECT id,app_name,COALESCE(NULLIF(public_service,''),manifest_service),CASE WHEN public_port > 0 THEN public_port ELSE manifest_port END,is_system FROM applications WHERE registration_state='ACTIVE' ORDER BY app_name`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	apps := []PublishedApplication{}
 	for rows.Next() {
-		var id, sub, service string
+		var id, appName, service string
 		var port, isSystem int
-		if err := rows.Scan(&id, &sub, &service, &port, &isSystem); err != nil {
+		if err := rows.Scan(&id, &appName, &service, &port, &isSystem); err != nil {
 			return err
 		}
-		apps = append(apps, PublishedApplication{AppID: id, Subdomain: sub, Service: service, Port: port, IsSystem: isSystem != 0})
+		var validationErr error
+		if isSystem != 0 {
+			host := hostname.Public(appName, m.BaseDomain)
+			if len(host) > 253 || len(strings.SplitN(host, ".", 2)[0]) > 63 {
+				validationErr = fmt.Errorf("システムアプリの公開ホスト名が長すぎます")
+			}
+		} else {
+			validationErr = ValidateAppNameForDomain(appName, m.BaseDomain)
+		}
+		if validationErr != nil {
+			return fmt.Errorf("公開名 %q をベースドメインで使用できません: %w", appName, validationErr)
+		}
+		apps = append(apps, PublishedApplication{AppID: id, AppName: appName, Service: service, Port: port, IsSystem: isSystem != 0})
 	}
 	if err := rows.Err(); err != nil {
 		return err

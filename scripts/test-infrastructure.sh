@@ -16,9 +16,9 @@ trap cleanup EXIT
 
 mkdir -p "$TMP/generated"
 cat >"$TMP/generated/hosts" <<'EOF'
-192.0.2.10 api.home.local
-192.0.2.10 dashboard.home.local
-192.0.2.10 app-a.home.local
+192.0.2.10 api-home.local
+192.0.2.10 dashboard-home.local
+192.0.2.10 app-a-home.local
 EOF
 
 docker build --network=host -f "$ROOT/infrastructure/Dockerfile.avahi" -t "$AVAHI_IMAGE" "$ROOT" >/dev/null

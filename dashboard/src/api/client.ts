@@ -61,7 +61,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...input, requestId: requestId() }),
     }),
-  update: (app: Application, input: { ref?: string; subdomain?: string }) =>
+  update: (app: Application, input: { ref?: string; appName?: string }) =>
     request<{ name: string }>(`/applications/${encodeURIComponent(appId(app))}`, {
       method: "PATCH",
       body: JSON.stringify({ ...input, requestId: requestId() }),

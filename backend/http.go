@@ -22,6 +22,7 @@ type Server struct {
 	AppsRoot      string
 	AllowedHost   string
 	AllowedOrigin string
+	BaseDomain    string
 	Ready         func() bool
 	events        *Events
 	worker        *Worker
@@ -122,7 +123,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, compose_file, override_files, desired_state, observed_state, registration_state, latest_error, updated_at, is_system FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
+	rows, err := s.DB.Query(`SELECT id, app_name, repository_url, git_ref, compose_file, override_files, desired_state, observed_state, registration_state, latest_error, updated_at, is_system FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY app_name`)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ一覧を取得できません", "")
 		return
@@ -130,9 +131,9 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, sub, repo, ref, composeFile, overrideFiles, desired, observed, state, latestError, updated string
+		var id, appName, repo, ref, composeFile, overrideFiles, desired, observed, state, latestError, updated string
 		var isSystem int
-		if err := rows.Scan(&id, &sub, &repo, &ref, &composeFile, &overrideFiles, &desired, &observed, &state, &latestError, &updated, &isSystem); err != nil {
+		if err := rows.Scan(&id, &appName, &repo, &ref, &composeFile, &overrideFiles, &desired, &observed, &state, &latestError, &updated, &isSystem); err != nil {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
@@ -150,7 +151,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 			overrides = []string{}
 		}
 		items = append(items, map[string]any{
-			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "composeFile": composeFile,
+			"name": "applications/" + id, "appName": appName, "repositoryUrl": repo, "ref": ref, "composeFile": composeFile,
 			"overrideFiles": overrides,
 			"isSystem":      isSystem != 0,
 			"desiredState":  desired, "observedState": observed, "registrationState": state,
@@ -174,7 +175,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RepositoryURL string   `json:"repositoryUrl"`
 		Ref           string   `json:"ref"`
-		Subdomain     string   `json:"subdomain"`
+		AppName       string   `json:"appName"`
 		ComposeFile   string   `json:"composeFile"`
 		OverrideFiles []string `json:"overrideFiles"`
 		RequestID     string   `json:"requestId"`
@@ -200,7 +201,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		}
 		seenOverrides[override] = true
 	}
-	if err := ValidateSubdomain(req.Subdomain); err != nil {
+	if err := ValidateAppNameForDomain(req.AppName, s.BaseDomain); err != nil {
 		writeValidationError(w, err)
 		return
 	}
@@ -217,7 +218,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	overridesJSON, _ := json.Marshal(req.OverrideFiles)
-	fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(req.RepositoryURL+"\n"+req.Ref+"\n"+req.Subdomain+"\n"+req.ComposeFile+"\n"+string(overridesJSON))))
+	fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(req.RepositoryURL+"\n"+req.Ref+"\n"+req.AppName+"\n"+req.ComposeFile+"\n"+string(overridesJSON))))
 	var existingID, existingKind, existingFingerprint string
 	err := s.DB.QueryRowContext(r.Context(), `SELECT id,kind,request_fingerprint FROM operations WHERE request_id=?`, req.RequestID).Scan(&existingID, &existingKind, &existingFingerprint)
 	if err == nil {
@@ -239,9 +240,9 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ登録を開始できません", "")
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(), `INSERT INTO applications(id,subdomain,repository_url,git_ref,compose_file,override_files,created_at,updated_at) VALUES(?,?,?,?,?,?,datetime('now'),datetime('now'))`, id, req.Subdomain, req.RepositoryURL, req.Ref, req.ComposeFile, string(overridesJSON)); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `INSERT INTO applications(id,app_name,repository_url,git_ref,compose_file,override_files,created_at,updated_at) VALUES(?,?,?,?,?,?,datetime('now'),datetime('now'))`, id, req.AppName, req.RepositoryURL, req.Ref, req.ComposeFile, string(overridesJSON)); err != nil {
 		_ = tx.Rollback()
-		writeAPIError(w, 409, "ALREADY_EXISTS", "同じsubdomainのアプリが既に存在します", "subdomain")
+		writeAPIError(w, 409, "ALREADY_EXISTS", "同じアプリ名が既に存在します", "appName")
 		return
 	}
 	op, err := createOperationWithExecutor(r.Context(), tx, id, req.RequestID, "CREATE", fingerprint, "")

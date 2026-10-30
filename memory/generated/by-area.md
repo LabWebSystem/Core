@@ -18,8 +18,9 @@
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
-- ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
+- ADR-016 | SUPERSEDED | - | Avahiコンテナで`.local` mDNSだけを提供する
 - ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
+- ADR-018 | ACCEPTED | - | mDNS公開名を単一DNSラベルへ平坦化する
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -104,6 +105,10 @@
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 - SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
+- SUP-003 | ACTIVE | - | mDNS公開名のドット区切り規則を単一ラベル形式へ置き換える
+
+## Backend / Dashboard / CLI / Infrastructure / Packaging / Documentation
+- CHG-096 | SHIPPED | Backend / Dashboard / CLI / Infrastructure / Packaging / Documentation | mDNS公開ホスト名を単一ラベル形式へ変更する
 
 ## Backend / Dashboard / Infrastructure / documentation
 - CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する

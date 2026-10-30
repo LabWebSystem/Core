@@ -67,7 +67,7 @@ func (s *Server) getResourcePools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	volumes, networks := []map[string]any{}, []map[string]any{}
-	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,subdomain,compose_file FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY subdomain`)
+	apps, err := s.DB.QueryContext(r.Context(), `SELECT id,app_name,compose_file FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING') ORDER BY app_name`)
 	if err == nil {
 		defer apps.Close()
 		for apps.Next() {
@@ -662,9 +662,9 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	var id, sub, repo, ref, desired, observed, state, latestError, created, updated string
+	var id, appName, repo, ref, desired, observed, state, latestError, created, updated string
 	var isSystem int
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,desired_state,observed_state,registration_state,latest_error,created_at,updated_at,is_system FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &latestError, &created, &updated, &isSystem)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,app_name,repository_url,git_ref,desired_state,observed_state,registration_state,latest_error,created_at,updated_at,is_system FROM applications WHERE id=?`, appID(r)).Scan(&id, &appName, &repo, &ref, &desired, &observed, &state, &latestError, &created, &updated, &isSystem)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, 404, "NOT_FOUND", "アプリが見つかりません", "application")
 		return
@@ -685,7 +685,7 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 	etag := fmt.Sprintf("\"%x\"", sha256.Sum256([]byte(id+"\x00"+updated+"\x00"+desired+"\x00"+observed)))
 	response := map[string]any{
 		"name":              "applications/" + id,
-		"subdomain":         sub,
+		"appName":           appName,
 		"repositoryUrl":     repo,
 		"ref":               ref,
 		"isSystem":          isSystem != 0,
@@ -724,14 +724,14 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	var p struct {
 		Ref       string `json:"ref"`
-		Subdomain string `json:"subdomain"`
+		AppName   string `json:"appName"`
 		RequestID string `json:"requestId"`
 	}
 	if json.NewDecoder(r.Body).Decode(&p) != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "JSONが不正です", "body")
 		return
 	}
-	if p.Ref == "" && p.Subdomain == "" {
+	if p.Ref == "" && p.AppName == "" {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "変更項目が必要です", "updateMask")
 		return
 	}
@@ -745,8 +745,8 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if p.Subdomain != "" {
-		if err := ValidateSubdomain(p.Subdomain); err != nil {
+	if p.AppName != "" {
+		if err := ValidateAppNameForDomain(p.AppName, s.BaseDomain); err != nil {
 			writeValidationError(w, err)
 			return
 		}

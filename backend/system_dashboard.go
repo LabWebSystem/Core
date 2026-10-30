@@ -51,20 +51,20 @@ func EnsureSystemDashboard(ctx context.Context, db *sql.DB, appsRoot, installati
 		return "", fmt.Errorf("Dashboard manifestを生成できません: %w", err)
 	}
 	_, err := db.ExecContext(ctx, `INSERT INTO applications(
-		id,subdomain,repository_url,git_ref,manifest_name,manifest_description,
+		id,app_name,repository_url,git_ref,manifest_name,manifest_description,
 		desired_state,observed_state,registration_state,installation_id,
 		manifest_service,manifest_port,public_service,public_port,compose_file,override_files,is_system,
 		created_at,updated_at
 	) VALUES(?,?,?,?,?,?, 'RUNNING','UNKNOWN','ACTIVE',?,'web',80,'web',80,'compose.yaml','[]',1,datetime('now'),datetime('now'))
 	ON CONFLICT(id) DO UPDATE SET
-		subdomain=excluded.subdomain,repository_url='',git_ref=excluded.git_ref,
+		app_name=excluded.app_name,repository_url='',git_ref=excluded.git_ref,
 		manifest_name=excluded.manifest_name,manifest_description=excluded.manifest_description,
 		registration_state='ACTIVE',installation_id=excluded.installation_id,
 		manifest_service='web',manifest_port=80,public_service='web',public_port=80,
 		compose_file='compose.yaml',override_files='[]',is_system=1,updated_at=datetime('now')`,
 		id, "dashboard", "", version, "LWS Dashboard", "LWSの管理画面", installationID)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: applications.subdomain") {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: applications.app_name") {
 			return "", fmt.Errorf("dashboardはLWS Dashboard用に予約されています。既存アプリの公開名を変更してください")
 		}
 		return "", fmt.Errorf("Dashboardをシステムアプリとして登録できません: %w", err)

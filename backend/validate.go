@@ -9,11 +9,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/LabWebSystem/Core/internal/hostname"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
 
-var subdomainPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+var appNamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 var variablePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 var servicePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
 var baseDomainPattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:local|localhost)$`)
@@ -23,6 +24,12 @@ var simpleComposeVariablePattern = regexp.MustCompile(`(^|[^$])\$([A-Za-z_][A-Za
 func ValidateBaseDomain(value string) error {
 	if !baseDomainPattern.MatchString(value) {
 		return NewValidationError("baseDomain", "ベースドメインが不正です", "INVALID_BASE_DOMAIN")
+	}
+	for _, systemName := range []string{"api", "dashboard"} {
+		host := hostname.Public(systemName, value)
+		if len(host) > 253 || len(strings.SplitN(host, ".", 2)[0]) > 63 {
+			return NewValidationError("baseDomain", "システムアプリを含む公開ホスト名が長すぎます", "INVALID_BASE_DOMAIN")
+		}
 	}
 	return nil
 }
@@ -51,12 +58,27 @@ func RepositoryURLAndRef(raw, fallback string) (string, string) {
 	return strings.TrimRight(raw, "/"), fallback
 }
 
-func ValidateSubdomain(value string) error {
-	if !subdomainPattern.MatchString(value) {
-		return NewValidationError("subdomain", "subdomainが不正です", "INVALID_SUBDOMAIN")
+func ValidateAppName(value string) error {
+	if !appNamePattern.MatchString(value) {
+		return NewValidationError("appName", "アプリ名が不正です", "INVALID_APP_NAME")
 	}
-	if value == "dashboard" {
-		return NewValidationError("subdomain", "dashboardはLWS Dashboard用に予約されています", "RESERVED_SUBDOMAIN")
+	if value == "dashboard" || value == "api" {
+		return NewValidationError("appName", "apiとdashboardはLWS用に予約されています", "RESERVED_APP_NAME")
+	}
+	return nil
+}
+
+func ValidateAppNameForDomain(value, baseDomain string) error {
+	if err := ValidateAppName(value); err != nil {
+		return err
+	}
+	host := hostname.Public(value, baseDomain)
+	if len(host) > 253 {
+		return NewValidationError("appName", "生成される公開ホスト名が長すぎます", "INVALID_PUBLIC_HOSTNAME")
+	}
+	label := strings.SplitN(host, ".", 2)[0]
+	if len(label) > 63 {
+		return NewValidationError("appName", "ベースドメインと連結した公開名は63文字以内にしてください", "INVALID_PUBLIC_HOSTNAME")
 	}
 	return nil
 }

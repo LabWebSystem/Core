@@ -77,7 +77,7 @@ describe("Dashboard デバッグルーム", () => {
       expect(apiMock.create.mock.calls[0]?.[0]).toEqual({
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
-        subdomain: "test-app",
+        appName: "test-app",
       }),
     );
   });
@@ -86,7 +86,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -108,7 +108,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/system-dashboard",
-        subdomain: "dashboard",
+        appName: "dashboard",
         repositoryUrl: "",
         ref: "0.1.0",
         isSystem: true,
@@ -131,7 +131,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -174,7 +174,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -199,7 +199,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -233,7 +233,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -263,7 +263,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -292,7 +292,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,
@@ -363,7 +363,7 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.list.mockResolvedValue([
       {
         name: "applications/test",
-        subdomain: "test",
+        appName: "test",
         repositoryUrl: "https://github.com/example/test",
         ref: "main",
         isSystem: false,

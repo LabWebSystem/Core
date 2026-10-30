@@ -31,11 +31,11 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 
 | エンティティ | 主な内容 |
 | --- | --- |
-| `applications` | app-id、subdomain、repository URL、ref、manifest表示情報・公開service・公開port、desired state、revision、最終エラー、登録状態、時刻 |
+| `applications` | app-id、appName、repository URL、ref、manifest表示情報・公開service・公開port、desired state、revision、最終エラー、登録状態、時刻 |
 | `application_variables` | app-id、変数名、secretフラグ、暗号化済み値または通常値、更新時刻 |
 | `operations` | operation ID、app-id、種別、状態、時刻、エラー概要 |
 
-- app-idはBackend発行UUID、subdomainは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開URLは`<subdomain>.<base-domain>`である。
+- app-idはBackend発行UUID、appNameは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開ホスト名はappNameとベースドメインの末尾ラベル以外をハイフンで連結し、末尾ラベルとの間にドットを置く（例: `app` + `lab.local` → `app-lab.local`）。生成するDNSラベルは63文字以内とする。
 - `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
 - コンテナ、network、volumeの実在と状態はDockerから都度照会し、DBへ複製しない。
 - 登録状態は`CONFIGURING`、`ACTIVE`、`UNREGISTERED`。初回登録はsourceとmanifestを検査して`CONFIGURING`へ遷移し、containerを起動しない。必須環境変数とCompose deviceのLWSデバイスbindingが設定済みの場合だけ開始して`ACTIVE`へ遷移する。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。
@@ -51,7 +51,7 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 ### 3.1 HTTP API
 
 - prefixは`/api/v1`。成功・失敗レスポンスはJSON、利用者向けメッセージは日本語とする。
-- 認証・認可は持たない。到達可能なLAN端末を管理者として扱う。BackendはCaddy経由以外を受け付けず、CORSを許可しない。`dashboard.<base-domain>`から同一Originの`/api/v1`へ送られた要求だけを許可し、任意の`Origin`は拒否する。
+- 認証・認可は持たない。到達可能なLAN端末を管理者として扱う。BackendはCaddy経由以外を受け付けず、CORSを許可しない。`dashboard-<base-domain-prefix>.local`から同一Originの`/api/v1`へ送られた要求だけを許可し、任意の`Origin`は拒否する。
 - 状態変更はJSONの`Content-Type`と許可済み`Host`を要求する。`Origin` headerがある要求は許可済みoriginだけを受け付ける。
 
 | メソッド | パス | 処理 |
@@ -68,7 +68,7 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | `GET` | `/applications/{application}/logEntries` | 永続ログの取得。`view=task|application|related`、service、期間、cursor、limitで絞り込む |
 | `GET` | `/applications/{application}/logEntries:watch` | cursorから再開できるSSEによる永続ログ配信 |
 
-- 登録要求は`repositoryUrl`、`ref`、`subdomain`を含む。表示名と説明はmanifestから読む。
+- 登録要求は`repositoryUrl`、`ref`、`appName`を含む。表示名と説明はmanifestから読む。
 - 長時間操作はOperationを返す。同一app-idへの変更は永続FIFOで待機し、同じapp-idで同時に実行しない。同じrequestIdの再送は既存Operationへ収束する。
 - 登録解除はアプリcontainerとapp用edge networkだけを削除し、source、runtime、named volume、アプリ設定、UNREGISTEREDのDB記録を保持する。再登録は保持したsource・設定を使って復帰する。完全削除は`UNREGISTERED`または`CONFIGURING`で`confirm:true`の要求だけが実行でき、アプリデータ、source、runtime、所有確認済みvolumeを削除してからDB記録を物理削除する。CONFIGURINGからは先に登録解除する。途中失敗時は記録を保持する。
 
@@ -143,7 +143,7 @@ UIのINPは75パーセンタイル200ms以下とする。clone、build、起動�
 
 少なくとも次を自動テストする。
 
-- URL、subdomain、manifest schema、変数名、path traversal、symlink、禁止Compose機能の拒否
+- URL、appName、manifest schema、変数名、path traversal、symlink、禁止Compose機能の拒否
 - manifest指定serviceの存在、source `.env`・`compose.override.yaml`非取込み、変数展開後の再検証
 - bind mount、匿名volume、host port、privileged、Docker socket、host network/PID/IPC、external resourceの拒否。deviceはLWSデバイスプールに登録済みで接続中のものだけを実行時overrideへ解決する。
 - `PATH_OUTSIDE_PROJECT_ROOT`、`BIND_MOUNT_FORBIDDEN`、secret非表示、HTTP origin・content-type制約

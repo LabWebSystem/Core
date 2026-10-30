@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: "0.0.0.0",
-    allowedHosts: ["dashboard.lws.localhost"],
+    allowedHosts: ["dashboard-lws.localhost"],
   },
   test: {
     environment: "jsdom",

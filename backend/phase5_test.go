@@ -21,7 +21,7 @@ func TestGetApplicationIncludesObservedAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
@@ -37,7 +37,7 @@ func TestListApplicationsReturnsApplicationContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestListApplicationsReturnsApplicationContract(t *testing.T) {
 	if len(response.Applications) != 1 {
 		t.Fatalf("一覧件数=%d", len(response.Applications))
 	}
-	for _, field := range []string{"name", "subdomain", "repositoryUrl", "ref", "isSystem", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
+	for _, field := range []string{"name", "appName", "repositoryUrl", "ref", "isSystem", "desiredState", "observedState", "registrationState", "observedAt", "reconciling", "etag"} {
 		if _, ok := response.Applications[0][field]; !ok {
 			t.Fatalf("一覧Applicationの必須項目がありません: %s", field)
 		}
@@ -67,7 +67,7 @@ func TestUnknownApplicationOperationIsRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications/app:unknown", strings.NewReader(`{"requestId":"550e8400-e29b-41d4-a716-446655440114"}`))
@@ -184,13 +184,13 @@ func TestCreateApplicationRollsBackWhenOperationCreationFails(t *testing.T) {
 	if _, err := db.Exec(`CREATE TRIGGER reject_operation BEFORE INSERT ON operations BEGIN SELECT RAISE(ABORT, 'operation unavailable'); END`); err != nil {
 		t.Fatal(err)
 	}
-	body := strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","ref":"main","subdomain":"demo","requestId":"550e8400-e29b-41d4-a716-446655440113"}`)
+	body := strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","ref":"main","appName":"demo","requestId":"550e8400-e29b-41d4-a716-446655440113"}`)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
 	req.Header.Set("Content-Type", "application/json")
 	NewServer(db, nil).Handler().ServeHTTP(rr, req)
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM applications WHERE subdomain='demo'").Scan(&count); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM applications WHERE app_name='demo'").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 0 {
@@ -204,7 +204,7 @@ func TestCreateApplicationAcceptsComposeSelectionDefinedByOpenAPI(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer db.Close()
-	body := strings.NewReader(`{"repositoryUrl":"https://github.com/example/app/tree/dev/new-arch","ref":"dev/new-arch","subdomain":"oruca","composeFile":"compose.dev.yaml","overrideFiles":["compose.local.yaml"],"requestId":"550e8400-e29b-41d4-a716-446655440114"}`)
+	body := strings.NewReader(`{"repositoryUrl":"https://github.com/example/app/tree/dev/new-arch","ref":"dev/new-arch","appName":"oruca","composeFile":"compose.dev.yaml","overrideFiles":["compose.local.yaml"],"requestId":"550e8400-e29b-41d4-a716-446655440114"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -220,7 +220,7 @@ func TestOperationSSEPublishesEnvelopeAndReplaysTerminalState(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	op, err := CreateOperation(context.Background(), db, "app", "550e8400-e29b-41d4-a716-446655440111", "START")
@@ -257,7 +257,7 @@ func TestOperationSSEDisconnectAndReconnectCanRecoverFromHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	op, err := CreateOperation(context.Background(), db, "app", "550e8400-e29b-41d4-a716-446655440112", "START")
@@ -317,7 +317,7 @@ func TestRestartMarksUnfinishedOperationsFailed(t *testing.T) {
 	}
 	defer db.Close()
 	for _, id := range []string{"app-a", "app-b"} {
-		if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES (?, ?, 'https://github.com/a/b','main',datetime('now'),datetime('now'))`, id, id); err != nil {
+		if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES (?, ?, 'https://github.com/a/b','main',datetime('now'),datetime('now'))`, id, id); err != nil {
 			t.Fatal(err)
 		}
 	}

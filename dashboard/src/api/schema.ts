@@ -364,7 +364,7 @@ export interface components {
             name: string;
             composeFile?: string;
             overrideFiles?: string[];
-            subdomain: string;
+            appName: string;
             repositoryUrl: string;
             ref: string;
             isSystem: boolean;
@@ -447,7 +447,7 @@ export interface components {
             /** Format: uri */
             repositoryUrl: string;
             ref: string;
-            subdomain: string;
+            appName: string;
             composeFile?: string;
             overrideFiles?: string[];
             /** Format: uuid */
@@ -455,7 +455,7 @@ export interface components {
         };
         UpdateApplicationRequest: {
             ref?: string;
-            subdomain?: string;
+            appName?: string;
             /** Format: uuid */
             requestId: string;
         };

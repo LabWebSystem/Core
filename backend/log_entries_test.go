@@ -18,7 +18,7 @@ func newLogStoreForTest(t *testing.T) (*sql.DB, *LogStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	return db, NewLogStore(db)

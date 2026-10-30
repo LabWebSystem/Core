@@ -46,6 +46,6 @@ test("アプリ登録フォームから登録APIを呼び出す", async ({ page 
   expect(body).toMatchObject({
     repositoryUrl: "https://github.com/example/test",
     ref: "main",
-    subdomain: "test",
+    appName: "test",
   });
 });

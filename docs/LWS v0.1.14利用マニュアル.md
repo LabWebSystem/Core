@@ -1,6 +1,6 @@
-# LWS v0.1.11 開発版 利用マニュアル
+# LWS v0.1.14 利用マニュアル
 
-> この文書はCore v0.1.11の開発版を対象とします。公開済みリリースの最新タグはv0.1.10です。
+この文書はCore v0.1.14を対象とします。
 
 ## LWSでできること
 
@@ -26,13 +26,13 @@ LWSの起動時にベースドメインを一つ設定します。
 example.local
 ```
 
-登録したアプリにはサブドメインを割り当てます。例えば`予約システム`に`reserve`を割り当てると、次のURLでアクセスできます。
+登録時にアプリ名を指定します。ベースドメインが`example.local`で、アプリ名が`reserve`の場合、URLは次のとおりです。
 
 ```text
-reserve.example.local
+reserve-example.local
 ```
 
-Dashboardは`dashboard.example.local`で開きます。名前解決はmDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用端末とLWSホストが同じLAN上にあり、端末のmDNSが有効である必要があります。
+Dashboardは`dashboard-example.local`、APIは`api-example.local`で開きます。ベースドメインが複数ラベルの場合、末尾の`.local`より前をハイフンで連結します。名前解決はmDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用端末とLWSホストが同じLAN上にあり、端末のmDNSが有効である必要があります。
 
 ## 利用を始める
 
@@ -107,7 +107,7 @@ public:
   port: 3000
 ```
 
-Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdomainを指定して登録します。登録後、LWSがリポジトリを取得・検査し、アプリは`CONFIGURING`（設定待ち）になります。Dashboardで環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
+Backend APIで、GitHubリポジトリ、ブランチまたはref、`appName`を指定して登録します。登録後、LWSがリポジトリを取得・検査し、アプリは`CONFIGURING`（設定待ち）になります。Dashboardで環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
 
 アプリの公開serviceやportは推測されません。manifestに記載したserviceがCompose内に存在しない場合、アプリは起動されません。
 
@@ -118,7 +118,7 @@ Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdom
 - 現在の状態を確認する
 - 起動・停止する
 - Composeを再構成する
-- リポジトリのrefや公開subdomainを変更する
+- リポジトリのrefや公開appNameを変更する
 - 最新のsourceを再取得して同期する
 - コンテナログを確認する
 - 環境変数を設定する
@@ -130,11 +130,11 @@ Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdom
 APIを直接使う場合の最小例は次のとおりです。
 
 ```sh
-curl -X POST http://api.example.local/api/v1/applications \
+curl -X POST http://api-example.local/api/v1/applications \
   -H 'Content-Type: application/json' \
-  -d '{"repositoryUrl":"https://github.com/example/app","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}'
+  -d '{"repositoryUrl":"https://github.com/example/app","ref":"main","appName":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}'
 
-curl http://api.example.local/api/v1/operations/<operation-id>
+curl http://api-example.local/api/v1/operations/<operation-id>
 ```
 
 変更操作は`202`とOperation名を返します。完了状態はOperation APIまたはSSEで確認します。
@@ -143,7 +143,7 @@ curl http://api.example.local/api/v1/operations/<operation-id>
 
 アプリごとに環境変数を設定できます。パスワードやAPIキーなどsecretとして登録した値は暗号化して保存され、取得時に値そのものは表示されません。
 
-ただし、LWS v0.1.11にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
+ただし、LWS v0.1.14にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
 
 ## リソースプールと設定レイヤー
 

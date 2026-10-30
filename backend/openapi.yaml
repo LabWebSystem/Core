@@ -193,12 +193,12 @@ components:
         updatedAt: { type: string, format: date-time }
     Application:
       type: object
-      required: [name, subdomain, repositoryUrl, ref, isSystem, desiredState, observedState, registrationState, observedAt, reconciling, etag]
+      required: [name, appName, repositoryUrl, ref, isSystem, desiredState, observedState, registrationState, observedAt, reconciling, etag]
       properties:
         name: { type: string, pattern: '^applications/.+$' }
         composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
         overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
-        subdomain: { type: string }
+        appName: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
         repositoryUrl: { type: string }
         ref: { type: string }
         isSystem: { type: boolean }
@@ -301,11 +301,11 @@ components:
         publicPort: { type: integer, minimum: 1, maximum: 65535 }
     CreateApplicationRequest:
       type: object
-      required: [repositoryUrl, ref, subdomain, requestId]
+      required: [repositoryUrl, ref, appName, requestId]
       properties:
         repositoryUrl: { type: string, format: uri }
         ref: { type: string, minLength: 1 }
-        subdomain: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
+        appName: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
         composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
         overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
         requestId: { type: string, format: uuid }
@@ -314,7 +314,7 @@ components:
       required: [requestId]
       properties:
         ref: { type: string }
-        subdomain: { type: string }
+        appName: { type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
         requestId: { type: string, format: uuid }
     ConfigurationRequest:
       type: object

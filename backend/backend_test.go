@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/LabWebSystem/Core/internal/hostname"
 )
 
 func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
@@ -26,7 +28,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 11 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 12 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,8 +37,49 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 11 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 12 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
+	}
+}
+
+func TestAppNameMigrationPreservesExistingNames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.sqlite")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"001_initial.sql", "002_operation_fingerprint.sql", "003_operation_payload.sql", "004_manifest_publication.sql", "005_log_entries.sql", "006_operation_progress.sql", "007_resource_pools.sql", "008_compose_file.sql", "009_override_files.sql", "010_public_interface.sql", "011_system_applications.sql"} {
+		contents, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(string(contents)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if _, err := db.Exec("INSERT INTO schema_migrations(version) VALUES(?)", name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES('saved','my-app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = OpenDB(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var appName string
+	if err := db.QueryRow(`SELECT app_name FROM applications WHERE id='saved'`).Scan(&appName); err != nil {
+		t.Fatal(err)
+	}
+	if appName != "my-app" {
+		t.Fatalf("既存appNameが保持されません: %q", appName)
 	}
 }
 
@@ -51,13 +94,13 @@ func TestSystemDashboardIsSeededAndCannotBeDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var subdomain, desired string
+	var appName, desired string
 	var isSystem int
-	if err := db.QueryRow(`SELECT subdomain,desired_state,is_system FROM applications WHERE id=?`, id).Scan(&subdomain, &desired, &isSystem); err != nil {
+	if err := db.QueryRow(`SELECT app_name,desired_state,is_system FROM applications WHERE id=?`, id).Scan(&appName, &desired, &isSystem); err != nil {
 		t.Fatal(err)
 	}
-	if subdomain != "dashboard" || desired != "RUNNING" || isSystem != 1 {
-		t.Fatalf("Dashboard登録値が不正です: subdomain=%q desired=%q is_system=%d", subdomain, desired, isSystem)
+	if appName != "dashboard" || desired != "RUNNING" || isSystem != 1 {
+		t.Fatalf("Dashboard登録値が不正です: appName=%q desired=%q is_system=%d", appName, desired, isSystem)
 	}
 	if _, err := db.Exec(`DELETE FROM applications WHERE id=?`, id); err == nil {
 		t.Fatal("システムDashboardを削除できてしまいました")
@@ -199,7 +242,7 @@ func TestListApplicationsIncludesUnregisteredApplications(t *testing.T) {
 	}
 	defer db.Close()
 	for _, state := range []string{"ACTIVE", "UNREGISTERED"} {
-		_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
+		_, err = db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -217,7 +260,7 @@ func TestDetachPurgedApplicationKeepsOperationAndLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err = db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	op, err := CreateOperation(context.Background(), db, "app", "550e8400-e29b-41d4-a716-446655440115", "PURGE")
@@ -285,6 +328,30 @@ func TestValidateBaseDomain(t *testing.T) {
 		if err := ValidateBaseDomain(value); err == nil {
 			t.Errorf("不正なbase domainを受理しました: %q", value)
 		}
+	}
+	if err := ValidateBaseDomain(strings.Repeat("a", 60) + ".local"); err == nil {
+		t.Fatal("システムホスト名が63文字を超えるbase domainを許可しました")
+	}
+}
+
+func TestPublicHostnameAndAppNameLength(t *testing.T) {
+	for _, test := range []struct{ app, domain, want string }{
+		{"app", "lab.local", "app-lab.local"},
+		{"app-a", "one.two.local", "app-a-one-two.local"},
+		{"app", "lws.localhost", "app-lws.localhost"},
+	} {
+		if got := hostname.Public(test.app, test.domain); got != test.want {
+			t.Errorf("PublicHostname(%q, %q)=%q, want %q", test.app, test.domain, got, test.want)
+		}
+	}
+	if err := ValidateAppNameForDomain("app", strings.Repeat("a", 60)+".local"); err == nil {
+		t.Fatal("63文字を超えるDNSラベルを許可しました")
+	}
+	if err := ValidateAppNameForDomain("dashboard", "lab.local"); err == nil {
+		t.Fatal("予約済みシステム名を許可しました")
+	}
+	if err := ValidateAppNameForDomain("api", "lab.local"); err == nil {
+		t.Fatal("予約済みAPI名を許可しました")
 	}
 }
 
@@ -369,18 +436,18 @@ func TestHTTPRejectsOrigin(t *testing.T) {
 }
 
 func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
-	s := &Server{AllowedHost: "api.example.local", AllowedOrigin: "http://dashboard.example.local"}
+	s := &Server{AllowedHost: "api-example.local", AllowedOrigin: "http://dashboard-example.local"}
 	allowed := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	request.Host = "api.example.local"
-	request.Header.Set("Origin", "http://dashboard.example.local")
+	request.Host = "api-example.local"
+	request.Header.Set("Origin", "http://dashboard-example.local")
 	s.Handler().ServeHTTP(allowed, request)
 	if allowed.Code != http.StatusOK {
 		t.Fatalf("dashboard origin status=%d body=%s", allowed.Code, allowed.Body.String())
 	}
 	rejected := httptest.NewRecorder()
 	request = httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	request.Host = "api.example.local"
+	request.Host = "api-example.local"
 	request.Header.Set("Origin", "http://other.example.local")
 	s.Handler().ServeHTTP(rejected, request)
 	if rejected.Code != http.StatusForbidden {
@@ -389,14 +456,20 @@ func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
 }
 
 func TestDerivedDashboardRoute(t *testing.T) {
-	dashboard := PublishedApplication{AppID: "dashboard-id", Subdomain: "dashboard", Service: "web", Port: 80, IsSystem: true}
-	apps := []PublishedApplication{dashboard}
-	hosts := GenerateHosts("example.local", "192.0.2.1", apps)
-	if !strings.Contains(hosts, "192.0.2.1 dashboard.example.local\n") {
+	dashboard := PublishedApplication{AppID: "dashboard-id", AppName: "dashboard", Service: "web", Port: 80, IsSystem: true}
+	app := PublishedApplication{AppID: "app-id", AppName: "app", Service: "web", Port: 3000}
+	apps := []PublishedApplication{dashboard, app}
+	hosts := GenerateHosts("lab.home.local", "192.0.2.1", apps)
+	for _, want := range []string{"192.0.2.1 api-lab-home.local\n", "192.0.2.1 dashboard-lab-home.local\n", "192.0.2.1 app-lab-home.local\n"} {
+		if !strings.Contains(hosts, want) {
+			t.Fatalf("generated host is missing %q: %s", want, hosts)
+		}
+	}
+	if !strings.Contains(hosts, "192.0.2.1 dashboard-lab-home.local\n") {
 		t.Fatalf("dashboard host is missing: %s", hosts)
 	}
-	caddy := GenerateCaddyfile("example.local", apps)
-	for _, want := range []string{"http://dashboard.example.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy lws-dashboard-id:80", "header_up Host api.example.local"} {
+	caddy := GenerateCaddyfile("lab.home.local", apps)
+	for _, want := range []string{"http://dashboard-lab-home.local", "http://app-lab-home.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy lws-dashboard-id:80", "header_up Host api-lab-home.local"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("dashboard route is missing %q: %s", want, caddy)
 		}
@@ -407,7 +480,7 @@ func TestHTTPRejectsUnexpectedHost(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
 	r.Host = "bad.example.local"
 	rr := httptest.NewRecorder()
-	(&Server{AllowedHost: "api.example.local"}).Handler().ServeHTTP(rr, r)
+	(&Server{AllowedHost: "api-example.local"}).Handler().ServeHTTP(rr, r)
 	if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "HOST_FORBIDDEN") {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -419,7 +492,7 @@ func TestHTTPUsesOpenAPISchemaValidationBeforeHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","appName":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(w, r)
@@ -509,7 +582,7 @@ func TestHTTPStateChangeRejectsClosedDatabase(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://github.com/a/b","ref":"main","appName":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
 	r.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(rr, r)
@@ -524,7 +597,7 @@ func TestHTTPRejectsInvalidRepositoryBeforePersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://gitlab.com/a/b","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"repositoryUrl":"https://gitlab.com/a/b","ref":"main","appName":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}`))
 	r.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	(&Server{DB: db}).Handler().ServeHTTP(rr, r)
@@ -537,13 +610,29 @@ func TestHTTPRejectsInvalidRepositoryBeforePersistence(t *testing.T) {
 	}
 }
 
+func TestHTTPRejectsAppNameThatWouldExceedDNSLabelLimit(t *testing.T) {
+	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	body := `{"repositoryUrl":"https://github.com/a/b","ref":"main","appName":"abcdefghij","requestId":"550e8400-e29b-41d4-a716-446655440000"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	(&Server{DB: db, BaseDomain: strings.Repeat("a", 53) + ".local"}).Handler().ServeHTTP(rr, r)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "INVALID_PUBLIC_HOSTNAME") {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestHTTPQueuesConcurrentApplicationOperation(t *testing.T) {
 	db, err := OpenDB(context.Background(), filepath.Join(t.TempDir(), "db.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440010", "START"); err != nil {
@@ -621,7 +710,7 @@ func TestRuntimeRestoresSourceWhenComposeValidationFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	r := &cloneValidationRunner{}
@@ -726,7 +815,7 @@ func TestOperationRequestIDIdempotency(t *testing.T) {
 	}
 	defer db.Close()
 	requestID := "550e8400-e29b-41d4-a716-446655440000"
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	a, err := CreateOperation(context.Background(), db, "a", requestID, "START")
@@ -745,7 +834,7 @@ func TestOperationRequestIDIdempotency(t *testing.T) {
 	if err != nil || duplicate.ID != a.ID {
 		t.Fatalf("同じ内容の再送が既存Operationへ収束しません: op=%+v err=%v", duplicate, err)
 	}
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('b','app-b','https://github.com/a/c','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('b','app-b','https://github.com/a/c','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := CreateOperationWithFingerprint(context.Background(), db, "b", "550e8400-e29b-41d4-a716-446655440002", "CREATE", "first"); err != nil {
@@ -763,21 +852,21 @@ func TestRuntimeUpdateRestoresApplicationOnSourceFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','old','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','old','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
-	payload := `{"ref":"feature","subdomain":"new"}`
+	payload := `{"ref":"feature","appName":"new"}`
 	e := &RuntimeExecutor{DB: db, Root: dir, Runner: &failingCommandRunner{err: fmt.Errorf("git failure")}}
 	err = e.Run(context.Background(), Operation{ApplicationID: "app-id", Kind: "UPDATE", Payload: payload})
 	if err == nil {
 		t.Fatal("source failureを成功扱いしました")
 	}
-	var subdomain, ref string
-	if err := db.QueryRow(`SELECT subdomain,git_ref FROM applications WHERE id='app-id'`).Scan(&subdomain, &ref); err != nil {
+	var appName, ref string
+	if err := db.QueryRow(`SELECT app_name,git_ref FROM applications WHERE id='app-id'`).Scan(&appName, &ref); err != nil {
 		t.Fatal(err)
 	}
-	if subdomain != "old" || ref != "main" {
-		t.Fatalf("更新前のアプリ情報を復元できません: subdomain=%s ref=%s", subdomain, ref)
+	if appName != "old" || ref != "main" {
+		t.Fatalf("更新前のアプリ情報を復元できません: appName=%s ref=%s", appName, ref)
 	}
 }
 
@@ -888,7 +977,7 @@ func TestSecretConfigurationIsEncryptedAndNeverReturned(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	key := []byte("01234567890123456789012345678901")
@@ -926,7 +1015,7 @@ func TestConfigurationReturnsComposeResourcesAndReplacesRemovedVariables(t *test
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
@@ -980,7 +1069,7 @@ func TestConfigurationRequestIDRejectsDifferentContentWithoutSideEffect(t *testi
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	server := (&Server{DB: db, SecretKey: []byte("01234567890123456789012345678901")})
@@ -1014,7 +1103,7 @@ func TestConfigurationQueuesBehindExistingOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440098", "START"); err != nil {
@@ -1039,7 +1128,7 @@ func TestGetApplicationIncludesOperationStateFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440096", "START"); err != nil {
@@ -1058,7 +1147,7 @@ func TestGetApplicationRetainsLatestCompletedOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	op, err := CreateOperation(context.Background(), db, "a", "550e8400-e29b-41d4-a716-446655440098", "START")
@@ -1081,7 +1170,7 @@ func TestApplicationOperationIsHandedToWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	run := make(chan Operation, 1)
@@ -1109,7 +1198,7 @@ func TestUnregisterApplicationIsHandedToWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('a','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	run := make(chan Operation, 1)
@@ -1133,11 +1222,11 @@ func TestUnregisterApplicationIsHandedToWorker(t *testing.T) {
 
 func TestDerivedConfigIsAtomic(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "hosts")
-	if err := WriteAtomic(p, []byte(GenerateHosts("example.local", "192.0.2.1", []PublishedApplication{{Subdomain: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
+	if err := WriteAtomic(p, []byte(GenerateHosts("example.local", "192.0.2.1", []PublishedApplication{{AppName: "app", AppID: "id", Service: "web", Port: 3000}})), 0600); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(p)
-	if !strings.Contains(string(data), "app.example.local") {
+	if !strings.Contains(string(data), "app-example.local") {
 		t.Fatal(string(data))
 	}
 }
@@ -1148,7 +1237,7 @@ func TestDerivedManagerUsesManifestPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	manager := &DerivedManager{DB: db, GeneratedDir: t.TempDir(), BaseDomain: "example.local", PublicAddress: "192.0.2.10"}
@@ -1195,7 +1284,7 @@ func TestDerivedManagerValidatesAndReloadsInfrastructure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	runner := &recordingRunner{output: []byte(`[{"Id":"infra","Name":"infra","Config":{"Labels":{"com.labwebsystem.owner":"lws","com.labwebsystem.installation-id":"installation"}}}]`)}
@@ -1224,7 +1313,7 @@ func TestDerivedManagerKeepsPreviousFilesWhenCaddyValidationFails(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
@@ -1253,7 +1342,7 @@ func TestDerivedManagerKeepsPreviousFilesWhenAvahiRestartFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES ('app-id','demo','https://github.com/a/b','main','frontend',4321,datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
@@ -1356,7 +1445,7 @@ func TestRuntimeRebuildPullsBuildsAndRecreatesContainers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,public_service,public_port,desired_state,observed_state,registration_state,compose_file,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','web',3000,'web',3000,'RUNNING','RUNNING','ACTIVE','compose.yaml',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,manifest_service,manifest_port,public_service,public_port,desired_state,observed_state,registration_state,compose_file,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','web',3000,'web',3000,'RUNNING','RUNNING','ACTIVE','compose.yaml',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	runner := &recordingRunner{output: []byte(`{"services":{"web":{"image":"example"}}}`)}
@@ -1513,7 +1602,7 @@ func TestRuntimeWritesValidatedEnvironmentFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	key := []byte("01234567890123456789012345678901")
@@ -1686,7 +1775,7 @@ func TestRuntimeReconcileActiveReconnectsRunningApplications(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,desired_state,observed_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','RUNNING','RUNNING',datetime('now'),datetime('now'))`)
+	_, err = db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,desired_state,observed_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','RUNNING','RUNNING',datetime('now'),datetime('now'))`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1714,7 +1803,7 @@ func TestRuntimeReconcileActiveDoesNotConnectStoppedApplications(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,desired_state,observed_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','STOPPED','STOPPED',datetime('now'),datetime('now'))`)
+	_, err = db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,desired_state,observed_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','STOPPED','STOPPED',datetime('now'),datetime('now'))`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1735,7 +1824,7 @@ func TestPurgeRequiresConfirmationAndRejectsActiveApplication(t *testing.T) {
 	}
 	defer db.Close()
 	for _, state := range []string{"ACTIVE", "CONFIGURING", "UNREGISTERED"} {
-		_, err = db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
+		_, err = db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,registration_state,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`, "app-"+state, "sub-"+strings.ToLower(state), "https://github.com/a/b", "main", state)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1780,7 +1869,7 @@ func TestRuntimeCleansCaddyConnectionAfterComposeFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	composeRunner := &composeFailureRunner{}
@@ -1818,7 +1907,7 @@ func TestRuntimeUnregisterKeepsCaddyConnectedWhenComposeDownFails(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,desired_state,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','RUNNING','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,desired_state,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','RUNNING','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	docker := &dockerBoundaryRunner{}
@@ -1853,7 +1942,7 @@ func TestRuntimeUnregisterPreservesSourceAndRegisterRestoresIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	e := &RuntimeExecutor{DB: db, Root: dir, Runner: &composeSuccessRunner{}}
@@ -1882,7 +1971,7 @@ func TestRuntimeUnregisterSucceedsWhenSourceAndDockerResourcesAreAlreadyGone(t *
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
+	if _, err := db.Exec(`INSERT INTO applications(id,app_name,repository_url,git_ref,registration_state,created_at,updated_at) VALUES ('app-id','app','https://github.com/a/b','main','ACTIVE',datetime('now'),datetime('now'))`); err != nil {
 		t.Fatal(err)
 	}
 	runner := &dockerBoundaryRunner{}

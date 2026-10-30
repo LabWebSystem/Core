@@ -12,12 +12,12 @@ describe("Dashboard API client", () => {
     await api.create({
       repositoryUrl: "https://github.com/example/app",
       ref: "main",
-      subdomain: "test",
+      appName: "test",
     });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
     expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(body.subdomain).toBe("test");
+    expect(body.appName).toBe("test");
   });
 
   it("OpenAPI契約のCompose選択項目を登録要求へ含める", async () => {
@@ -28,7 +28,7 @@ describe("Dashboard API client", () => {
     await api.create({
       repositoryUrl: "https://github.com/example/app/tree/dev/new-arch",
       ref: "dev/new-arch",
-      subdomain: "test",
+      appName: "test",
       composeFile: "compose.dev.yaml",
       overrideFiles: ["compose.local.yaml"],
     });

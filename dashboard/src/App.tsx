@@ -80,8 +80,8 @@ const registrationStateLabel = (state: string) =>
     UNREGISTERED: "登録解除済み",
   })[state] ?? state;
 const publicUrl = (app: Application) => {
-  const host = window.location.host.replace(/^dashboard\./, "");
-  return `${window.location.protocol}//${app.subdomain}.${host}`;
+	const host = window.location.host.replace(/^dashboard(?=-)/, app.appName);
+	return `${window.location.protocol}//${host}`;
 };
 const operationLabel = (kind?: string) =>
   ({
@@ -332,7 +332,7 @@ export function App() {
               >
                 <span className={`dot ${stateTone(app)}`} />
                 <span>
-                  <strong>{app.isSystem ? "LWS Dashboard" : app.subdomain}</strong>
+                  <strong>{app.isSystem ? "LWS Dashboard" : app.appName}</strong>
                   <small>
                     {app.isSystem ? `システムアプリ · ${stateLabel(app)}` : stateLabel(app)}
                   </small>
@@ -427,7 +427,7 @@ function RegisterForm({
 }) {
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [ref, setRef] = useState("main");
-  const [subdomain, setSubdomain] = useState("test-app");
+  const [appName, setAppName] = useState("test-app");
   const [composeFile, setComposeFile] = useState("compose.yaml");
   const [branches, setBranches] = useState<string[]>([]);
   const [composeFiles, setComposeFiles] = useState<string[]>([]);
@@ -480,7 +480,7 @@ function RegisterForm({
         );
         setBranches(nextBranches);
         setComposeFiles(names);
-        setSubdomain(
+        setAppName(
           name
             .toLowerCase()
             .replace(/[^a-z0-9-]+/g, "-")
@@ -515,7 +515,7 @@ function RegisterForm({
           onSubmit({
             repositoryUrl,
             ref,
-            subdomain,
+            appName,
             ...(overrideFiles.length ? { overrideFiles } : {}),
             ...(composeFile !== "compose.yaml" ? { composeFile } : {}),
           });
@@ -608,12 +608,12 @@ function RegisterForm({
             )}
           </label>
           <label>
-            公開名
+            アプリ名
             <input
               required
               pattern="[a-z0-9][a-z0-9-]{0,61}"
-              value={subdomain}
-              onChange={(e) => setSubdomain(e.target.value)}
+              value={appName}
+              onChange={(e) => setAppName(e.target.value)}
             />
           </label>
         </div>
@@ -960,7 +960,7 @@ function AppWorkbench({
       <header className="app-heading">
         <div>
           <span className="eyebrow">{app.isSystem ? "LWSシステムアプリ" : "公開アプリ"}</span>
-          <h2>{app.isSystem ? "Dashboard" : app.subdomain}</h2>
+          <h2>{app.isSystem ? "Dashboard" : app.appName}</h2>
           <a href={publicUrl(app)} target="_blank" rel="noreferrer">
             {publicUrl(app)} <ExternalLink size={14} />
           </a>

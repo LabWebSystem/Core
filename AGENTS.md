@@ -185,14 +185,16 @@ lwsctl down --purge
 アプリは次の形式で公開します。
 
 ```text
-<app-name>.<base-domain>
+<app-name>-<base-domain-prefix>.local
 ```
+
+`base-domain-prefix`はベースドメインの末尾ラベルより前をハイフンで連結した値です。例: `lab.local`の`app`は`app-lab.local`です。
 
 例:
 
 ```text
-dashboard.example.internal
-app-a.example.internal
+dashboard-example.local
+app-a-example.local
 ```
 
 ベースドメイン変更時は、関連するDNSとReverse Proxy設定を一貫して更新してください。

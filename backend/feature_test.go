@@ -126,7 +126,7 @@ func TestFTV1_020RegisterValidApp(t *testing.T) {
 	runner := &featureRunner{}
 	db, _, server := newFeatureServer(t, runner)
 
-	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","subdomain":"valid","requestId":"550e8400-e29b-41d4-a716-446655440201"}`, url))
+	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","appName":"valid","requestId":"550e8400-e29b-41d4-a716-446655440201"}`, url))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -144,7 +144,7 @@ func TestFTV1_020RegisterValidApp(t *testing.T) {
 	}
 
 	var state, observed, name, service string
-	if err := db.QueryRow(`SELECT registration_state,observed_state,manifest_name,manifest_service FROM applications WHERE subdomain='valid'`).Scan(&state, &observed, &name, &service); err != nil {
+	if err := db.QueryRow(`SELECT registration_state,observed_state,manifest_name,manifest_service FROM applications WHERE app_name='valid'`).Scan(&state, &observed, &name, &service); err != nil {
 		t.Fatal(err)
 	}
 	if state != "CONFIGURING" || observed != "STOPPED" || name != "LWSテストアプリ" || service != "web" {
@@ -160,7 +160,7 @@ func TestFTV1_023InvalidManifestDoesNotStartDocker(t *testing.T) {
 	runner := &featureRunner{}
 	db, _, server := newFeatureServer(t, runner)
 
-	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","subdomain":"invalid-manifest","requestId":"550e8400-e29b-41d4-a716-446655440202"}`, url))
+	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","appName":"invalid-manifest","requestId":"550e8400-e29b-41d4-a716-446655440202"}`, url))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -185,7 +185,7 @@ func TestFTV1_026GitCloneFailureKeepsApplicationUnchanged(t *testing.T) {
 	runner := &featureRunner{gitError: true}
 	db, _, server := newFeatureServer(t, runner)
 	url := "https://github.com/test/lws-git-failure"
-	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","subdomain":"git-failure","requestId":"550e8400-e29b-41d4-a716-446655440203"}`, url))
+	body := strings.NewReader(fmt.Sprintf(`{"repositoryUrl":%q,"ref":"main","appName":"git-failure","requestId":"550e8400-e29b-41d4-a716-446655440203"}`, url))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/applications", body)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestFTV1_026GitCloneFailureKeepsApplicationUnchanged(t *testing.T) {
 		t.Fatalf("Git失敗を成功扱いしました: %q", result)
 	}
 	var state string
-	if err := db.QueryRow(`SELECT registration_state FROM applications WHERE subdomain='git-failure'`).Scan(&state); err != nil {
+	if err := db.QueryRow(`SELECT registration_state FROM applications WHERE app_name='git-failure'`).Scan(&state); err != nil {
 		t.Fatal(err)
 	}
 	if state != "ACTIVE" {

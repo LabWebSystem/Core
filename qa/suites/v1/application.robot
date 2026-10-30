@@ -6,7 +6,7 @@ Suite Setup      APIの接続を設定する
 
 *** Test Cases ***
 FT-V1-020 適合GitHub repositoryを登録して公開する
-    [Documentation]    Operation完了後にsource取得・検証・起動しsubdomain.domainで公開する。
+    [Documentation]    Operation完了後にsource取得・検証・起動し、アプリ名とベースドメインをハイフン連結した単一ラベルで公開する。
     [Tags]    FT-V1-020    live    planned    workflow    v1
     ${response}=    アプリ登録要求を送信する    550e8400-e29b-41d4-a716-446655440201    qa-app
     ${operation}=    Operation名を取得する    ${response}
@@ -19,7 +19,7 @@ FT-V1-020 適合GitHub repositoryを登録して公開する
 FT-V1-021 不正なrepository URLを拒否する
     [Documentation]    GitHub以外、SSH、認証情報付きURLをGit実行前に拒否する。
     [Tags]    FT-V1-021    live    planned    workflow    v1
-    ${body}=    Create Dictionary    repositoryUrl=ssh://git@github.com/test/lws    ref=main    subdomain=invalid-url    requestId=550e8400-e29b-41d4-a716-446655440221
+    ${body}=    Create Dictionary    repositoryUrl=ssh://git@github.com/test/lws    ref=main    appName=invalid-url    requestId=550e8400-e29b-41d4-a716-446655440221
     ${response}=    POST On Session    lws    /applications    json=${body}    expected_status=anything
     Should Be Equal As Integers    ${response.status_code}    400
 
@@ -32,7 +32,7 @@ FT-V1-023 不正manifestをDocker実行前に拒否する
     [Documentation]    manifest不在・破損・schema違反でDockerを実行せず既存状態を保持する。
     [Tags]    FT-V1-023    live    planned    workflow    v1
     ${repository}=    Get Environment Variable    LWS_QA_INVALID_MANIFEST_URL    https://github.com/test/lws-invalid-manifest
-    ${body}=    Create Dictionary    repositoryUrl=${repository}    ref=main    subdomain=invalid-manifest    requestId=550e8400-e29b-41d4-a716-446655440223
+    ${body}=    Create Dictionary    repositoryUrl=${repository}    ref=main    appName=invalid-manifest    requestId=550e8400-e29b-41d4-a716-446655440223
     ${response}=    POST On Session    lws    /applications    json=${body}    expected_status=202
     ${operation}=    Operation名を取得する    ${response}
     ${state}=    Operationが終端状態になるまで待つ    ${operation}
@@ -51,7 +51,7 @@ FT-V1-025 危険なComposeを起動前に拒否する
 FT-V1-026 Git取得失敗時に旧公開経路を保持する
     [Documentation]    cloneまたはref取得失敗時にOperationをfailedとし旧source・公開経路を維持する。
     [Tags]    FT-V1-026    live    planned    workflow    v1
-    ${body}=    Create Dictionary    repositoryUrl=https://github.com/test/does-not-exist-lws    ref=main    subdomain=git-failure    requestId=550e8400-e29b-41d4-a716-446655440226
+    ${body}=    Create Dictionary    repositoryUrl=https://github.com/test/does-not-exist-lws    ref=main    appName=git-failure    requestId=550e8400-e29b-41d4-a716-446655440226
     ${response}=    POST On Session    lws    /applications    json=${body}    expected_status=202
     ${operation}=    Operation名を取得する    ${response}
     ${state}=    Operationが終端状態になるまで待つ    ${operation}

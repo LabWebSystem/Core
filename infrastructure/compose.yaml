@@ -7,6 +7,7 @@ services:
     image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}@${LWS_BACKEND_DIGEST:-sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2}
     restart: unless-stopped
     environment:
+      LWS_ALLOWED_HOST: ${LWS_ALLOWED_HOST:-api-localhost}
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
       LWS_VERSION: ${LWS_VERSION:-0.1.0}
       LWS_INSTALLATION_ID: ${LWS_INSTALLATION_ID:-}
@@ -32,7 +33,7 @@ services:
       com.labwebsystem.owner: lws
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --header=Host:api.$${LWS_BASE_DOMAIN} http://127.0.0.1:8080/api/v1/health/live -O - >/dev/null"]
+      test: ["CMD-SHELL", "wget -q --header=Host:$${LWS_ALLOWED_HOST} http://127.0.0.1:8080/api/v1/health/live -O - >/dev/null"]
       interval: 2s
       timeout: 2s
       retries: 30

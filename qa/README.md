@@ -33,6 +33,8 @@ mise run qa-live
 
 `qa-live`はLWSを自動起動しない。LWSが起動していない場合はテストをSKIPせず、接続エラーとしてFAILする。未実装の受け入れシナリオは`planned`タグで管理し、内部テストの結果でGREENにしてはいけない。
 
+`LWS_QA_BASE_DOMAIN=qa.example.local`の場合、APIのHostは`api-qa-example.local`です。ベースドメインの末尾ラベルより前をハイフン連結します。
+
 LWSの起動・停止・再構成を実際のDocker Composeで確認する場合は、専用の隔離環境を使って次を実行する。
 
 ```sh

@@ -20,7 +20,7 @@ LWSは、GitHubリポジトリのCompose定義を検証してDocker Composeで�
 
 ## Operating Context
 
-信頼できる研究室・家庭内LANで利用する。管理者はGitHubリポジトリをアプリとして登録し、起動、停止、更新、設定値・secret・ログ・実行状態を管理する。アプリは`<app-name>.<base-domain>`形式のURLで公開する。
+信頼できる研究室・家庭内LANで利用する。管理者はGitHubリポジトリをアプリとして登録し、起動、停止、更新、設定値・secret・ログ・実行状態を管理する。アプリ名とベースドメインの末尾ラベル以外をハイフン連結し、単一ラベルのホスト名で公開する。
 
 ## Capabilities and Constraints
 

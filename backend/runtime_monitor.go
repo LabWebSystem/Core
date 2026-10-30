@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LabWebSystem/Core/internal/hostname"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	mobyclient "github.com/moby/moby/client"
@@ -316,14 +317,14 @@ func (m *RuntimeMonitor) associateHost(ctx context.Context, entry *StoredLogEntr
 	if entry.ApplicationID != "" || m.DB == nil || m.BaseDomain == "" || (entry.Component != "caddy" && entry.Component != "avahi" && entry.Component != "backend") {
 		return
 	}
-	rows, err := m.DB.QueryContext(ctx, `SELECT id,subdomain FROM applications`)
+	rows, err := m.DB.QueryContext(ctx, `SELECT id,app_name FROM applications`)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, subdomain string
-		if rows.Scan(&id, &subdomain) == nil && strings.Contains(entry.Message, subdomain+"."+m.BaseDomain) {
+		var id, appName string
+		if rows.Scan(&id, &appName) == nil && strings.Contains(entry.Message, hostname.Public(appName, m.BaseDomain)) {
 			entry.ApplicationID = id
 			return
 		}

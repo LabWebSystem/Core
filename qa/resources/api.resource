@@ -8,7 +8,9 @@ Library    String
 APIの接続を設定する
     ${base}=    Get Environment Variable    LWS_QA_BASE_URL    http://127.0.0.1/api/v1
     ${domain}=    Get Environment Variable    LWS_QA_BASE_DOMAIN    example.local
-    ${headers}=    Create Dictionary    Host=api.${domain}
+    ${domain_prefix}=    Replace String    ${domain}    .local    ${EMPTY}
+    ${domain_prefix}=    Replace String    ${domain_prefix}    .    -
+    ${headers}=    Create Dictionary    Host=api-${domain_prefix}.local
     Create Session    lws    ${base}    headers=${headers}
     Set Suite Variable    ${LWS_QA_BASE_URL}    ${base}
 
@@ -17,10 +19,10 @@ APIの接続を設定する
     Should Be Equal As Strings    ${response.text}    OK
 
 アプリ登録要求を送信する
-    [Arguments]    ${request_id}    ${subdomain}=qa-app
+    [Arguments]    ${request_id}    ${appName}=qa-app
     ${repository}=    Get Environment Variable    LWS_QA_REPOSITORY_URL    https://github.com/test/lws-valid
     ${ref}=    Get Environment Variable    LWS_QA_REPOSITORY_REF    main
-    ${body}=    Create Dictionary    repositoryUrl=${repository}    ref=${ref}    subdomain=${subdomain}    requestId=${request_id}
+    ${body}=    Create Dictionary    repositoryUrl=${repository}    ref=${ref}    appName=${appName}    requestId=${request_id}
     ${response}=    POST On Session    lws    /applications    json=${body}    expected_status=anything
     RETURN    ${response}
 
@@ -48,11 +50,11 @@ Operationの状態を確認する
     Fail    Operationが終端状態になっていません: ${state}
 
 Operationを再送して同じ名前を確認する
-    [Arguments]    ${request_id}    ${subdomain}
-    ${first}=    アプリ登録要求を送信する    ${request_id}    ${subdomain}
+    [Arguments]    ${request_id}    ${appName}
+    ${first}=    アプリ登録要求を送信する    ${request_id}    ${appName}
     ${first_body}=    Evaluate    $first.json()
     ${first_name}=    Get From Dictionary    ${first_body}    name
-    ${second}=    アプリ登録要求を送信する    ${request_id}    ${subdomain}
+    ${second}=    アプリ登録要求を送信する    ${request_id}    ${appName}
     Should Be Equal As Integers    ${second.status_code}    202
     ${second_body}=    Evaluate    $second.json()
     ${second_name}=    Get From Dictionary    ${second_body}    name

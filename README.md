@@ -4,16 +4,16 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> このリポジトリのCore開発版は v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。公開済みリリースの最新タグは v0.1.10 です。
+> このリポジトリのCore開発版は v0.1.14 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。
 
 ## できること
 
 - GitHubリポジトリにあるWebアプリを登録する
 - Docker Composeでアプリを起動・停止・更新する
-- `app-name.example.local`の形でアプリごとのURLを公開する
+- `app-name-example.local`の形でアプリごとのURLを公開する
 - アプリの設定値、secret、ログ、実行状態を管理する
 - アプリごとの名前付きVolume、edge Network、デバイス割り当てを設定する
-- `dashboard.<base-domain>`のDashboardから、アプリを日本語で登録・操作する
+- `dashboard-<base-domain-prefix>.local`のDashboardから、アプリを日本語で登録・操作する
 - LWS本体を起動、停止、再構成、更新する
 
 ## はじめる
@@ -58,7 +58,7 @@ sudo lwsctl start --domain home.local --force
 たとえば、`reserve`というアプリは次のURLで公開されます。
 
 ```text
-reserve.example.local
+reserve-example.local
 ```
 
 ## LWSを操作する
@@ -81,7 +81,7 @@ sudo lwsctl down --purge
 
 通常の`stop`と`down`はLWS本体だけを対象にします。子のアプリも対象にする場合は`-r`または`--recursive`を追加します。`down --recursive --purge`では、子のアプリのLWS所有volumeも削除します。
 
-詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.14利用マニュアル.md)を参照してください。
 
 ## アプリを公開する
 
@@ -104,13 +104,13 @@ public:
   port: 3000
 ```
 
-LWSはリポジトリを取得して内容を確認します。登録直後は`CONFIGURING`（設定待ち）となり、Dashboardで環境変数とデバイス割り当てを確認してから開始します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+LWSはリポジトリを取得して内容を確認します。登録直後は`CONFIGURING`（設定待ち）となり、Dashboardで環境変数とデバイス割り当てを確認してから開始します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.14利用マニュアル.md)を参照してください。
 
 ### Backend APIの概要
 
 APIのベースパスは`/api/v1`です。変更操作はすぐに`Operation`を返し、進捗は`GET /operations/{operation}`またはSSEの`GET /operations/{operation}:watch`で確認します。
 
-OpenAPIの仕様は`http://api.<base-domain>/openapi.json`または`http://dashboard.<base-domain>/openapi.json`で取得でき、Swagger UIは`http://api.<base-domain>/swagger/`または`http://dashboard.<base-domain>/swagger/`で確認できます。
+OpenAPIの仕様は`http://api-<base-domain-prefix>.local/openapi.json`または`http://dashboard-<base-domain-prefix>.local/openapi.json`で取得でき、Swagger UIも同じホストの`/swagger/`で確認できます。各ホスト名はベースドメイン末尾の`.local`より前をハイフンで連結します。
 
 主なリソースと操作は次のとおりです。
 
@@ -142,14 +142,14 @@ mise run dev-dashboard-build # 初回またはBackend変更時に再ビルドし
 
 ### Dashboardを実際に操作する
 
-`mise run dev-dashboard`は、Backendがシステムアプリとして登録するVite開発サーバーへ`dashboard.lws.localhost:18180`で接続します。`dashboard/src`をマウントするため、保存したUI変更はHMRで即時反映されます。通常のLWSとは別のCompose project、volume、networkと、80/5353番以外のportを使用します。
+`mise run dev-dashboard`は、Backendがシステムアプリとして登録するVite開発サーバーへ`dashboard-lws.localhost:18180`で接続します。`dashboard/src`をマウントするため、保存したUI変更はHMRで即時反映されます。通常のLWSとは別のCompose project、volume、networkと、80/5353番以外のportを使用します。
 
 初回起動時、または`backend/`・Dockerfile・Compose構成を変更したときだけ、先に`mise run dev-dashboard-build`でBackendを再ビルドします。BackendのGoモジュール・コンパイルキャッシュはBuildKitで再利用します。`dashboard/src`だけの変更には再ビルド不要です。
 
 起動後にブラウザで次を開きます。
 
 ```text
-http://dashboard.lws.localhost:18180
+http://dashboard-lws.localhost:18180
 ```
 
 `.localhost`はローカル端末へ解決されるため、hostsの編集は不要です。停止してデータを残すには`Ctrl+C`、コンテナとnetworkを削除するには次を実行します。
@@ -197,7 +197,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 
 ## 関連資料
 
-- [利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)
+- [利用マニュアル](docs/LWS%20v0.1.14利用マニュアル.md)
 - [設計概要](docs/LabWebSystem設計概要.md)
 - [Infrastructure仕様書](docs/Infrastructure仕様書.md)
 - [Backend仕様書](docs/Backend仕様書.md)

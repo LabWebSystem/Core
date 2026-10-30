@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/LabWebSystem/Core/backend"
+	"github.com/LabWebSystem/Core/internal/hostname"
 )
 
 func main() {
@@ -94,17 +95,18 @@ func main() {
 		}()
 	}
 	server := backend.NewServer(db, runtime.Run)
+	server.BaseDomain = os.Getenv("LWS_BASE_DOMAIN")
 	server.Docker = runtime.Docker
 	server.SecretKey = secretKey
 	server.AppsRoot = appsRoot
 	server.Logs.SecretKey = secretKey
 	server.AllowedHost = os.Getenv("LWS_ALLOWED_HOST")
 	if server.AllowedHost == "" {
-		server.AllowedHost = "api." + os.Getenv("LWS_BASE_DOMAIN")
+		server.AllowedHost = hostname.Public("api", os.Getenv("LWS_BASE_DOMAIN"))
 	}
 	server.AllowedOrigin = os.Getenv("LWS_ALLOWED_ORIGIN")
 	if server.AllowedOrigin == "" {
-		server.AllowedOrigin = "http://dashboard." + os.Getenv("LWS_BASE_DOMAIN")
+		server.AllowedOrigin = "http://" + hostname.Public("dashboard", os.Getenv("LWS_BASE_DOMAIN"))
 	}
 	if source, err := backend.NewMobyDockerRuntimeSource(runtime.InstallationID); err != nil {
 		slog.Error("Dockerログ監視を初期化できません", "error", err)
