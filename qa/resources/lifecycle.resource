@@ -16,7 +16,7 @@ LWS本体の隔離環境を準備する
     Set Suite Variable    ${QA_PROJECT}    ${project}
     Create File    ${qa_root}/version    0.1.0
     ${build}=    Run Process    ${WORKSPACE}/scripts/build-lwsctl.sh    --output    ${qa_root}/lwsctl    cwd=${WORKSPACE}
-    Should Be Equal As Integers    ${build.rc}    0
+    Should Be Equal As Integers    ${build.rc}    0    lwsctl buildに失敗: stdout=${build.stdout} stderr=${build.stderr}
     Set Suite Variable    ${LWSCTL}    ${qa_root}/lwsctl
     ${compose}=    Get File    ${WORKSPACE}/infrastructure/compose.yaml
     ${compose}=    Replace String    ${compose}    lws-backend-data    ${project}-backend-data
@@ -38,7 +38,7 @@ LWS本体の隔離環境を準備する
     ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|5353)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
     Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、5353/udp)が既に使用されています。
     ${avahi_build}=    Run Process    docker    build    --network    host    --file    ${WORKSPACE}/infrastructure/Dockerfile.avahi    --tag    lws-avahi-qa:local    ${WORKSPACE}
-    Should Be Equal As Integers    ${avahi_build.rc}    0
+    Should Be Equal As Integers    ${avahi_build.rc}    0    Avahi image buildに失敗: stdout=${avahi_build.stdout} stderr=${avahi_build.stderr}
 
 LWS本体を停止して隔離環境を削除する
     Run Keyword If    $QA_ROOT    Run Process    ${LWSCTL}    down    --purge    --force
@@ -47,12 +47,12 @@ LWS本体を停止して隔離環境を削除する
 LWSを起動する
     ${result}=    Run Process    ${LWSCTL}    start    --domain    qa.example.local
     Log    stdout=${result.stdout} stderr=${result.stderr}
-    Should Be Equal As Integers    ${result.rc}    0
+    Should Be Equal As Integers    ${result.rc}    0    lwsctl startに失敗: stdout=${result.stdout} stderr=${result.stderr}
 
 LWSが起動済みであることを確認する
     ${status}=    Run Process    ${LWSCTL}    status
     Should Be Equal As Integers    ${status.rc}    0
     Should Contain    ${status.stdout}    設定済み: YES
     ${services}=    Run Process    docker    compose    --project-name    ${QA_PROJECT}    --file    ${WORKSPACE}/infrastructure/compose.yaml    ps    --status    running    --services
-    Should Be Equal As Integers    ${services.rc}    0
+    Should Be Equal As Integers    ${services.rc}    0    Docker Compose psに失敗: stdout=${services.stdout} stderr=${services.stderr}
     Should Contain    ${services.stdout}    backend

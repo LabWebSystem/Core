@@ -30,5 +30,5 @@ FT-V1-006 start済みLWSをstop/status/rebuildする
     Should Be Equal As Integers    ${status.rc}    0
     ${rebuild}=    Run Process    ${LWSCTL}    rebuild
     Log    stdout=${rebuild.stdout} stderr=${rebuild.stderr}
-    Should Be Equal As Integers    ${rebuild.rc}    0
+    Should Be Equal As Integers    ${rebuild.rc}    0    lwsctl rebuildに失敗: stdout=${rebuild.stdout} stderr=${rebuild.stderr}
     File Should Exist    ${QA_ROOT}/etc/config.env
