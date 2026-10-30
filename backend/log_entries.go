@@ -285,7 +285,7 @@ func validLogLevel(value string) bool {
 }
 func validLogComponent(value string) bool {
 	switch value {
-	case "backend", "caddy", "coredns", "dashboard", "application":
+	case "backend", "caddy", "coredns", "avahi", "dashboard", "application":
 		return true
 	}
 	return false

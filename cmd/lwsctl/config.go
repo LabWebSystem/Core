@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	domainPattern  = regexp.MustCompile(`^(?:localhost|[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)+)$`)
+	versionPattern      = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+	domainPattern       = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+local$`)
+	storedDomainPattern = regexp.MustCompile(`^(?:localhost|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)$`)
 )
 
 type application struct {
@@ -68,7 +69,7 @@ func (a *application) loadConfig() error {
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	if !domainPattern.MatchString(values["LWS_BASE_DOMAIN"]) || !versionPattern.MatchString(values["LWS_VERSION"]) {
+	if !storedDomainPattern.MatchString(values["LWS_BASE_DOMAIN"]) || !versionPattern.MatchString(values["LWS_VERSION"]) {
 		return errors.New("LWSの設定が不正です")
 	}
 	a.domain = values["LWS_BASE_DOMAIN"]

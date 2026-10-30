@@ -97,7 +97,7 @@ func newFeatureServer(t *testing.T, runner *featureRunner) (*sql.DB, *RuntimeExe
 	e.Derived = &DerivedManager{
 		DB:            db,
 		GeneratedDir:  filepath.Join(tmp, "generated"),
-		BaseDomain:    "example.internal",
+		BaseDomain:    "example.local",
 		PublicAddress: "192.0.2.10",
 	}
 	server := httptest.NewServer(NewServer(db, e.Run).Handler())

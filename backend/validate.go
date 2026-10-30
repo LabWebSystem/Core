@@ -16,7 +16,7 @@ import (
 var subdomainPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 var variablePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 var servicePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
-var baseDomainPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
+var baseDomainPattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:local|localhost)$`)
 var composeVariablePattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?[-?])(.*))?\}`)
 var simpleComposeVariablePattern = regexp.MustCompile(`(^|[^$])\$([A-Za-z_][A-Za-z0-9_]*)`)
 
@@ -54,6 +54,9 @@ func RepositoryURLAndRef(raw, fallback string) (string, string) {
 func ValidateSubdomain(value string) error {
 	if !subdomainPattern.MatchString(value) {
 		return NewValidationError("subdomain", "subdomainが不正です", "INVALID_SUBDOMAIN")
+	}
+	if value == "dashboard" {
+		return NewValidationError("subdomain", "dashboardはLWS Dashboard用に予約されています", "RESERVED_SUBDOMAIN")
 	}
 	return nil
 }
@@ -144,15 +147,16 @@ func ExtractComposeVariables(data []byte) ([]ComposeVariable, error) {
 }
 
 type Manifest struct {
-	APIVersion string `yaml:"apiVersion"`
-	Metadata   struct {
-		Name        string `yaml:"name"`
-		Description string `yaml:"description"`
-	} `yaml:"metadata"`
+	APIVersion  string `yaml:"apiVersion" json:"apiVersion"`
+	ComposeFile string `yaml:"composeFile" json:"composeFile,omitempty"`
+	Metadata    struct {
+		Name        string `yaml:"name" json:"name"`
+		Description string `yaml:"description" json:"description"`
+	} `yaml:"metadata" json:"metadata"`
 	Public struct {
-		Service string `yaml:"service"`
-		Port    int    `yaml:"port"`
-	} `yaml:"public"`
+		Service string `yaml:"service" json:"service"`
+		Port    int    `yaml:"port" json:"port"`
+	} `yaml:"public" json:"public"`
 }
 
 func ValidateManifest(data []byte) (Manifest, error) {
@@ -175,14 +179,14 @@ func ValidateManifest(data []byte) (Manifest, error) {
 	if err := inspectManifestNode(n.Content[0]); err != nil {
 		return m, err
 	}
-	if err := yaml.Unmarshal(data, &m); err != nil || m.APIVersion != "lws/v1" || m.Metadata.Name == "" || strings.TrimSpace(m.Metadata.Name) != m.Metadata.Name || len([]rune(m.Metadata.Name)) > 80 || len([]rune(m.Metadata.Description)) > 500 || strings.ContainsAny(m.Metadata.Description, "\r\n\x00") || !servicePattern.MatchString(m.Public.Service) || m.Public.Port < 1 || m.Public.Port > 65535 {
+	if err := yaml.Unmarshal(data, &m); err != nil || m.APIVersion != "lws/v1" || (m.ComposeFile != "" && !containsComposeFile(m.ComposeFile)) || m.Metadata.Name == "" || strings.TrimSpace(m.Metadata.Name) != m.Metadata.Name || len([]rune(m.Metadata.Name)) > 80 || len([]rune(m.Metadata.Description)) > 500 || strings.ContainsAny(m.Metadata.Description, "\r\n\x00") || !servicePattern.MatchString(m.Public.Service) || m.Public.Port < 1 || m.Public.Port > 65535 {
 		return Manifest{}, NewValidationError("manifest", "manifestのschemaが不正です", "INVALID_MANIFEST")
 	}
 	return m, nil
 }
 
 func inspectManifestNode(root *yaml.Node) error {
-	if err := inspectManifestMapping(root, map[string]string{"apiVersion": "str", "metadata": "map", "public": "map"}, map[string]bool{"apiVersion": true, "metadata": true, "public": true}); err != nil {
+	if err := inspectManifestMapping(root, map[string]string{"apiVersion": "str", "composeFile": "str", "metadata": "map", "public": "map"}, map[string]bool{"apiVersion": true, "metadata": true, "public": true}); err != nil {
 		return err
 	}
 	metadata, public := findManifestValues(root, "metadata", "public")

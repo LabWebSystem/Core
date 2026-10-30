@@ -2,15 +2,15 @@
 
 LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・管理するための仕組みです。
 
-アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
+アプリはGitHubリポジトリまたはZIPファイルから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> このリポジトリのCore開発版は v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。公開済みリリースの最新タグは v0.1.10 です。
+> Core v0.1.12を公開しました。GitHubまたはZIPからのアプリ登録、`.local` mDNSによる公開に対応しています。TypeScript SDKは開発中です。
 
 ## できること
 
-- GitHubリポジトリにあるWebアプリを登録する
+- GitHubリポジトリまたはZIPファイルにあるWebアプリを登録する
 - Docker Composeでアプリを起動・停止・更新する
-- `app-name.example.internal`の形でアプリごとのURLを公開する
+- `app-name.example.local`の形でアプリごとのURLを公開する
 - アプリの設定値、secret、ログ、実行状態を管理する
 - アプリごとの名前付きVolume、edge Network、デバイス割り当てを設定する
 - `dashboard.<base-domain>`のDashboardから、アプリを日本語で登録・操作する
@@ -23,10 +23,10 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 - Ubuntu系またはAlmaLinux系のLinux
 - 現在のリリース成果物はamd64（RPMではx86_64）向け
 - Docker EngineとDocker Compose plugin
-- 空いている80/tcp、53/tcp、53/udpポート
+- 空いている80/tcp、5353/udpポート
 - GitHub Releasesへ接続できるネットワーク
 
-LAN内の端末からアプリ名でアクセスするには、端末がLWSのDNSを使うようにDHCPまたはDNSを設定します。
+LAN内の端末からアプリ名でアクセスするには、端末のmDNSを有効にし、LWSホストと同じLANへ接続します。ルーターのDNS設定は不要です。
 
 ### インストール
 
@@ -43,16 +43,22 @@ curl -fsSL https://raw.githubusercontent.com/LabWebSystem/Core/main/scripts/inst
 ベースドメインを決めて起動します。
 
 ```sh
-sudo lwsctl start --domain example.internal
+sudo lwsctl start --domain example.local
 sudo lwsctl status
 ```
 
-ベースドメインには`localhost`も指定できます。
+ベースドメインは`.local`で終わる名前を指定します。mDNSを通さないネットワークを越えた名前解決には対応しません。
+
+以前のベースドメインから移行する場合は、次のように新しい名前を指定します。
+
+```sh
+sudo lwsctl start --domain home.local --force
+```
 
 たとえば、`reserve`というアプリは次のURLで公開されます。
 
 ```text
-reserve.example.internal
+reserve.example.local
 ```
 
 ## LWSを操作する
@@ -75,21 +81,22 @@ sudo lwsctl down --purge
 
 通常の`stop`と`down`はLWS本体だけを対象にします。子のアプリも対象にする場合は`-r`または`--recursive`を追加します。`down --recursive --purge`では、子のアプリのLWS所有volumeも削除します。
 
-詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.12利用マニュアル.md)を参照してください。
 
 ## アプリを公開する
 
-登録するGitHubリポジトリには、次のファイルが必要です。
+登録するアプリにはComposeファイルが必要です。ZIPはファイルを直下、または直下の単一フォルダに配置してください。
 
 ```text
 compose.yaml
 lws.manifest.yaml
 ```
 
-`lws.manifest.yaml`には、公開するCompose serviceとportを書きます。
+`lws.manifest.yaml`は任意です。記載するとアプリ名と公開先が登録画面に反映されます。
 
 ```yaml
 apiVersion: lws/v1
+composeFile: compose.yaml
 metadata:
   name: 予約システム
   description: 研究室の設備予約を管理するアプリ
@@ -98,7 +105,7 @@ public:
   port: 3000
 ```
 
-LWSはリポジトリを取得して内容を確認します。登録直後は`CONFIGURING`（設定待ち）となり、Dashboardで環境変数とデバイス割り当てを確認してから開始します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+DashboardでGitHubのURLとref、またはZIPを指定し、取り込み内容を確認します。manifestがない場合はアプリ名、Composeファイル、公開serviceとportを指定します。登録直後は`CONFIGURING`（設定待ち）となり、環境変数とデバイス割り当てを確認してから開始します。ZIPで登録したアプリは、新しいZIPを指定して更新できます。
 
 ### Backend APIの概要
 
@@ -111,6 +118,8 @@ OpenAPIの仕様は`http://api.<base-domain>/openapi.json`または`http://dashb
 | メソッド | パス | 内容 |
 | --- | --- | --- |
 | `GET` / `POST` | `/applications` | アプリ一覧、アプリ登録 |
+| `POST` | `/imports/github`、`/imports/zip` | GitHubまたはZIPを取得して登録候補を確認 |
+| `POST` | `/applications/{application}/imports` | 確認済みZIPによるアプリ更新 |
 | `GET` / `PATCH` / `DELETE` | `/applications/{application}` | 取得、更新、登録解除 |
 | `POST` | `/applications/{application}:start`、`:stop`、`:sync`、`:rebuild`、`:register`、`:purge` | アプリ操作 |
 | `GET` / `PATCH` | `/applications/{application}/configuration` | 環境変数・デバイス設定 |
@@ -136,7 +145,7 @@ mise run dev-dashboard-build # 初回またはBackend変更時に再ビルドし
 
 ### Dashboardを実際に操作する
 
-`mise run dev-dashboard`は、`dashboard/src`をマウントしたVite開発サーバーを`dashboard.lws.localhost:18180`で公開します。保存したUI変更はHMRで即時反映され、Caddyの同一Originプロキシを通じて実Backendへ接続します。通常のLWSとは別のCompose project、volume、networkと、80/53番以外のportを使用します。
+`mise run dev-dashboard`は、Backendがシステムアプリとして登録するVite開発サーバーへ`dashboard.lws.localhost:18180`で接続します。`dashboard/src`をマウントするため、保存したUI変更はHMRで即時反映されます。通常のLWSとは別のCompose project、volume、networkと、80/5353番以外のportを使用します。
 
 初回起動時、または`backend/`・Dockerfile・Compose構成を変更したときだけ、先に`mise run dev-dashboard-build`でBackendを再ビルドします。BackendのGoモジュール・コンパイルキャッシュはBuildKitで再利用します。`dashboard/src`だけの変更には再ビルド不要です。
 
@@ -191,7 +200,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 
 ## 関連資料
 
-- [利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)
+- [利用マニュアル](docs/LWS%20v0.1.12利用マニュアル.md)
 - [設計概要](docs/LabWebSystem設計概要.md)
 - [Infrastructure仕様書](docs/Infrastructure仕様書.md)
 - [Backend仕様書](docs/Backend仕様書.md)

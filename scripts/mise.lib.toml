@@ -32,12 +32,17 @@ run = ["npm test", "npm run build"]
 [test-dashboard]
 description = "Dashboardのlint、test、build、イメージを検証"
 depends = ["dashboard-install"]
-run = ["npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --file dashboard/Dockerfile dashboard"]
+run = ["npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --network=host --file dashboard/Dockerfile dashboard"]
 
 [test-dashboard-e2e]
 description = "DashboardのPlaywright UIテストを実行"
 depends = ["dashboard-install"]
 run = ["npx --prefix dashboard playwright install chromium", "npm --prefix dashboard run test:e2e"]
+
+[test-import-e2e]
+description = "ZIP登録・更新を隔離Docker環境とブラウザで検証"
+depends = ["dashboard-install"]
+run = ["npx --prefix dashboard playwright install chromium", "bash scripts/test-import-e2e.sh"]
 
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"

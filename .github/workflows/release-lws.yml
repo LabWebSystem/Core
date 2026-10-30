@@ -20,6 +20,13 @@ jobs:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
       - run: mise run verify release
+      - name: 品質ゲート結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-test-results
+          path: test/result/
+          if-no-files-found: ignore
   backend-image:
     needs: [quality]
     runs-on: ubuntu-latest
@@ -72,8 +79,37 @@ jobs:
     outputs:
       digest: ${{ steps.publish.outputs.digest }}
 
+  avahi-image:
+    needs: [quality]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v4
+      - name: Avahiイメージ名を作成
+        id: image
+        run: echo "image=ghcr.io/labwebsystem/lws-avahi:${GITHUB_REF_NAME#lws-v}" >> "$GITHUB_OUTPUT"
+      - name: Avahiイメージをビルドして公開
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infrastructure/Dockerfile.avahi
+          network: host
+          allow: network.host
+          push: true
+          tags: ${{ steps.image.outputs.image }}
+          cache-from: type=gha,scope=lws-avahi
+          cache-to: type=gha,mode=max,scope=lws-avahi
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+
   package:
-    needs: [quality, backend-image, dashboard-image]
+    needs: [quality, backend-image, dashboard-image, avahi-image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -82,6 +118,7 @@ jobs:
         env:
           LWS_BACKEND_DIGEST: ${{ needs.backend-image.outputs.digest }}
           LWS_DASHBOARD_DIGEST: ${{ needs.dashboard-image.outputs.digest }}
+          LWS_AVAHI_DIGEST: ${{ needs.avahi-image.outputs.digest }}
         run: mise run package
       - uses: actions/upload-artifact@v7
         with:
@@ -89,7 +126,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
   release:
-    needs: [quality, package, backend-image, dashboard-image]
+    needs: [quality, package, backend-image, dashboard-image, avahi-image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8

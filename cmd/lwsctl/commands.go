@@ -107,6 +107,9 @@ func (a *application) start(options []string) error {
 
 	if err := a.loadConfig(); err == nil {
 		current := a.domain
+		if requested == "" && !domainPattern.MatchString(current) {
+			return localDomainMigrationError()
+		}
 		if requested != "" && requested != current {
 			if !force {
 				confirmed, confirmErr := confirm(fmt.Sprintf("ベースドメインを%sから%sへ変更し、ルーティング設定を再生成します。続行しますか?", current, requested))
@@ -152,10 +155,12 @@ func (a *application) start(options []string) error {
 func (a *application) checkRequiredPorts() error {
 	for _, required := range []struct{ network, address string }{
 		{network: "tcp", address: ":80"},
-		{network: "tcp", address: ":53"},
-		{network: "udp", address: ":53"},
+		{network: "udp", address: ":5353"},
 	} {
 		if err := requiredPortProbe(required.network, required.address); err != nil {
+			if required.network == "udp" && required.address == ":5353" {
+				return fmt.Errorf("mDNS用のudp/5353が既に使用されています（既存サービスは停止しません）")
+			}
 			return fmt.Errorf("%w: %s/%s", errPortOccupied, required.network, required.address)
 		}
 	}
@@ -230,6 +235,9 @@ func (a *application) rebuild() error {
 		}
 		return err
 	}
+	if !domainPattern.MatchString(a.domain) {
+		return localDomainMigrationError()
+	}
 	if err := a.compose("config"); err != nil {
 		return err
 	}
@@ -248,6 +256,9 @@ func (a *application) update() error {
 		} else {
 			return err
 		}
+	}
+	if configured && !domainPattern.MatchString(a.domain) {
+		return localDomainMigrationError()
 	}
 	if os.Getenv("LWS_SKIP_PACKAGE_UPDATE") != "1" {
 		wasRunning := false
@@ -296,6 +307,10 @@ func (a *application) update() error {
 	}
 	fmt.Println("LWSを更新しました")
 	return nil
+}
+
+func localDomainMigrationError() error {
+	return errors.New("ベースドメインがmDNS対応形式ではありません。lwsctl start --domain <名前>.local --force で変更してください")
 }
 
 func (a *application) pullImagesIfNeeded() error {
