@@ -1,7 +1,7 @@
 FROM debian:13.1-slim
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y avahi-daemon \
+    && apt-get install --no-install-recommends -y avahi-daemon iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY infrastructure/avahi-daemon.conf /etc/avahi/avahi-daemon.conf

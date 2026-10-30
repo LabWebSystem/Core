@@ -293,7 +293,7 @@ func (a *application) update() error {
 			return err
 		}
 	}
-	if err := a.pullImagesIfNeeded(); err != nil {
+	if err := a.pullImages(); err != nil {
 		return err
 	}
 	if configured && os.Getenv("LWS_RESTART_AFTER_UPDATE") == "1" {
@@ -313,20 +313,8 @@ func localDomainMigrationError() error {
 	return errors.New("ベースドメインがmDNS対応形式ではありません。lwsctl start --domain <名前>.local --force で変更してください")
 }
 
-func (a *application) pullImagesIfNeeded() error {
-	output, err := a.composeOutput("config", "--images")
-	if err != nil {
-		return err
-	}
-	for _, image := range strings.Fields(string(output)) {
-		if !strings.Contains(image, "@sha256:") {
-			return a.compose("pull")
-		}
-		if _, err := a.dockerOutput("image", "inspect", image); err != nil {
-			return a.compose("pull")
-		}
-	}
-	return nil
+func (a *application) pullImages() error {
+	return a.compose("pull")
 }
 
 func (a *application) hasRunningServices() (bool, error) {

@@ -7,13 +7,14 @@ if [[ "$#" -eq 0 ]]; then
 fi
 
 tmp="$(mktemp -d)"
+run_id="${tmp##*.}"
 
 cleanup() {
   rm -rf "$tmp"
 }
 trap cleanup EXIT
 
-docker image ls --all --quiet --no-trunc | sort -u >"$tmp/images-before"
+export LWS_TEST_RUN_ID="$run_id"
 
 status=0
 if "$@"; then
@@ -22,18 +23,20 @@ else
   status=$?
 fi
 
-docker image ls --all --quiet --no-trunc | sort -u >"$tmp/images-after"
-
 cleanup_status=0
+if ! docker image ls --all --quiet --no-trunc --filter "label=com.labwebsystem.test-run=$run_id" >"$tmp/images"; then
+  printf 'このテストが作成したDocker imageを確認できませんでした\n' >&2
+  cleanup_status=1
+fi
 while IFS= read -r image; do
   [[ -z "$image" ]] && continue
   if docker image rm "$image"; then
-    printf 'テストで取得したDocker imageを削除しました: %s\n' "$image"
+    printf 'このテストが作成したDocker imageを削除しました: %s\n' "$image"
   else
-    printf 'テストで取得したDocker imageを削除できません: %s\n' "$image" >&2
+    printf 'このテストが作成したDocker imageを削除できません: %s\n' "$image" >&2
     cleanup_status=1
   fi
-done < <(comm -13 "$tmp/images-before" "$tmp/images-after")
+done <"$tmp/images"
 
 if [[ "$status" -ne 0 ]]; then
   exit "$status"

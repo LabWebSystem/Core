@@ -69,14 +69,6 @@ parse_args() {
   done
 }
 
-validate_repository_state() {
-  local branch
-  branch="$(git -C "$ROOT" branch --show-current)"
-
-  # [[ "$branch" == "main" ]] ||
-    # die 'リリースはmainブランチからのみ実行できます'
-}
-
 resolve_repository() {
   if [[ -n "${LWS_REPOSITORY:-}" ]]; then
     printf '%s\n' "$LWS_REPOSITORY"
@@ -200,8 +192,6 @@ main() {
   require_command gh
   require_command mise
   check_release_state
-  validate_repository_state
-
   local repository
   repository="$(resolve_repository)"
 

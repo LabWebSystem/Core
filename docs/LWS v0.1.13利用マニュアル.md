@@ -1,6 +1,6 @@
-# LWS v0.1.12 利用マニュアル
+# LWS v0.1.13 利用マニュアル
 
-> この文書はCore v0.1.12を対象とします。
+> この文書はCore v0.1.13を対象とします。
 
 ## LWSでできること
 
@@ -69,7 +69,7 @@ sudo lwsctl status
 | `lwsctl status` | lwsctlのバージョン、設定と実行状態を確認する |
 | `lwsctl version` | lwsctlのバージョンを確認する |
 | `lwsctl rebuild` | LWSの設定を再生成して実行環境を作り直す |
-| `lwsctl update` | LWSのパッケージとDockerイメージを更新する。同じdigestのイメージは再取得しない |
+| `lwsctl update` | LWSのパッケージと、現在のLWSバージョンtagに対応するDockerイメージを取得する |
 | `lwsctl down [--recursive]` | LWSの実行環境を削除する。`--recursive`指定時は子のアプリcontainerも削除する |
 
 `down`は実行環境だけを削除します。設定・状態・保存データまで削除する場合は、確認のうえで次を実行します。
@@ -144,7 +144,7 @@ curl http://api.example.local/api/v1/operations/<operation-id>
 
 アプリごとに環境変数を設定できます。パスワードやAPIキーなどsecretとして登録した値は暗号化して保存され、取得時に値そのものは表示されません。
 
-ただし、LWS v0.1.12にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
+ただし、LWS v0.1.13にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
 
 ## リソースプールと設定レイヤー
 
@@ -171,7 +171,7 @@ Dashboardのリソースプールでは、Composeから検出した名前付きV
 
 この操作は元に戻せないため、確認が必要です。
 
-## v0.1.12での注意点
+## v0.1.13での注意点
 
 - 管理操作の中心はBackend APIです。
 - DashboardではGitHubまたはZIPからアプリを登録できます。LWS本体の起動・停止・更新は引き続き`lwsctl`で行います。
@@ -179,6 +179,7 @@ Dashboardのリソースプールでは、Composeから検出した名前付きV
 - APIの認証・認可はありません。
 - WebSocketは使用せず、処理状態やログの通知にはSSEを使います。
 - `.local`名の解決には端末のmDNS対応が必要です。ルーターのDNS設定は不要です。
+- Avahiは設定された公開IPv4アドレスを持つネットワークインターフェースだけでmDNSに参加します。
 - 登録アプリはDocker Compose形式で用意する必要があります。
 
 ## 困ったとき

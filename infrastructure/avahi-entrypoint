@@ -5,5 +5,37 @@ hosts=/var/lib/lws/generated/hosts
 while [ ! -f "$hosts" ]; do
     sleep 1
 done
+
+public_address=${LWS_PUBLIC_ADDRESS:-}
+if [ -z "$public_address" ]; then
+    printf '%s\n' '公開IPv4アドレスが設定されていません' >&2
+    exit 1
+fi
+
+interface=$(ip -o -4 address show | awk -v address="$public_address" '
+    {
+        split($4, parts, "/")
+        if (parts[1] == address) {
+            print $2
+            exit
+        }
+    }
+')
+interface=${interface%%@*}
+case "$interface" in
+    ''|*[!A-Za-z0-9_.-]*)
+        printf '公開IPv4アドレスに対応するネットワークインターフェースがありません: %s\n' "$public_address" >&2
+        exit 1
+        ;;
+esac
+
 ln -sf "$hosts" /etc/avahi/hosts
-exec avahi-daemon --no-chroot --debug
+awk -v interface="$interface" '
+    /^\[server\]$/ {
+        print
+        printf "allow-interfaces=%s\n", interface
+        next
+    }
+    { print }
+' /etc/avahi/avahi-daemon.conf >/run/avahi-daemon.conf
+exec avahi-daemon --no-chroot --file /run/avahi-daemon.conf --debug

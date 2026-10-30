@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}@${LWS_BACKEND_DIGEST:-sha256:c1c71a7693cd3981884ecc669ab72934dda8e9fbb2b15125ff1e212f9f82eda2}
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-backend:${LWS_VERSION:-0.1.0}
     restart: unless-stopped
     environment:
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
@@ -15,7 +15,7 @@ services:
       LWS_SECRET_KEY_PATH: /etc/lws/secret.key
       LWS_CADDY_CONTAINER: ${LWS_CADDY_CONTAINER:-lws-caddy-1}
       LWS_AVAHI_CONTAINER: ${LWS_AVAHI_CONTAINER:-lws-avahi-1}
-      LWS_DASHBOARD_IMAGE: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}@${LWS_DASHBOARD_DIGEST:-sha256:be36c3a68689ddbf480a801e8752b38ef7a978774a97bbb881d0fa70432047c4}
+      LWS_DASHBOARD_IMAGE: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-dashboard:${LWS_VERSION:-0.1.0}
     volumes:
       # DB、アプリsource、生成設定をNamed Volumeに保持する。登録アプリの
       # Composeではhost bind mountを許可しないため、アプリ領域の共有は不要である。
@@ -37,7 +37,7 @@ services:
       timeout: 2s
       retries: 30
   caddy:
-    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    image: caddy:2.10-alpine
     command: ["sh", "-c", "while [ ! -f /var/lib/lws/generated/Caddyfile ]; do sleep 1; done; exec caddy run --config /var/lib/lws/generated/Caddyfile --adapter caddyfile"]
     depends_on:
       backend:
@@ -52,9 +52,11 @@ services:
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
 
   avahi:
-    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-avahi:${LWS_VERSION:-0.1.0}@${LWS_AVAHI_DIGEST:-sha256:0000000000000000000000000000000000000000000000000000000000000000}
+    image: ghcr.io/${LWS_GITHUB_OWNER:-labwebsystem}/lws-avahi:${LWS_VERSION:-0.1.0}
     network_mode: host
     restart: unless-stopped
+    environment:
+      LWS_PUBLIC_ADDRESS: ${LWS_PUBLIC_ADDRESS:-}
     cap_add: [NET_ADMIN, NET_RAW]
     volumes:
       - lws-generated:/var/lib/lws/generated:ro

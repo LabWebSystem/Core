@@ -6,7 +6,6 @@ tmp="$(mktemp -d)"
 installation="e2e-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 caddy="lws-${installation}-caddy"
 backend_pid=""
-pulled_image=""
 
 cleanup() {
   if [[ -n "$backend_pid" ]]; then
@@ -33,25 +32,11 @@ cleanup() {
   while IFS= read -r name; do
     [[ -z "$name" ]] || docker volume rm "$name" >/dev/null
   done < <(docker volume ls -q --filter "label=com.labwebsystem.owner=lws" --filter "label=com.labwebsystem.installation-id=$installation")
-  if [[ -n "$pulled_image" ]]; then
-    tags="$(docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "$pulled_image" 2>/dev/null || true)"
-    users="$(docker ps -aq --filter "ancestor=$pulled_image")"
-    if [[ "$tags" == "caddy:2.10-alpine" && -z "$users" ]]; then
-      docker image rm "$pulled_image" >/dev/null
-    fi
-  fi
   rm -rf "$tmp"
 }
 trap cleanup EXIT
 
-if ! docker image inspect caddy:2.10-alpine >/dev/null 2>&1; then
-  docker image ls --all --quiet --no-trunc >"$tmp/images-before"
-  docker pull caddy:2.10-alpine >/dev/null
-  candidate="$(docker image inspect --format '{{.Id}}' caddy:2.10-alpine)"
-  if ! grep -Fxq "$candidate" "$tmp/images-before"; then
-    pulled_image="$candidate"
-  fi
-fi
+docker pull caddy:2.10-alpine >/dev/null
 web_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 docker run -d --name "$caddy" --label com.labwebsystem.owner=lws --label "com.labwebsystem.installation-id=$installation" caddy:2.10-alpine >/dev/null
 go build -o "$tmp/backend" "$root/test/e2e/backend"

@@ -14,6 +14,8 @@ LWS本体の隔離環境を準備する
     Set Suite Variable    ${QA_ROOT}    ${qa_root}
     ${project}=    Evaluate    'lws-qa-' + __import__('uuid').uuid4().hex[:8]
     Set Suite Variable    ${QA_PROJECT}    ${project}
+    ${test_run_id}=    Get Environment Variable    LWS_TEST_RUN_ID
+    ${avahi_image}=    Set Variable    lws-avahi-qa:${test_run_id}
     Create File    ${qa_root}/version    0.1.0
     ${build}=    Run Process    ${WORKSPACE}/scripts/build-lwsctl.sh    --output    ${qa_root}/lwsctl    cwd=${WORKSPACE}
     Should Be Equal As Integers    ${build.rc}    0
@@ -25,7 +27,7 @@ LWS本体の隔離環境を準備する
     ${compose}=    Replace String    ${compose}    lws-internal    ${project}-internal
     ${compose}=    Replace String    ${compose}    context: ..    context: ${WORKSPACE}
     ${compose}=    Evaluate    __import__('re').sub(r'(?m)^\\s*image: ghcr[.]io/.*lws-backend.*\\n', '', $compose)
-    ${compose}=    Evaluate    __import__('re').sub(r'(?m)^(\\s*image:\\s*)ghcr[.]io/.*lws-avahi:.*$', r'\\1lws-avahi-qa:local', $compose)
+    ${compose}=    Evaluate    __import__('re').sub(r'(?m)^(\\s*image:\\s*)ghcr[.]io/.*lws-avahi:.*$', r'\\1' + $avahi_image, $compose)
     ${compose_file}=    Set Variable    ${qa_root}/compose.yaml
     Create File    ${compose_file}    ${compose}
     Set Environment Variable    LWS_CONFIG_DIR    ${qa_root}/etc
@@ -37,7 +39,7 @@ LWS本体の隔離環境を準備する
     Set Environment Variable    LWS_AVAHI_CONTAINER    ${project}-avahi-1
     ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|5353)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
     Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、5353/udp)が既に使用されています。
-    ${avahi_build}=    Run Process    docker    build    --network    host    --file    ${WORKSPACE}/infrastructure/Dockerfile.avahi    --tag    lws-avahi-qa:local    ${WORKSPACE}
+    ${avahi_build}=    Run Process    docker    build    --network    host    --label    com.labwebsystem.test-run=%{LWS_TEST_RUN_ID}    --file    ${WORKSPACE}/infrastructure/Dockerfile.avahi    --tag    ${avahi_image}    ${WORKSPACE}
     Should Be Equal As Integers    ${avahi_build.rc}    0
 
 LWS本体を停止して隔離環境を削除する

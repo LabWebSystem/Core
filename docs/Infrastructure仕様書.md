@@ -21,7 +21,7 @@
 
 - BackendだけがDocker socketを使う。登録アプリへのsocket mountを禁止する。
 - Backendは物理デバイスの検出だけのため、ホストの`/dev`と`/run/udev`をread-onlyでmountする。Backend自身へdeviceを割り当てず、実際のdevice割り当ては生成overrideを通じて登録アプリだけへ行う。
-- Backend、Caddy、Avahiの実行イメージは、同じLWS release versionに揃えたtagと固定digestを使う。`latest`は使わない。
+- Backend、Dashboard、Avahiの実行イメージはLWS release versionのtagを使い、Caddyは固定のバージョンtagを使う。`latest`は使わない。
 - Backendは`docker compose`と`git`を実行するため、distrolessイメージを使わない。
 - Backendはホストポートを公開せず、Caddy経由でだけ到達可能にする。CORSは許可しない。状態変更にはJSONの`Content-Type`と許可済み`Host`を要求し、`Origin` headerがある要求は許可済みoriginだけを受け付ける。
 

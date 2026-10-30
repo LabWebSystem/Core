@@ -37,14 +37,6 @@ case "$*" in
       printf '%s\n' "$LWS_TEST_RUNNING_SERVICES"
     fi
     ;;
-  *'config --images'*)
-    printf '%s\n' 'ghcr.io/labwebsystem/lws-backend:0.2.0@sha256:test-image'
-    ;;
-  *'image inspect'*)
-    if [ "${LWS_TEST_IMAGE_PRESENT:-}" != 1 ]; then
-      status=1
-    fi
-    ;;
 esac
 printf '%s | LWS_BASE_DOMAIN=%s LWS_VERSION=%s\n' \
   "$*" \
@@ -250,14 +242,6 @@ test_update() {
     'pull | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 
-  grep -qF \
-    'config --images | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
-    "$TMP/docker.log"
-
-  grep -qF \
-    'image inspect ghcr.io/labwebsystem/lws-backend:0.2.0@sha256:test-image | LWS_BASE_DOMAIN= LWS_VERSION=' \
-    "$TMP/docker.log"
-
   ! grep -qF \
     'up -d --remove-orphans' \
     "$TMP/docker.log"
@@ -276,23 +260,12 @@ test_update_running() {
     "$TMP/docker.log"
 }
 
-test_update_with_current_images() {
+test_update_pulls_version_tagged_images() {
   : >"$TMP/docker.log"
-  export LWS_TEST_IMAGE_PRESENT=1
 
   LWS_SKIP_PACKAGE_UPDATE=1 "$LWSCTL" update
 
-  unset LWS_TEST_IMAGE_PRESENT
-
   grep -qF \
-    'config --images | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
-    "$TMP/docker.log"
-
-  grep -qF \
-    'image inspect ghcr.io/labwebsystem/lws-backend:0.2.0@sha256:test-image | LWS_BASE_DOMAIN= LWS_VERSION=' \
-    "$TMP/docker.log"
-
-  ! grep -qF \
     'pull | LWS_BASE_DOMAIN=changed.local LWS_VERSION=0.2.0' \
     "$TMP/docker.log"
 }
@@ -572,6 +545,31 @@ test_version_sources() {
   grep -qx "sdk $sdk_version" <<<"$versions"
 }
 
+test_image_cleanup_scope() {
+  local fake_bin="$TMP/image-cleanup-bin"
+  local log="$TMP/image-cleanup.log"
+  mkdir -p "$fake_bin"
+
+  cat >"$fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${LWS_TEST_IMAGE_CLEANUP_LOG:?}"
+case "$1 $2" in
+  'image ls')
+    printf 'test-image-id\n'
+    ;;
+esac
+EOF
+  chmod +x "$fake_bin/docker"
+
+  PATH="$fake_bin:$HOST_PATH" \
+    LWS_TEST_IMAGE_CLEANUP_LOG="$log" \
+    "$ROOT/scripts/run-with-image-cleanup.sh" true
+
+  grep -Eq '^image ls --all --quiet --no-trunc --filter label=com[.]labwebsystem[.]test-run=[[:alnum:]]+$' "$log"
+  grep -qx 'image rm test-image-id' "$log"
+  ! grep -q 'images-before\|comm -13' "$ROOT/scripts/run-with-image-cleanup.sh"
+}
+
 main() {
   local target="${1:-all}"
 
@@ -591,6 +589,7 @@ main() {
   fi
   if [[ "$target" == all || "$target" == fast || "$target" == architecture ]]; then
     "$ROOT/scripts/test-quality-architecture.sh"
+    test_image_cleanup_scope
   fi
   if [[ "$target" == all || "$target" == cli ]]; then
     setup_cli_environment
@@ -603,7 +602,7 @@ main() {
     test_config_migration
     test_update
     test_update_running
-    test_update_with_current_images
+    test_update_pulls_version_tagged_images
     test_down
     test_version_sources
   fi
@@ -631,7 +630,7 @@ main() {
   if [[ "$target" == all || "$target" == infrastructure ]]; then
     (cd "$ROOT" && go test -list '^TestDerived' ./backend/... | grep -q '^TestDerived') || { printf 'infrastructure対象テストがありません\n' >&2; return 1; }
     (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestDerived')
-    PATH="$HOST_PATH" "$ROOT/scripts/run-with-image-cleanup.sh" "$ROOT/scripts/test-infrastructure.sh"
+    PATH="$HOST_PATH" "$ROOT/scripts/test-infrastructure.sh"
   fi
 
   printf 'テスト: 成功\n'

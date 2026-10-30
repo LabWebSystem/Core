@@ -4,7 +4,7 @@ LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・�
 
 アプリはGitHubリポジトリまたはZIPファイルから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
-> Core v0.1.12を公開しました。GitHubまたはZIPからのアプリ登録、`.local` mDNSによる公開に対応しています。TypeScript SDKは開発中です。
+> Core v0.1.13を公開しました。AvahiはLWSの公開IPv4アドレスを持つNICだけでmDNSに参加し、イメージはリリースバージョンtagで管理します。GitHubまたはZIPからのアプリ登録にも対応しています。TypeScript SDKは開発中です。
 
 ## できること
 
@@ -70,7 +70,7 @@ reserve.example.local
 | `lwsctl status` | lwsctlのバージョン、設定とコンテナの状態を表示 |
 | `lwsctl version` | lwsctlのバージョンを表示 |
 | `lwsctl rebuild` | 設定を作り直して実行環境を再構成 |
-| `lwsctl update` | パッケージとDockerイメージを更新。同じdigestのイメージは再取得しない |
+| `lwsctl update` | パッケージと、現在のLWSバージョンtagに対応するDockerイメージを取得する |
 | `lwsctl down [--recursive]` | LWSの実行環境を削除。`--recursive`指定時は子のアプリcontainerも削除する |
 
 設定や保存データも含めて削除する場合は、次を実行します。
@@ -81,7 +81,7 @@ sudo lwsctl down --purge
 
 通常の`stop`と`down`はLWS本体だけを対象にします。子のアプリも対象にする場合は`-r`または`--recursive`を追加します。`down --recursive --purge`では、子のアプリのLWS所有volumeも削除します。
 
-詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.12利用マニュアル.md)を参照してください。
+詳しい操作、アプリの登録方法、完全削除については、[利用マニュアル](docs/LWS%20v0.1.13利用マニュアル.md)を参照してください。
 
 ## アプリを公開する
 
@@ -200,7 +200,7 @@ QAとDashboardのイメージ検証は、実行中に新しく取得・作成し
 
 ## 関連資料
 
-- [利用マニュアル](docs/LWS%20v0.1.12利用マニュアル.md)
+- [利用マニュアル](docs/LWS%20v0.1.13利用マニュアル.md)
 - [設計概要](docs/LabWebSystem設計概要.md)
 - [Infrastructure仕様書](docs/Infrastructure仕様書.md)
 - [Backend仕様書](docs/Backend仕様書.md)

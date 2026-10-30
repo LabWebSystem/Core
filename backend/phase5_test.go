@@ -92,32 +92,28 @@ func TestConfigurationRequiresExistingApplication(t *testing.T) {
 	}
 }
 
-func TestInfrastructureImagesArePinnedAndUsesMDNSOnly(t *testing.T) {
+func TestInfrastructureImagesUseVersionTagsAndUsesMDNSOnly(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "infrastructure", "compose.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(data)
-	for _, image := range []string{"lws-backend:", "lws-dashboard:", "caddy:", "lws-avahi:"} {
-		found := false
-		for _, line := range strings.Split(text, "\n") {
-			if strings.Contains(line, image) && strings.Contains(line, "@") && strings.Contains(line, "sha256:") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("固定digestのimageがありません: %s", image)
+	for _, image := range []string{
+		"lws-backend:${LWS_VERSION:-0.1.0}",
+		"lws-dashboard:${LWS_VERSION:-0.1.0}",
+		"caddy:2.10-alpine",
+		"lws-avahi:${LWS_VERSION:-0.1.0}",
+	} {
+		if !strings.Contains(text, image) {
+			t.Fatalf("バージョンtagのimageがありません: %s", image)
 		}
 	}
-	for _, port := range []string{"\"${LWS_HTTP_PORT:-80}:80\"", "network_mode: host", "lws-generated:/var/lib/lws/generated:ro"} {
+	if strings.Contains(text, "@sha256:") {
+		t.Fatal("Composeにdigest固定が残っています")
+	}
+	for _, port := range []string{"\"${LWS_HTTP_PORT:-80}:80\"", "network_mode: host", "LWS_PUBLIC_ADDRESS: ${LWS_PUBLIC_ADDRESS:-}", "lws-generated:/var/lib/lws/generated:ro"} {
 		if !strings.Contains(text, port) {
 			t.Fatalf("必須公開portが固定されていません: %s", port)
-		}
-	}
-	for _, variable := range []string{"LWS_BACKEND_DIGEST", "LWS_DASHBOARD_DIGEST", "LWS_AVAHI_DIGEST"} {
-		if !strings.Contains(text, variable+":-") {
-			t.Fatalf("リリースdigestの注入点がありません: %s", variable)
 		}
 	}
 	if strings.Contains(text, "coredns:") || strings.Contains(text, "LWS_COREDNS_DIGEST") || strings.Contains(text, ":53/tcp") || strings.Contains(text, ":53/udp") {
@@ -139,6 +135,9 @@ func TestAvahiImageAndComposePublishGeneratedMDNSHosts(t *testing.T) {
 	}
 	if !strings.Contains(string(entrypoint), "/var/lib/lws/generated/hosts") {
 		t.Fatal("Backend生成hostsをAvahiへ渡していません")
+	}
+	if !strings.Contains(string(entrypoint), "allow-interfaces=") || !strings.Contains(string(entrypoint), "LWS_PUBLIC_ADDRESS") {
+		t.Fatal("Avahiが公開IPv4アドレスのインターフェースに限定されていません")
 	}
 }
 

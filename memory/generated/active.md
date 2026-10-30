@@ -43,3 +43,4 @@
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 - SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
 - SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+- SUP-004 | ACTIVE | - | LWS image digest固定と全体差分によるテストcleanupを置き換える

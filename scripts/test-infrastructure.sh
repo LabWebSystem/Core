@@ -10,21 +10,27 @@ cleanup() {
   docker compose -p "$PROJECT" -f "$TMP/compose.yaml" down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker volume rm "${PROJECT}_owned" "${PROJECT}_foreign" >/dev/null 2>&1 || true
   docker image rm "$AVAHI_IMAGE" >/dev/null 2>&1 || true
+  docker network rm "$PROJECT" >/dev/null 2>&1 || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
 
+docker network create "$PROJECT" >/dev/null
+test_subnet="$(docker network inspect --format '{{(index .IPAM.Config 0).Subnet}}' "$PROJECT")"
+test_address="$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1])[2])' "$test_subnet")"
+
 mkdir -p "$TMP/generated"
-cat >"$TMP/generated/hosts" <<'EOF'
-192.0.2.10 api.home.local
-192.0.2.10 dashboard.home.local
-192.0.2.10 app-a.home.local
+cat >"$TMP/generated/hosts" <<EOF
+$test_address api.home.local
+$test_address dashboard.home.local
+$test_address app-a.home.local
 EOF
 
 docker build --network=host -f "$ROOT/infrastructure/Dockerfile.avahi" -t "$AVAHI_IMAGE" "$ROOT" >/dev/null
 docker run --rm --entrypoint avahi-daemon "$AVAHI_IMAGE" --version >/dev/null
 set +e
-timeout --foreground 4s docker run --rm --network bridge --cap-add NET_ADMIN --cap-add NET_RAW \
+timeout --foreground 4s docker run --rm --network "$PROJECT" --ip "$test_address" \
+  --env "LWS_PUBLIC_ADDRESS=$test_address" --cap-add NET_ADMIN --cap-add NET_RAW \
   --volume "$TMP/generated/hosts:/var/lib/lws/generated/hosts:ro" "$AVAHI_IMAGE" \
   >"$TMP/avahi.log" 2>&1
 avahi_status=$?
@@ -32,6 +38,11 @@ set -e
 if [[ "$avahi_status" -ne 124 ]] || ! grep -q 'Server startup complete' "$TMP/avahi.log"; then
   cat "$TMP/avahi.log" >&2
   printf 'Avahiが隔離ネットワークで起動しませんでした\n' >&2
+  exit 1
+fi
+if ! grep -q "Joining mDNS multicast group on interface eth0.IPv4 with address $test_address" "$TMP/avahi.log"; then
+  cat "$TMP/avahi.log" >&2
+  printf 'Avahiが公開アドレスのインターフェースだけに参加しませんでした\n' >&2
   exit 1
 fi
 if grep -Eq 'coredns|:53(/|:|\")' "$ROOT/infrastructure/compose.yaml"; then

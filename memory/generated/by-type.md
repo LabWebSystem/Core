@@ -84,7 +84,7 @@
 - CHG-035 | SHIPPED | - | フェーズ5のSSEと再起動耐障害性を実装する
 - CHG-036 | SHIPPED | - | フェーズ0〜5の未達項目をテスト先行で補完する
 - CHG-037 | SHIPPED | - | Backendの未検証境界を自動テストで補完する
-- CHG-038 | SHIPPED | - | リリース時のBackend・Dashboard digestをパッケージへ反映する
+- CHG-038 | SUPERSEDED | - | リリース時のBackend・Dashboard digestをパッケージへ反映する
 - CHG-039 | SHIPPED | - | CIのCLIテストで実ホストport競合を分離する
 - CHG-040 | SHIPPED | - | GitHub ActionsをNode.js 24対応版へ更新する
 - CHG-041 | SHIPPED | - | CIのOSRunner timeoutテストを決定的にする
@@ -107,7 +107,7 @@
 - CHG-058 | SHIPPED | - | miseの内部taskをライブラリ設定へ分離する
 - CHG-059 | SHIPPED | - | READMEを現行の利用・開発入口に合わせて再構成する
 - CHG-060 | SHIPPED | - | 初回起動前のLWS更新を許可する
-- CHG-061 | SHIPPED | - | テスト用Dockerイメージを実行後に削除する
+- CHG-061 | SUPERSEDED | - | テスト用Dockerイメージを実行後に削除する
 - CHG-062 | SHIPPED | - | Impeccableデザインスキルをプロジェクトへ導入する
 - CHG-063 | SHIPPED | - | LWSのプロダクト文脈を定義する
 - CHG-064 | SHIPPED | - | Dashboardデバッグルームと公開経路を実装する
@@ -144,8 +144,10 @@
 - CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する
 - CHG-096 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
 - CHG-097 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
+- CHG-098 | SHIPPED | Infrastructure / CLI / CI / test | LWSイメージをバージョンtagで運用しテスト用image削除を限定する
 
 ## SUP
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 - SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
 - SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+- SUP-004 | ACTIVE | - | LWS image digest固定と全体差分によるテストcleanupを置き換える
