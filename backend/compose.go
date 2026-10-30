@@ -3,6 +3,7 @@ package backend
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +18,28 @@ type ComposeSource struct {
 	Data []byte
 }
 
+func readComposeFile(root, name string) ([]byte, error) {
+	path := filepath.Join(root, name)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 4<<20 {
+		return nil, fmt.Errorf("Composeファイルを読み取れないかサイズが大きすぎます")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("Composeを読み取れません")
+	}
+	defer file.Close()
+	info, err = file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 4<<20 {
+		return nil, fmt.Errorf("Composeファイルを読み取れないかサイズが大きすぎます")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, (4<<20)+1))
+	if err != nil || len(data) > 4<<20 {
+		return nil, fmt.Errorf("Composeファイルを読み取れないかサイズが大きすぎます")
+	}
+	return data, nil
+}
+
 // ReadComposeSourcesはメインComposeと、指定順のoverrideを同じ順序で読み取る。
 func ReadComposeSources(sourceRoot, composeFile string, overrideFiles []string) ([]ComposeSource, error) {
 	files := append([]string{composeFile}, overrideFiles...)
@@ -26,7 +49,7 @@ func ReadComposeSources(sourceRoot, composeFile string, overrideFiles []string) 
 			return nil, NewValidationError("composeFile", "Composeファイル名が不正です", "INVALID_ARGUMENT")
 		}
 		path := filepath.Join(sourceRoot, file)
-		data, err := os.ReadFile(path)
+		data, err := readComposeFile(sourceRoot, file)
 		if err != nil {
 			return nil, fmt.Errorf("Composeを読み取れません: %w", err)
 		}
@@ -55,8 +78,8 @@ func MergeComposeVariables(sources []ComposeSource) ([]ComposeVariable, error) {
 }
 
 type WebInterface struct {
-	Service string
-	Port    int
+	Service string `json:"service"`
+	Port    int    `json:"port"`
 }
 
 func ComposeHasService(sources []ComposeSource, name string) bool {

@@ -2,13 +2,13 @@
 
 LabWebSystem（LWS）は、研究室や家庭内LANでWebアプリを公開・管理するための仕組みです。
 
-アプリはGitHubリポジトリから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
+アプリはGitHubリポジトリまたはZIPファイルから登録します。LWSがDocker Composeでアプリを動かし、アプリごとのURLをLAN内へ公開します。
 
 > このリポジトリのCore開発版は v0.1.11 です。CLI、Backend、Dashboardによるアプリ管理を使えます。TypeScript SDKは、まだ開発中です。公開済みリリースの最新タグは v0.1.10 です。
 
 ## できること
 
-- GitHubリポジトリにあるWebアプリを登録する
+- GitHubリポジトリまたはZIPファイルにあるWebアプリを登録する
 - Docker Composeでアプリを起動・停止・更新する
 - `app-name.example.internal`の形でアプリごとのURLを公開する
 - アプリの設定値、secret、ログ、実行状態を管理する
@@ -79,17 +79,18 @@ sudo lwsctl down --purge
 
 ## アプリを公開する
 
-登録するGitHubリポジトリには、次のファイルが必要です。
+登録するアプリにはComposeファイルが必要です。ZIPはファイルを直下、または直下の単一フォルダに配置してください。
 
 ```text
 compose.yaml
 lws.manifest.yaml
 ```
 
-`lws.manifest.yaml`には、公開するCompose serviceとportを書きます。
+`lws.manifest.yaml`は任意です。記載するとアプリ名と公開先が登録画面に反映されます。
 
 ```yaml
 apiVersion: lws/v1
+composeFile: compose.yaml
 metadata:
   name: 予約システム
   description: 研究室の設備予約を管理するアプリ
@@ -98,7 +99,7 @@ public:
   port: 3000
 ```
 
-LWSはリポジトリを取得して内容を確認します。登録直後は`CONFIGURING`（設定待ち）となり、Dashboardで環境変数とデバイス割り当てを確認してから開始します。アプリの登録・設定・操作はBackend APIから行います。APIの詳しい使い方は[利用マニュアル](docs/LWS%20v0.1.11利用マニュアル.md)を参照してください。
+DashboardでGitHubのURLとref、またはZIPを指定し、取り込み内容を確認します。manifestがない場合はアプリ名、Composeファイル、公開serviceとportを指定します。登録直後は`CONFIGURING`（設定待ち）となり、環境変数とデバイス割り当てを確認してから開始します。ZIPで登録したアプリは、新しいZIPを指定して更新できます。
 
 ### Backend APIの概要
 
@@ -111,6 +112,8 @@ OpenAPIの仕様は`http://api.<base-domain>/openapi.json`または`http://dashb
 | メソッド | パス | 内容 |
 | --- | --- | --- |
 | `GET` / `POST` | `/applications` | アプリ一覧、アプリ登録 |
+| `POST` | `/imports/github`、`/imports/zip` | GitHubまたはZIPを取得して登録候補を確認 |
+| `POST` | `/applications/{application}/imports` | 確認済みZIPによるアプリ更新 |
 | `GET` / `PATCH` / `DELETE` | `/applications/{application}` | 取得、更新、登録解除 |
 | `POST` | `/applications/{application}:start`、`:stop`、`:sync`、`:rebuild`、`:register`、`:purge` | アプリ操作 |
 | `GET` / `PATCH` | `/applications/{application}/configuration` | 環境変数・デバイス設定 |

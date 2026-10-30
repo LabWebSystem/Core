@@ -58,16 +58,16 @@
 
 ## 5. 登録アプリ契約
 
-### 5.1 必須ファイル
+### 5.1 アプリsource
 
-リポジトリrootには、通常のComposeアプリとしての`compose.yaml`とLWS連携情報の`lws.manifest.yaml`が必要である。
+GitHubリポジトリまたはZIPにComposeファイルが必要である。`lws.manifest.yaml`は任意であり、表示情報と公開先の初期値を提供する。ZIPは直下または直下の単一フォルダをアプリrootとする。
 
 ```text
 compose.yaml
 lws.manifest.yaml
 ```
 
-`compose.override.yaml`はローカル開発用に使用できるが、LWSは明示的に`-f compose.yaml`を指定するため読まない。
+メインComposeとoverrideは利用者が明示した順に読み込む。暗黙のoverrideは適用しない。
 
 ### 5.2 `lws.manifest.yaml`
 
@@ -76,6 +76,7 @@ lws.manifest.yaml
 
 ```yaml
 apiVersion: lws/v1
+composeFile: compose.yaml
 metadata:
   name: 研究室予約システム
   description: 研究室の設備予約を管理するWebアプリケーション
@@ -87,6 +88,7 @@ public:
 | 項目 | 要件 |
 | --- | --- |
 | `apiVersion` | 文字列`lws/v1`のみ |
+| `composeFile` | 任意。source rootにあるComposeファイル名。明示選択がない場合に使用する |
 | `metadata` | `name`と`description`だけを持つobject |
 | `metadata.name` | 前後空白なし、1〜80文字のUnicode文字列 |
 | `metadata.description` | 0〜500文字のプレーンテキスト |
@@ -105,11 +107,11 @@ docker compose --project-name lws-app-<app-id> \
   -f /var/lib/lws/apps/<app-id>/runtime/lws.override.yaml up -d
 ```
 
-- overrideはmanifest指定サービスへapp固有edge network、`lws-<app-id>` alias、LWS所有labelを追加する。検証済みの全named volumeにもLWS所有labelを追加する。それ以外のservice、image、build、command、environment、依存関係、volume設定値を変更しない。
+- overrideは選択された公開サービスへapp固有edge network、`lws-<app-id>` alias、LWS所有labelを追加する。検証済みの全named volumeにもLWS所有labelを追加する。それ以外のservice、image、build、command、environment、依存関係、volume設定値を変更しない。
 - `docker compose config --format json`の前に、source treeのsymlink、`include`、`extends`、`env_file`、`label_file`、`volumes_from`、ファイル型`configs`/`secrets`、`build.additional_contexts`、リモートGit build contextを拒否する。
 - `build.context`と`build.dockerfile`は、実体パスがsource root配下の場合だけ許可する。絶対パス、root外へ解決される相対パス、external network、external volumeを拒否する。パスを丸めたりComposeを書き換えたりして受理しない。
-- 事前検査を通過したものだけを`docker compose config --format json`で正規化し、manifest指定serviceの存在を確認する。公開serviceやportは推測しない。
-- 初回登録はsourceとmanifestの検証後に`CONFIGURING`へ遷移し、containerを起動しない。Dashboardまたは設定APIで必須環境変数とdevice bindingを保存した後の開始操作だけがComposeを起動する。
+- 事前検査を通過したものだけを`docker compose config --format json`で正規化し、選択したserviceの存在を確認する。公開serviceやportは推測しない。
+- 初回登録はsourceと、存在する場合はmanifestの検証後に`CONFIGURING`へ遷移し、containerを起動しない。Dashboardまたは設定APIで必須環境変数とdevice bindingを保存した後の開始操作だけがComposeを起動する。
 - source検証と実効Compose検証の両方で、bind mount、匿名volume、tmpfs、host port、host network/PID/IPC、privileged、Docker socket、named volume以外のmountを拒否する。`devices`は例外であり、Composeのcontainer側targetと権限を保ちつつ、LWSデバイスプールから解決した現在の`/dev` pathだけを生成overrideへ渡す。開発時のファイル同期が必要なアプリは、プロジェクトrootからの相対pathだけを指定したDocker Compose Watchを利用する。
 
 ## 7. ライフサイクルと禁止事項

@@ -4,7 +4,7 @@
 
 ## システムの目的
 
-LWSは、信頼できる研究室・家庭内LANで、GitHub上のDocker Composeアプリを登録・検証・公開・管理するシステムです。アプリは`<subdomain>.<base-domain>`で公開されます。
+LWSは、信頼できる研究室・家庭内LANで、GitHubまたはZIPのDocker Composeアプリを登録・検証・公開・管理するシステムです。アプリは`<subdomain>.<base-domain>`で公開されます。
 
 ## 正本と責務
 
@@ -12,7 +12,7 @@ LWSは、信頼できる研究室・家庭内LANで、GitHub上のDocker Compose
 |---|---|---|
 | アプリ状態 | BackendのSQLite | [Backend仕様書](Backend仕様書.md) |
 | API契約 | `backend/openapi.yaml` | [Backend仕様書](Backend仕様書.md) |
-| アプリ契約 | `lws.manifest.yaml`と`compose.yaml` | [Infrastructure仕様書](Infrastructure仕様書.md) |
+| アプリ契約 | 選択したComposeと任意の`lws.manifest.yaml` | [Infrastructure仕様書](Infrastructure仕様書.md) |
 | DNS・Reverse Proxy・Compose override | SQLiteから生成する派生物 | [Infrastructure仕様書](Infrastructure仕様書.md) |
 | LWS本体のライフサイクル | `lwsctl`の6コマンド | [利用マニュアル](LWS%20v0.1.11利用マニュアル.md) |
 | 実行環境 | Docker Compose | [Infrastructure仕様書](Infrastructure仕様書.md) |
@@ -63,7 +63,7 @@ GitHub Actions
 
 1. APTまたはDNFでパッケージをインストールする。インストール時は起動しない。
 2. `lwsctl start --domain <base-domain>`で設定を作成し、LWS本体を起動する。
-3. DashboardからGitHub HTTPSリポジトリ、ref、subdomainを指定してアプリを登録する。
+3. DashboardからGitHub HTTPSリポジトリとref、またはZIPとsubdomainを指定して内容を確認し、アプリを登録する。
 4. BackendがmanifestとComposeを検証し、設定完了まで`CONFIGURING`で保持する。
 5. 環境変数とdevice bindingを設定してアプリを起動する。
 6. `dashboard.<base-domain>`と各アプリURLから利用する。

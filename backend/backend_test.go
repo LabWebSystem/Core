@@ -26,7 +26,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatalf("pragmas fk=%v wal=%v busy_timeout=%d err=%v", fk, wal, busyTimeout, err)
 	}
 	var applied int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 11 {
 		t.Fatalf("migration count=%d err=%v", applied, err)
 	}
 	db.Close()
@@ -35,7 +35,7 @@ func TestDBInitializesWithWALAndForeignKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 10 {
+	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&applied); err != nil || applied != 11 {
 		t.Fatalf("migration rerun count=%d err=%v", applied, err)
 	}
 }
@@ -273,6 +273,48 @@ func TestValidateManifest(t *testing.T) {
 	}
 	if err := ValidateEffectiveComposeWithOwnedNetwork(owned, "web", 3000, "lws-other-edge"); err == nil {
 		t.Fatal("foreign edge network accepted")
+	}
+}
+
+func TestManifestComposeFile(t *testing.T) {
+	base := "apiVersion: lws/v1\nmetadata:\n  name: Demo\n  description: test\npublic:\n  service: web\n  port: 3000\n"
+	manifest, err := ValidateManifest([]byte(base + "composeFile: docker-compose.prod.yml\n"))
+	if err != nil || manifest.ComposeFile != "docker-compose.prod.yml" {
+		t.Fatalf("Compose指定を読み取れません: %+v %v", manifest, err)
+	}
+	for _, filename := range []string{"../compose.yaml", "app.yaml", "/tmp/compose.yaml"} {
+		if _, err := ValidateManifest([]byte(base + "composeFile: " + filename + "\n")); err == nil {
+			t.Fatalf("不正なCompose指定を受理しました: %s", filename)
+		}
+	}
+}
+
+type manifestComposeRunner struct{}
+
+func (manifestComposeRunner) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+	dest := args[len(args)-1]
+	if err := os.MkdirAll(dest, 0700); err != nil {
+		return nil, err
+	}
+	files := map[string]string{
+		"lws.manifest.yaml":       "apiVersion: lws/v1\ncomposeFile: docker-compose.prod.yml\nmetadata:\n  name: Demo\n  description: test\npublic:\n  service: web\n  port: 3000\n",
+		"compose.yaml":            "services:\n  web:\n    image: example\n",
+		"docker-compose.prod.yml": "services:\n  web:\n    image: example\n",
+	}
+	for name, contents := range files {
+		if err := os.WriteFile(filepath.Join(dest, name), []byte(contents), 0600); err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+func TestCloneUsesManifestComposeUnlessExplicitlySelected(t *testing.T) {
+	for _, tc := range []struct{ requested, want string }{{"", "docker-compose.prod.yml"}, {"compose.yaml", "compose.yaml"}} {
+		got, err := CloneAndValidateWithCompose(context.Background(), manifestComposeRunner{}, "https://github.com/a/b", "main", tc.requested, filepath.Join(t.TempDir(), "source"))
+		if err != nil || got != tc.want {
+			t.Fatalf("Compose選択: got %q want %q: %v", got, tc.want, err)
+		}
 	}
 }
 func TestValidateProjectPath(t *testing.T) {
@@ -1283,6 +1325,9 @@ func TestRuntimeUsesOwnedComposeArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES('app-id','app','https://github.com/a/b','main','web',3000,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
 	e := &RuntimeExecutor{DB: db, Root: dir, Runner: r}
 	if err := e.reconcile(context.Background(), "app-id", source, runtime, "up", "-d"); err != nil {
 		t.Fatal(err)
@@ -1520,6 +1565,9 @@ func TestRuntimeRejectsEffectiveComposeBeforeUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO applications(id,subdomain,repository_url,git_ref,manifest_service,manifest_port,created_at,updated_at) VALUES('app-id','app','https://github.com/a/b','main','web',3000,datetime('now'),datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
 	e := &RuntimeExecutor{DB: db, Root: dir, Runner: r}
 	err = e.reconcile(context.Background(), "app-id", source, runtime, "up", "-d")
 	if err == nil {

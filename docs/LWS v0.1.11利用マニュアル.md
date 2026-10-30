@@ -8,7 +8,7 @@ LWSは、研究室や家庭内LANで使うWebアプリを、決まったURLで�
 
 LWSを使うと、次のことができます。
 
-- WebアプリをGitHubリポジトリから登録する
+- WebアプリをGitHubリポジトリまたはZIPから登録する
 - アプリを設定確認後にDocker Composeで起動する
 - アプリごとに専用のURLを割り当てる
 - アプリを停止・再起動・再構成する
@@ -88,17 +88,18 @@ sudo lwsctl down --purge --force
 
 ## アプリを登録する
 
-登録するアプリのGitHubリポジトリには、次の2ファイルが必要です。
+登録するアプリにはComposeファイルが必要です。GitHubリポジトリまたはZIPファイルから取り込めます。`lws.manifest.yaml`は任意です。
 
 ```text
 compose.yaml
 lws.manifest.yaml
 ```
 
-`lws.manifest.yaml`には、アプリの名前と、外部公開するCompose service・portを記載します。
+`lws.manifest.yaml`がある場合は、アプリの名前と、外部公開するCompose service・portを登録画面の初期値として使用します。
 
 ```yaml
 apiVersion: lws/v1
+composeFile: compose.yaml
 metadata:
   name: 研究室予約システム
   description: 研究室の設備予約を管理するWebアプリケーション
@@ -107,9 +108,9 @@ public:
   port: 3000
 ```
 
-Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdomainを指定して登録します。登録後、LWSがリポジトリを取得・検査し、アプリは`CONFIGURING`（設定待ち）になります。Dashboardで環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
+DashboardでGitHubのURLとref、またはZIPと公開subdomainを指定し、取り込み内容を確認します。manifestがない場合はアプリ名、メインCompose、公開serviceとportを指定します。ZIPは直下または直下の単一フォルダにアプリを配置してください。登録後は`CONFIGURING`（設定待ち）になります。環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
 
-アプリの公開serviceやportは推測されません。manifestに記載したserviceがCompose内に存在しない場合、アプリは起動されません。
+アプリの公開serviceやportは推測されません。選択したserviceがCompose内に存在しない場合、アプリは登録されません。ZIPアプリを更新する場合は「ZIPで更新」から新しいZIPを指定し、内容を確認します。
 
 ## アプリを管理する
 

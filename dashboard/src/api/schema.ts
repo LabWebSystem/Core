@@ -86,6 +86,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/imports/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["prepareGitImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["prepareZipImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/{importId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["discardImport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications": {
         parameters: {
             query?: never;
@@ -246,6 +296,24 @@ export interface paths {
         patch: operations["updateConfiguration"];
         trace?: never;
     };
+    "/applications/{application}/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["updateApplicationImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/{operation}": {
         parameters: {
             query?: never;
@@ -333,6 +401,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ImportInspection: {
+            /** Format: uuid */
+            importId: string;
+            manifest: components["schemas"]["ImportManifest"] | null;
+            composeFiles: {
+                name: string;
+                services: string[];
+                interfaces: {
+                    service: string;
+                    port: number;
+                }[];
+            }[];
+        };
+        ImportManifest: {
+            apiVersion: string;
+            composeFile?: string;
+            metadata: {
+                name: string;
+                description: string;
+            };
+            public: {
+                service: string;
+                port: number;
+            };
+        };
         /**
          * Format: uuid
          * @description Operationの一意なID。Operation作成APIが返すname（operations/{operation}）のoperation部分を指定します。
@@ -367,6 +460,8 @@ export interface components {
             subdomain: string;
             repositoryUrl: string;
             ref: string;
+            /** @enum {string} */
+            sourceKind?: "github" | "zip";
             desiredState: string;
             observedState: string;
             /** @enum {string} */
@@ -444,17 +539,35 @@ export interface components {
         };
         CreateApplicationRequest: {
             /** Format: uri */
-            repositoryUrl: string;
-            ref: string;
+            repositoryUrl?: string;
+            ref?: string;
+            /** Format: uuid */
+            importId?: string;
             subdomain: string;
             composeFile?: string;
             overrideFiles?: string[];
+            displayName?: string;
+            description?: string;
+            publicService?: string;
+            publicPort?: number;
             /** Format: uuid */
             requestId: string;
         };
         UpdateApplicationRequest: {
             ref?: string;
             subdomain?: string;
+            /** Format: uuid */
+            requestId: string;
+        };
+        UpdateImportRequest: {
+            /** Format: uuid */
+            importId: string;
+            composeFile: string;
+            overrideFiles?: string[];
+            displayName: string;
+            description?: string;
+            publicService: string;
+            publicPort: number;
             /** Format: uuid */
             requestId: string;
         };
@@ -661,6 +774,77 @@ export interface operations {
             };
             /** @description 使用中または削除できないVolume */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    prepareGitImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    repositoryUrl: string;
+                    ref: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 検査結果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspection"];
+                };
+            };
+        };
+    };
+    prepareZipImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/zip": string;
+            };
+        };
+        responses: {
+            /** @description 検査結果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspection"];
+                };
+            };
+        };
+    };
+    discardImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 一時取り込みを破棄 */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -994,6 +1178,32 @@ export interface operations {
         };
         responses: {
             /** @description Operationを作成 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationReference"];
+                };
+            };
+        };
+    };
+    updateApplicationImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateImportRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新Operationを作成 */
             202: {
                 headers: {
                     [name: string]: unknown;

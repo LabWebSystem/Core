@@ -6,6 +6,8 @@
 
 ## 実行
 
+ZIP取り込みのブラウザ・Backend・Docker連携は`mise run test-import-e2e`を実行する。一意なinstallation IDとCompose projectを使い、テスト専用container、network、volumeを終了時に削除する。必要な`caddy:2.10-alpine` imageがなければ取得し、テストが取得した未使用のimageだけを整理する。
+
 ```sh
 mise run qa
 ```

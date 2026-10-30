@@ -12,21 +12,21 @@ web
 
 ## Product Purpose
 
-LabWebSystem（LWS）は、GitHubリポジトリのCompose定義からWebアプリをLAN内へ公開・管理できるようにする。アプリ単位のURLを提供し、管理者が日本語で、誰でも簡単に非専門的な操作で運用できることを目指す。
+LabWebSystem（LWS）は、GitHubリポジトリまたはZIPのCompose定義からWebアプリをLAN内へ公開・管理できるようにする。アプリ単位のURLを提供し、管理者が日本語で、誰でも簡単に非専門的な操作で運用できることを目指す。
 
 ## Positioning
 
-LWSは、GitHubリポジトリのCompose定義を検証してDocker Composeで実行し、アプリごとのLAN URL、DNS、Reverse Proxyを一貫して管理する。非専門家が日本語の操作画面を通じて利用できることが、一般的なDocker操作や手作業のプロキシ設定と異なる点である。
+LWSは、GitHubまたはZIPのCompose定義を検証してDocker Composeで実行し、アプリごとのLAN URL、DNS、Reverse Proxyを一貫して管理する。非専門家が日本語の操作画面を通じて利用できることが、一般的なDocker操作や手作業のプロキシ設定と異なる点である。
 
 ## Operating Context
 
-信頼できる研究室・家庭内LANで利用する。管理者はGitHubリポジトリをアプリとして登録し、起動、停止、更新、設定値・secret・ログ・実行状態を管理する。アプリは`<app-name>.<base-domain>`形式のURLで公開する。
+信頼できる研究室・家庭内LANで利用する。管理者はGitHubリポジトリまたはZIPをアプリとして登録し、起動、停止、更新、設定値・secret・ログ・実行状態を管理する。アプリは`<app-name>.<base-domain>`形式のURLで公開する。
 
 ## Capabilities and Constraints
 
 - Docker ComposeがLWSおよび登録アプリの実行基盤である。
 - Backend APIがアプリ登録、Docker操作、検証、DNS・Reverse Proxy設定、状態永続化を担う。DashboardはBackend API経由で操作する。
-- GitHubリポジトリURL、アプリ定義、アプリ名、ベースドメイン、APIリクエストは未信頼入力として扱う。
+- GitHubリポジトリURL、ZIP、アプリ定義、アプリ名、ベースドメイン、APIリクエストは未信頼入力として扱う。
 - 現段階では、重厚な認証機能は実装しない。
 - 管理APIは認証・認可未実装のため、信頼できるLAN内だけで利用する。
 - Dashboardは基本的なアプリ管理機能を実装済みで、UIの洗練と受け入れ確認を継続している。TypeScript SDKは開発途中である。

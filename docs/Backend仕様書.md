@@ -36,9 +36,9 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | `operations` | operation ID、app-id、種別、状態、時刻、エラー概要 |
 
 - app-idはBackend発行UUID、subdomainは`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`かつbase domain内で一意とする。公開URLは`<subdomain>.<base-domain>`である。
-- `compose.yaml`と`lws.manifest.yaml`がアプリsourceの正本である。`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
+- 選択されたComposeと、存在する場合の`lws.manifest.yaml`はアプリsourceである。公開先など利用者の選択はSQLiteを正本とし、`runtime/lws.override.yaml`、`runtime/app.env`、生成Caddyfile、生成hostsは派生物である。Backend起動時と状態変更後に派生物を再調整する。
 - コンテナ、network、volumeの実在と状態はDockerから都度照会し、DBへ複製しない。
-- 登録状態は`CONFIGURING`、`ACTIVE`、`UNREGISTERED`。初回登録はsourceとmanifestを検査して`CONFIGURING`へ遷移し、containerを起動しない。必須環境変数とCompose deviceのLWSデバイスbindingが設定済みの場合だけ開始して`ACTIVE`へ遷移する。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。
+- 登録状態は`CONFIGURING`、`ACTIVE`、`UNREGISTERED`。初回登録はsourceと存在する場合のmanifestを検査して`CONFIGURING`へ遷移し、containerを起動しない。必須環境変数とCompose deviceのLWSデバイスbindingが設定済みの場合だけ開始して`ACTIVE`へ遷移する。`UNREGISTERED`はcontainerとedge networkを持たないが、アプリ設定、source、runtime、named volume、DB記録を保持する復帰可能状態である。
 
 ## 3. API契約
 
@@ -99,6 +99,8 @@ Backendは、アプリ管理と実行状態の唯一の管理者である。HTTP
 | 再試行 | `requestId`付き変更とreadだけを、指数backoffとjitterで再試行する |
 | 並列性 | 同一app-idは直列化し、異なるapp-idは上限2のworker poolで並列化する |
 
+取り込み内容の確認は登録前にsourceを取得するため、確認APIはGit cloneまたはZIP展開の完了を待つ。登録・更新の確定要求は通常どおりOperationを返す。
+
 以下は将来の運用目標であり、現在の品質ゲートの合否条件や稼働中の計測値ではない。計測基盤を導入するまでは、実装仕様として扱わない。
 
 ### 将来の運用目標
@@ -120,10 +122,11 @@ UIのINPは75パーセンタイル200ms以下とする。clone、build、起動�
 ### 5.1 取得と検証
 
 - 受理するURLは`https://github.com/<owner>/<repository>`または末尾`.git`付きだけ。認証情報、query、fragment、SSH URL、`file://`、ローカルpath、GitHub以外のhostを拒否する。
-- Git操作は対話入力を無効化し、argv形式で行う。cloneは一時ディレクトリへ行い、`compose.yaml`とmanifestの検証成功後だけ`source/`へ原子的に入れ替える。失敗時は既存sourceと実行設定を保つ。
+- Git操作は対話入力を無効化し、argv形式で行う。GitHubまたはZIPを一時領域へ取得し、利用者がComposeと公開先を確認した後に登録する。ZIP更新時も検証成功後だけ`source/`へ原子的に入れ替え、失敗時は既存sourceと実行設定を復元する。
+- ZIPは100 MiB以下、展開後512 MiB以下、10,000エントリ以下とする。絶対path、root外path、重複path、symlinkと特殊ファイルを拒否する。アプリrootはZIP直下または直下の単一フォルダとする。
 - manifestのschemaは[Infrastructure仕様書](Infrastructure仕様書.md)を唯一の仕様とし、Backendは共通validatorを使う。
 - `docker compose config`前に、source treeのsymlink、`include`、`extends`、`env_file`、`label_file`、`volumes_from`、ファイル型`configs`/`secrets`、`build.additional_contexts`、リモートGit build context、root外pathを拒否する。pathを丸めたりComposeを変更して受理しない。
-- LWS実行では`source/compose.yaml`と生成overrideだけを`-f`指定する。`compose.override.yaml`、sourceの`.env`、追加Composeファイルを暗黙に使わない。事前検査後にだけ`docker compose config --format json`で実効モデルを検証する。
+- LWS実行では選択したメインCompose、明示した順序のoverride、生成overrideを`-f`指定する。`compose.override.yaml`、sourceの`.env`、追加Composeファイルを暗黙に使わない。事前検査後にだけ`docker compose config --format json`で実効モデルを検証する。
 
 ### 5.2 環境変数
 

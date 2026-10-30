@@ -4,7 +4,7 @@
 
 ## -
 - ADR-001 | ACCEPTED | - | LWS配布とライフサイクルの基盤
-- ADR-002 | ACCEPTED | - | InfrastructureとBackendの正本およびアプリ実行方式
+- ADR-002 | SUPERSEDED | - | InfrastructureとBackendの正本およびアプリ実行方式
 - ADR-003 | ACCEPTED | - | Backend APIのAIP準拠とOpenAPI契約
 - ADR-004 | ACCEPTED | - | Backendの応答性、SSE、およびOperation実行
 - ADR-005 | ACCEPTED | - | アプリ単位のedge networkとCompose事前検査
@@ -18,6 +18,7 @@
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
 - ADR-014 | ACCEPTED | - | 設定レイヤーとLWSデバイスプール
 - ADR-015 | ACCEPTED | - | 層別テストを先行し、大きな境界だけE2Eで確認する
+- ADR-016 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
 - CHG-001 | SHIPPED | - | Ubuntu系とAlmaLinux系のインストーラー分岐
 - CHG-002 | SHIPPED | - | インストーラーのLWSリリース変数をOS情報から分離
 - CHG-003 | SHIPPED | - | 初回起動時にベースドメインをComposeへ渡す
@@ -101,6 +102,10 @@
 - CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
+- SUP-002 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
+
+## Backend / Dashboard / アプリ登録
+- CHG-094 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
 
 ## Backend / Docker Compose
 - BUG-020 | VERIFIED | Backend / Docker Compose | 公開serviceのWebSocketが内部APIへ接続できない
@@ -114,6 +119,9 @@
 
 ## Backend / Runtime / Dashboard
 - CHG-084 | SHIPPED | Backend / Runtime / Dashboard | アプリのリビルドをイメージ更新から強制再作成まで一貫させる
+
+## Backend / manifest
+- CHG-093 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
 
 ## Backend HTTP API
 - CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する

@@ -106,6 +106,7 @@ run_qa() {
   run_step 'VFY-006' '自己完結Robot QA' mise run qa-current || status=1
   run_step 'VFY-007' '隔離ライフサイクルRobot QA' mise run qa-lifecycle || status=1
   run_step 'VFY-008' 'QAテスト項目ドキュメント生成' mise run qa-docs || status=1
+  run_step 'VFY-010' 'ZIP取り込みブラウザ結合テスト' mise run test-import-e2e || status=1
   return "$status"
 }
 
@@ -206,6 +207,7 @@ main() {
       skip_step 'VFY-006' '自己完結Robot QA（fast失敗のため）'
       skip_step 'VFY-007' '隔離ライフサイクルRobot QA（fast失敗のため）'
       skip_step 'VFY-008' 'QAテスト項目ドキュメント生成（fast失敗のため）'
+      skip_step 'VFY-010' 'ZIP取り込みブラウザ結合テスト（fast失敗のため）'
     fi
   fi
 

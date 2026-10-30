@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -28,6 +29,8 @@ type Server struct {
 	Logs          *LogStore
 	DeviceScanner DeviceScanner
 	Docker        *DockerResources
+	SourceRunner  CommandRunner
+	importMu      sync.Mutex
 }
 
 func NewServer(db *sql.DB, run func(context.Context, Operation) error) *Server {
@@ -52,6 +55,9 @@ func (s *Server) Handler() http.Handler {
 	// patternとして受け付けないため、生成wrapperの通常routeと分離する。
 	mux.HandleFunc("GET /api/v1/health/live", wrapper.HealthLive)
 	mux.HandleFunc("GET /api/v1/health/ready", wrapper.HealthReady)
+	mux.HandleFunc("POST /api/v1/imports/github", wrapper.PrepareGitImport)
+	mux.HandleFunc("POST /api/v1/imports/zip", wrapper.PrepareZipImport)
+	mux.HandleFunc("DELETE /api/v1/imports/{importId}", wrapper.DiscardImport)
 	mux.HandleFunc("GET /api/v1/resource-pools", wrapper.ListResourcePools)
 	mux.HandleFunc("POST /api/v1/resource-pools/devices", wrapper.CreatePoolDevice)
 	mux.HandleFunc("DELETE /api/v1/resource-pools/volumes/{volume}", wrapper.DeleteResourcePoolVolume)
@@ -73,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/applications/{application}", wrapper.UpdateApplication)
 	mux.HandleFunc("GET /api/v1/applications/{application}/configuration", wrapper.GetConfiguration)
 	mux.HandleFunc("PATCH /api/v1/applications/{application}/configuration", wrapper.UpdateConfiguration)
+	mux.HandleFunc("POST /api/v1/applications/{application}/imports", wrapper.UpdateApplicationImport)
 	// custom method suffix（{operation}:watch）はwildcardの末尾制約により
 	// 生成wrapperへ直接登録できないため、prefix dispatcherで振り分ける。
 	mux.HandleFunc("GET /api/v1/operations/", s.operationRoute)
@@ -95,6 +102,12 @@ func openAPIValidation(next http.Handler) http.Handler {
 		})
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/imports/zip" {
+			// ZIPは大きなバイナリのためOpenAPI middlewareで全量を
+			// メモリに読み込まず、handlerで種別とサイズを検証する。
+			next.ServeHTTP(w, r)
+			return
+		}
 		validationRequest := r
 		if strings.HasSuffix(r.URL.Path, ":watch") {
 			// legacy routerはcustom method suffixをpath parameterへ含めるため、
@@ -122,7 +135,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, compose_file, override_files, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
+	rows, err := s.DB.Query(`SELECT id, subdomain, repository_url, git_ref, source_kind, compose_file, override_files, desired_state, observed_state, registration_state, latest_error, updated_at FROM applications WHERE registration_state IN ('ACTIVE','CONFIGURING','UNREGISTERED') ORDER BY subdomain`)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリ一覧を取得できません", "")
 		return
@@ -130,8 +143,8 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, sub, repo, ref, composeFile, overrideFiles, desired, observed, state, latestError, updated string
-		if err := rows.Scan(&id, &sub, &repo, &ref, &composeFile, &overrideFiles, &desired, &observed, &state, &latestError, &updated); err != nil {
+		var id, sub, repo, ref, sourceKind, composeFile, overrideFiles, desired, observed, state, latestError, updated string
+		if err := rows.Scan(&id, &sub, &repo, &ref, &sourceKind, &composeFile, &overrideFiles, &desired, &observed, &state, &latestError, &updated); err != nil {
 			writeAPIError(w, 500, "DATABASE_ERROR", "アプリ一覧を取得できません", "")
 			return
 		}
@@ -149,7 +162,7 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 			overrides = []string{}
 		}
 		items = append(items, map[string]any{
-			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "composeFile": composeFile,
+			"name": "applications/" + id, "subdomain": sub, "repositoryUrl": repo, "ref": ref, "sourceKind": sourceKind, "composeFile": composeFile,
 			"overrideFiles": overrides,
 			"desiredState":  desired, "observedState": observed, "registrationState": state,
 			"observedAt": time.Now().UTC().Format(time.RFC3339Nano), "reconciling": activeOperation != "",
@@ -158,6 +171,20 @@ func (s *Server) listApplications(w http.ResponseWriter, _ *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})
+}
+
+type createApplicationInput struct {
+	RepositoryURL string   `json:"repositoryUrl"`
+	Ref           string   `json:"ref"`
+	Subdomain     string   `json:"subdomain"`
+	ImportID      string   `json:"importId"`
+	ComposeFile   string   `json:"composeFile"`
+	OverrideFiles []string `json:"overrideFiles"`
+	DisplayName   string   `json:"displayName"`
+	Description   string   `json:"description"`
+	PublicService string   `json:"publicService"`
+	PublicPort    int      `json:"publicPort"`
+	RequestID     string   `json:"requestId"`
 }
 
 func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
@@ -169,16 +196,13 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 400, "INVALID_CONTENT_TYPE", "状態を変更する要求はJSONで指定してください", "contentType")
 		return
 	}
-	var req struct {
-		RepositoryURL string   `json:"repositoryUrl"`
-		Ref           string   `json:"ref"`
-		Subdomain     string   `json:"subdomain"`
-		ComposeFile   string   `json:"composeFile"`
-		OverrideFiles []string `json:"overrideFiles"`
-		RequestID     string   `json:"requestId"`
-	}
+	var req createApplicationInput
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "JSONが不正です", "body")
+		return
+	}
+	if req.ImportID != "" {
+		s.createImportedApplication(w, r, req)
 		return
 	}
 	if err := ValidateRepositoryURL(req.RepositoryURL); err != nil {

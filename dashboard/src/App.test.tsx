@@ -10,6 +10,10 @@ const apiMock = vi.hoisted(() => ({
   resourcePools: vi.fn(),
   createPoolDevice: vi.fn(),
   create: vi.fn(),
+  prepareGitImport: vi.fn(),
+  prepareZipImport: vi.fn(),
+  discardImport: vi.fn().mockResolvedValue(undefined),
+  updateImport: vi.fn(),
   update: vi.fn(),
   action: vi.fn(),
   unregister: vi.fn(),
@@ -65,21 +69,153 @@ describe("Dashboard デバッグルーム", () => {
     apiMock.watchOperation.mockReturnValue(() => undefined);
   });
 
-  it("空の台帳からテストアプリを登録する", async () => {
+  it("manifestのないGitHubアプリの公開先を指定して登録する", async () => {
     apiMock.create.mockResolvedValue({ name: "operations/create" });
+    apiMock.prepareGitImport.mockResolvedValue({
+      importId: "import-one",
+      manifest: null,
+      composeFiles: [{ name: "compose.yaml", services: ["web"], interfaces: [] }],
+    });
     renderApp();
     await screen.findByText("台帳にアプリを登録する");
     fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repository"), {
       target: { value: "https://github.com/example/test" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "検証して登録" }).closest("form")!);
+    fireEvent.change(screen.getByLabelText("公開名"), { target: { value: "test-app" } });
+    fireEvent.click(screen.getByRole("button", { name: "取り込み内容を確認" }));
+    await screen.findByText(/manifestがありません/);
+    fireEvent.change(screen.getByLabelText("使用するComposeファイル"), {
+      target: { value: "compose.yaml" },
+    });
+    fireEvent.change(screen.getByLabelText("アプリ名"), { target: { value: "デモ" } });
+    fireEvent.change(screen.getByLabelText("公開サービス"), { target: { value: "web" } });
+    fireEvent.change(screen.getByLabelText("公開ポート"), { target: { value: "8080" } });
+    fireEvent.click(screen.getByRole("button", { name: "この内容で登録" }));
     await waitFor(() =>
       expect(apiMock.create.mock.calls[0]?.[0]).toEqual({
-        repositoryUrl: "https://github.com/example/test",
-        ref: "main",
+        importId: "import-one",
         subdomain: "test-app",
+        composeFile: "compose.yaml",
+        overrideFiles: [],
+        displayName: "デモ",
+        description: "",
+        publicService: "web",
+        publicPort: 8080,
       }),
     );
+  });
+
+  it("ZIPのmanifestを登録値の初期値として表示する", async () => {
+    apiMock.prepareZipImport.mockResolvedValue({
+      importId: "import-zip",
+      manifest: {
+        apiVersion: "lws/v1",
+        composeFile: "compose.prod.yaml",
+        metadata: { name: "予約", description: "説明" },
+        public: { service: "web", port: 3000 },
+      },
+      composeFiles: [{ name: "compose.prod.yaml", services: ["web"], interfaces: [] }],
+    });
+    renderApp();
+    await screen.findByText("台帳にアプリを登録する");
+    fireEvent.click(screen.getByLabelText("ZIPファイル"));
+    fireEvent.change(screen.getByLabelText("公開名"), { target: { value: "zip-test" } });
+    const file = new File(["zip"], "app.zip", { type: "application/zip" });
+    fireEvent.change(screen.getByLabelText("取り込むZIPファイル"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "取り込み内容を確認" }));
+    expect(await screen.findByText(/manifestを読み込みました/)).toBeTruthy();
+    expect((screen.getByLabelText("使用するComposeファイル") as HTMLSelectElement).value).toBe(
+      "compose.prod.yaml",
+    );
+    expect((screen.getByLabelText("アプリ名") as HTMLInputElement).value).toBe("予約");
+    expect((screen.getByLabelText("公開ポート") as HTMLInputElement).value).toBe("3000");
+  });
+
+  it("ZIPアプリの更新内容を確認してから更新する", async () => {
+    const app = {
+      name: "applications/zip",
+      subdomain: "zip",
+      repositoryUrl: "",
+      ref: "",
+      sourceKind: "zip",
+      desiredState: "STOPPED",
+      observedState: "STOPPED",
+      registrationState: "ACTIVE",
+      observedAt: "2026-08-23T00:00:00Z",
+      reconciling: false,
+      etag: "tag",
+    };
+    apiMock.list.mockResolvedValue([app]);
+    apiMock.prepareZipImport.mockResolvedValue({
+      importId: "zip-update",
+      manifest: {
+        apiVersion: "lws/v1",
+        composeFile: "compose.yaml",
+        metadata: { name: "更新", description: "" },
+        public: { service: "web", port: 8080 },
+      },
+      composeFiles: [{ name: "compose.yaml", services: ["web"], interfaces: [] }],
+    });
+    apiMock.updateImport.mockResolvedValue({ name: "operations/update" });
+    apiMock.operation.mockResolvedValue({
+      name: "operations/update",
+      state: "succeeded",
+      kind: "sync",
+    });
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "ZIPで更新" }));
+    fireEvent.change(screen.getByLabelText("取り込むZIPファイル"), {
+      target: { files: [new File(["zip"], "app.zip")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "取り込み内容を確認" }));
+    await screen.findByText(/manifestを読み込みました/);
+    expect(apiMock.updateImport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "この内容で更新" }));
+    await waitFor(() =>
+      expect(apiMock.updateImport).toHaveBeenCalledWith(
+        app,
+        expect.objectContaining({
+          importId: "zip-update",
+          composeFile: "compose.yaml",
+          displayName: "更新",
+          publicService: "web",
+          publicPort: 8080,
+        }),
+      ),
+    );
+  });
+
+  it("取り込み失敗を表示し登録しない", async () => {
+    apiMock.prepareZipImport.mockRejectedValue(new Error("manifestのschemaが不正です"));
+    renderApp();
+    await screen.findByText("台帳にアプリを登録する");
+    fireEvent.click(screen.getByLabelText("ZIPファイル"));
+    fireEvent.change(screen.getByLabelText("公開名"), { target: { value: "zip-test" } });
+    fireEvent.change(screen.getByLabelText("取り込むZIPファイル"), {
+      target: { files: [new File(["zip"], "app.zip")] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "取り込み内容を確認" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("manifestのschemaが不正です");
+    expect(apiMock.create).not.toHaveBeenCalled();
+  });
+
+  it("取り込み元へ戻ると一時データを破棄する", async () => {
+    apiMock.prepareGitImport.mockResolvedValue({
+      importId: "temporary-import",
+      manifest: null,
+      composeFiles: [{ name: "compose.yaml", services: ["web"], interfaces: [] }],
+    });
+    renderApp();
+    await screen.findByText("台帳にアプリを登録する");
+    fireEvent.change(screen.getByLabelText("GitHub リポジトリ"), {
+      target: { value: "https://github.com/example/test" },
+    });
+    fireEvent.change(screen.getByLabelText("公開名"), { target: { value: "test" } });
+    fireEvent.click(screen.getByRole("button", { name: "取り込み内容を確認" }));
+    await screen.findByText(/manifestがありません/);
+    fireEvent.click(screen.getByRole("button", { name: "取り込み元に戻る" }));
+    expect(apiMock.discardImport).toHaveBeenCalledWith("temporary-import");
+    expect(screen.getByLabelText("GitHub リポジトリ")).toBeTruthy();
   });
 
   it("登録済みアプリがあっても登録画面を開ける", async () => {

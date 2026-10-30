@@ -39,6 +39,11 @@ description = "DashboardのPlaywright UIテストを実行"
 depends = ["dashboard-install"]
 run = ["npx --prefix dashboard playwright install chromium", "npm --prefix dashboard run test:e2e"]
 
+[test-import-e2e]
+description = "ZIP登録・更新を隔離Docker環境とブラウザで検証"
+depends = ["dashboard-install"]
+run = ["npx --prefix dashboard playwright install chromium", "bash scripts/test-import-e2e.sh"]
+
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"
 run = "scripts/run-with-image-cleanup.sh uv run --project qa robot --nostatusrc --exclude live --outputdir test/result/robot qa/suites"

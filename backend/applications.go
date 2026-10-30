@@ -650,8 +650,8 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	var id, sub, repo, ref, desired, observed, state, latestError, created, updated string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,desired_state,observed_state,registration_state,latest_error,created_at,updated_at FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &latestError, &created, &updated)
+	var id, sub, repo, ref, sourceKind, desired, observed, state, latestError, created, updated string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,source_kind,desired_state,observed_state,registration_state,latest_error,created_at,updated_at FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &sourceKind, &desired, &observed, &state, &latestError, &created, &updated)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, 404, "NOT_FOUND", "アプリが見つかりません", "application")
 		return
@@ -675,6 +675,7 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		"subdomain":         sub,
 		"repositoryUrl":     repo,
 		"ref":               ref,
+		"sourceKind":        sourceKind,
 		"desiredState":      desired,
 		"observedState":     observed,
 		"registrationState": state,
