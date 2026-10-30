@@ -1,0 +1,11 @@
+FROM debian:13.1-slim
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y avahi-daemon \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY infrastructure/avahi-daemon.conf /etc/avahi/avahi-daemon.conf
+COPY infrastructure/avahi-entrypoint /usr/local/bin/lws-avahi-entrypoint
+RUN chmod 0755 /usr/local/bin/lws-avahi-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/lws-avahi-entrypoint"]

@@ -24,10 +24,12 @@ import {
   type Application,
   type Configuration,
   type CreateApplicationInput,
+  type ImportInspection,
   type LogEntry,
   type LogQuery,
   type Operation,
   type ResourcePools,
+  type UpdateImportInput,
 } from "./api/client";
 
 type PendingAction = {
@@ -332,8 +334,10 @@ export function App() {
               >
                 <span className={`dot ${stateTone(app)}`} />
                 <span>
-                  <strong>{app.subdomain}</strong>
-                  <small>{stateLabel(app)}</small>
+                  <strong>{app.isSystem ? "LWS Dashboard" : app.subdomain}</strong>
+                  <small>
+                    {app.isSystem ? `システムアプリ · ${stateLabel(app)}` : stateLabel(app)}
+                  </small>
                 </span>
               </button>
             ))}
@@ -423,124 +427,221 @@ function RegisterForm({
   busy: boolean;
   onSubmit: (input: CreateApplicationInput) => void;
 }) {
-  const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [ref, setRef] = useState("main");
-  const [subdomain, setSubdomain] = useState("test-app");
-  const [composeFile, setComposeFile] = useState("compose.yaml");
-  const [branches, setBranches] = useState<string[]>([]);
-  const [composeFiles, setComposeFiles] = useState<string[]>([]);
-  const [overrideFiles, setOverrideFiles] = useState<string[]>([]);
-  const [lookupState, setLookupState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const repositoryReady = /^https:\/\/github\.com\/[^/]+\/[^/]+/.test(repositoryUrl);
-  useEffect(() => {
-    const match = repositoryUrl.match(
-      /^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/(.*))?\/?$/,
-    );
-    if (!match) {
-      setBranches([]);
-      setComposeFiles([]);
-      setOverrideFiles([]);
-      setLookupState("idle");
-      return;
-    }
-    const [, owner, name, urlRef] = match;
-    if (urlRef) setRef(decodeURIComponent(urlRef));
-    setLookupState("loading");
-    let active = true;
-    void Promise.all([
-      fetch(`https://api.github.com/repos/${owner}/${name}/branches?per_page=100`).then((r) =>
-        r.ok ? r.json() : [],
-      ),
-      fetch(
-        `https://api.github.com/repos/${owner}/${name}/contents?ref=${encodeURIComponent(urlRef || ref)}`,
-      ).then((r) => (r.ok ? r.json() : [])),
-    ])
-      .then(([branchData, fileData]) => {
-        if (!active) return;
-        const nextBranches = Array.isArray(branchData)
-          ? branchData.map((item: { name: string }) => item.name)
-          : [];
-        const names = Array.isArray(fileData)
-          ? fileData
-              .map((item: { name: string }) => item.name)
-              .filter((name: string) => /compose.*\.(yaml|yml)$/.test(name))
-          : [];
-        const priority = [
-          "compose.yaml",
-          "compose.yml",
-          "docker-compose.yaml",
-          "docker-compose.yml",
-        ];
-        names.sort(
-          (a: string, b: string) =>
-            (priority.indexOf(a) < 0 ? 99 : priority.indexOf(a)) -
-            (priority.indexOf(b) < 0 ? 99 : priority.indexOf(b)),
-        );
-        setBranches(nextBranches);
-        setComposeFiles(names);
-        setSubdomain(
-          name
-            .toLowerCase()
-            .replace(/[^a-z0-9-]+/g, "-")
-            .replace(/^-+|-+$/g, "")
-            .slice(0, 62) || "app",
-        );
-        if (names.length && !names.includes(composeFile)) setComposeFile(names[0]);
-        setOverrideFiles((current) =>
-          current.filter((file) => names.includes(file) && file !== (names[0] ?? composeFile)),
-        );
-        setLookupState("ready");
-      })
-      .catch(() => {
-        if (active) setLookupState("error");
-      });
-    return () => {
-      active = false;
-    };
-  }, [repositoryUrl, ref]);
   return (
     <section className="empty-workbench">
       <div className="empty-icon">
         <CirclePlus />
       </div>
-      <span className="eyebrow">最初のアプリ</span>
       <h2>台帳にアプリを登録する</h2>
-      <p>GitHub リポジトリの Compose 定義を確認して、LAN 内の URL を準備します。</p>
-      <form
-        className="register-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit({
-            repositoryUrl,
-            ref,
-            subdomain,
-            ...(overrideFiles.length ? { overrideFiles } : {}),
-            ...(composeFile !== "compose.yaml" ? { composeFile } : {}),
-          });
-        }}
-      >
-        <label>
-          GitHub リポジトリ
-          <input
-            required
-            type="url"
-            placeholder="https://github.com/owner/repository"
-            value={repositoryUrl}
-            onChange={(e) => setRepositoryUrl(e.target.value)}
-          />
-        </label>
-        <fieldset className="override-picker">
-          <legend>overrideするComposeファイル（任意）</legend>
-          <small className="field-hint">
-            未選択のまま登録するとoverrideは適用されません。複数選択時は上から順に読み込みます。
-          </small>
-          {composeFiles.filter((file) => file !== composeFile).length ? (
-            composeFiles
-              .filter((file) => file !== composeFile)
-              .map((file) => {
-                const index = overrideFiles.indexOf(file);
+      <p>GitHubまたはZIPの内容を確認し、LAN内の公開先を設定します。</p>
+      <ImportForm busy={busy} onSubmit={(input, subdomain) => onSubmit({ ...input, subdomain })} />
+    </section>
+  );
+}
+
+function ImportForm({
+  busy,
+  zipOnly = false,
+  onSubmit,
+  onCancel,
+}: {
+  busy: boolean;
+  zipOnly?: boolean;
+  onSubmit: (input: UpdateImportInput, subdomain: string) => void;
+  onCancel?: () => void;
+}) {
+  const [sourceKind, setSourceKind] = useState<"github" | "zip">(zipOnly ? "zip" : "github");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [ref, setRef] = useState("main");
+  const [file, setFile] = useState<File>();
+  const [subdomain, setSubdomain] = useState("");
+  const [inspection, setInspection] = useState<ImportInspection>();
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+  const [composeFile, setComposeFile] = useState("");
+  const [overrideFiles, setOverrideFiles] = useState<string[]>([]);
+  const [displayName, setDisplayName] = useState("");
+  const [description, setDescription] = useState("");
+  const [publicService, setPublicService] = useState("");
+  const [publicPort, setPublicPort] = useState("");
+  const selectedFiles = [composeFile, ...overrideFiles];
+  const services = Array.from(
+    new Set(
+      inspection?.composeFiles
+        .filter((item) => selectedFiles.includes(item.name))
+        .flatMap((item) => item.services) ?? [],
+    ),
+  ).sort();
+  const interfaces =
+    inspection?.composeFiles
+      .filter((item) => selectedFiles.includes(item.name))
+      .flatMap((item) => item.interfaces)
+      .filter((item) => item.service === publicService) ?? [];
+  const prepare = async () => {
+    if (!zipOnly && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain)) {
+      setError(
+        "公開名は英小文字・数字・ハイフンで入力し、先頭と末尾は英小文字か数字にしてください。",
+      );
+      return;
+    }
+    if ((sourceKind === "zip" && !file) || (sourceKind === "github" && (!repositoryUrl || !ref))) {
+      setError(
+        sourceKind === "zip"
+          ? "ZIPファイルを選択してください。"
+          : "GitHubのURLとブランチまたはタグを入力してください。",
+      );
+      return;
+    }
+    setError("");
+    setChecking(true);
+    try {
+      const result =
+        sourceKind === "zip"
+          ? await api.prepareZipImport(file!)
+          : await api.prepareGitImport(repositoryUrl, ref);
+      setInspection(result);
+      setComposeFile(result.manifest?.composeFile ?? "");
+      setOverrideFiles([]);
+      setDisplayName(result.manifest?.metadata.name ?? "");
+      setDescription(result.manifest?.metadata.description ?? "");
+      setPublicService(result.manifest?.public.service ?? "");
+      setPublicPort(result.manifest ? String(result.manifest.public.port) : "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "取り込み内容を確認できませんでした。");
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <form
+      className="register-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!inspection) return;
+        onSubmit(
+          {
+            importId: inspection.importId,
+            composeFile,
+            overrideFiles,
+            displayName,
+            description,
+            publicService,
+            publicPort: Number(publicPort),
+          },
+          subdomain,
+        );
+      }}
+    >
+      {!inspection ? (
+        <>
+          {!zipOnly && (
+            <fieldset className="source-picker">
+              <legend>取り込み元</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="source-kind"
+                  checked={sourceKind === "github"}
+                  onChange={() => setSourceKind("github")}
+                />{" "}
+                GitHub
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="source-kind"
+                  checked={sourceKind === "zip"}
+                  onChange={() => setSourceKind("zip")}
+                />{" "}
+                ZIPファイル
+              </label>
+            </fieldset>
+          )}
+          {sourceKind === "github" ? (
+            <>
+              <label>
+                GitHub リポジトリ
+                <input
+                  type="url"
+                  placeholder="https://github.com/owner/repository"
+                  value={repositoryUrl}
+                  onChange={(event) => setRepositoryUrl(event.target.value)}
+                />
+              </label>
+              <label>
+                ブランチまたはタグ
+                <input value={ref} onChange={(event) => setRef(event.target.value)} />
+              </label>
+            </>
+          ) : (
+            <label>
+              取り込むZIPファイル
+              <input
+                type="file"
+                accept=".zip,application/zip"
+                onChange={(event) => setFile(event.target.files?.[0])}
+              />
+            </label>
+          )}
+          {!zipOnly && (
+            <label>
+              公開名
+              <input
+                required
+                pattern="[a-z0-9][a-z0-9-]{0,61}"
+                value={subdomain}
+                onChange={(event) => setSubdomain(event.target.value)}
+              />
+            </label>
+          )}
+          <button
+            type="button"
+            className="primary"
+            disabled={checking || busy}
+            onClick={() => void prepare()}
+          >
+            {checking && <LoaderCircle className="spin" size={18} />}取り込み内容を確認
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="field-hint">
+            {inspection.manifest ? "manifestを読み込みました" : "manifestがありません"}
+            。内容を確認して公開先を指定してください。
+          </p>
+          <label>
+            使用するComposeファイル
+            <select
+              required
+              value={composeFile}
+              onChange={(event) => {
+                setComposeFile(event.target.value);
+                setOverrideFiles((current) =>
+                  current.filter((item) => item !== event.target.value),
+                );
+              }}
+            >
+              <option value="">選択してください</option>
+              {inspection.composeFiles.map((item) => (
+                <option key={item.name} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="override-picker">
+            <legend>overrideするComposeファイル（任意）</legend>
+            <small className="field-hint">
+              {inspection.composeFiles.some((item) => item.name !== composeFile)
+                ? "選択順に読み込みます。"
+                : "選択できるoverride Composeファイルはありません。"}
+            </small>
+            {inspection.composeFiles
+              .filter((item) => item.name !== composeFile)
+              .map((item) => {
+                const index = overrideFiles.indexOf(item.name);
                 return (
-                  <div className="override-row" key={file}>
+                  <div className="override-row" key={item.name}>
                     <label className="override-check">
                       <input
                         type="checkbox"
@@ -548,12 +649,12 @@ function RegisterForm({
                         onChange={(event) =>
                           setOverrideFiles((current) =>
                             event.target.checked
-                              ? [...current, file]
-                              : current.filter((item) => item !== file),
+                              ? [...current, item.name]
+                              : current.filter((name) => name !== item.name),
                           )
                         }
                       />{" "}
-                      {file}
+                      {item.name}
                     </label>
                     {index >= 0 && (
                       <span className="override-actions">
@@ -587,72 +688,103 @@ function RegisterForm({
                     )}
                   </div>
                 );
-              })
-          ) : (
-            <p className="field-hint">選択可能なoverride Composeファイルはありません。</p>
-          )}
-        </fieldset>
-        <div className="form-row">
+              })}
+          </fieldset>
           <label>
-            ブランチまたはタグ
-            {branches.length ? (
-              <select value={ref} onChange={(e) => setRef(e.target.value)}>
-                {branches.map((branch) => (
-                  <option key={branch}>{branch}</option>
-                ))}
-              </select>
-            ) : (
-              <input required value={ref} onChange={(e) => setRef(e.target.value)} />
-            )}
-          </label>
-          <label>
-            公開名
+            アプリ名
             <input
               required
-              pattern="[a-z0-9][a-z0-9-]{0,61}"
-              value={subdomain}
-              onChange={(e) => setSubdomain(e.target.value)}
+              maxLength={80}
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
             />
           </label>
-        </div>
-        <label>
-          使用するComposeファイル
-          {repositoryReady ? (
-            <select
-              value={composeFile}
-              onChange={(e) => {
-                const next = e.target.value;
-                setComposeFile(next);
-                setOverrideFiles((current) => current.filter((file) => file !== next));
-              }}
-              disabled={lookupState === "loading"}
-            >
-              {(composeFiles.length
-                ? composeFiles
-                : ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]
-              ).map((file) => (
-                <option key={file}>{file}</option>
-              ))}
-            </select>
-          ) : (
-            <input value={composeFile} readOnly aria-label="使用するComposeファイル" />
+          <label>
+            説明（任意）
+            <input
+              maxLength={500}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              公開サービス
+              <select
+                required
+                value={publicService}
+                onChange={(event) => setPublicService(event.target.value)}
+              >
+                <option value="">選択してください</option>
+                {services.map((service) => (
+                  <option key={service} value={service}>
+                    {service}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              公開ポート
+              <input
+                required
+                type="number"
+                min="1"
+                max="65535"
+                value={publicPort}
+                list="public-port-candidates"
+                onChange={(event) => setPublicPort(event.target.value)}
+              />
+              <datalist id="public-port-candidates">
+                {interfaces.map((item) => (
+                  <option key={item.port} value={item.port} />
+                ))}
+              </datalist>
+            </label>
+          </div>
+          {services.length === 0 && (
+            <p className="field-hint">
+              {composeFile
+                ? "選択したComposeから公開サービスを読み取れません。ファイルの内容を確認してください。"
+                : "Composeファイルを選択すると公開サービスの候補を表示します。"}
+            </p>
           )}
-          <small className="field-hint">
-            優先順位: compose.yaml → compose.yml → docker-compose.yaml → docker-compose.yml
-          </small>
-        </label>
-        {lookupState === "loading" && <p className="field-hint">リポジトリを確認しています…</p>}
-        {lookupState === "error" && (
-          <p className="field-hint error-text">
-            リポジトリ情報を取得できません。URLと公開設定を確認してください。
-          </p>
-        )}
-        <button className="primary" disabled={busy}>
-          {busy ? <LoaderCircle className="spin" size={18} /> : <CirclePlus size={18} />}
-          検証して登録
+          <div className="import-actions">
+            <button
+              type="button"
+              onClick={() => {
+                void api.discardImport(inspection.importId).catch(() => undefined);
+                setInspection(undefined);
+              }}
+            >
+              取り込み元に戻る
+            </button>
+            <button
+              type="submit"
+              className="primary"
+              disabled={busy || !composeFile || !services.includes(publicService)}
+            >
+              {zipOnly ? "この内容で更新" : "この内容で登録"}
+            </button>
+          </div>
+        </>
+      )}
+      {error && (
+        <p className="field-hint error-text" role="alert">
+          {error}
+        </p>
+      )}
+      {onCancel && (
+        <button
+          type="button"
+          onClick={() => {
+            if (inspection) void api.discardImport(inspection.importId).catch(() => undefined);
+            onCancel();
+          }}
+        >
+          キャンセル
         </button>
-      </form>
-    </section>
+      )}
+    </form>
   );
 }
 
@@ -895,6 +1027,7 @@ function AppWorkbench({
   const [deviceValues, setDeviceValues] = useState<Record<string, string>>({});
   const [publicService, setPublicService] = useState("");
   const [publicPort, setPublicPort] = useState(0);
+  const [updatingZip, setUpdatingZip] = useState(false);
   const variables = configuration?.variables ?? [];
   useEffect(() => {
     if (configuration) {
@@ -957,8 +1090,8 @@ function AppWorkbench({
     <section className="app-workbench">
       <header className="app-heading">
         <div>
-          <span className="eyebrow">公開アプリ</span>
-          <h2>{app.subdomain}</h2>
+          <span className="eyebrow">{app.isSystem ? "LWSシステムアプリ" : "公開アプリ"}</span>
+          <h2>{app.isSystem ? "Dashboard" : app.subdomain}</h2>
           <a href={publicUrl(app)} target="_blank" rel="noreferrer">
             {publicUrl(app)} <ExternalLink size={14} />
           </a>
@@ -983,43 +1116,84 @@ function AppWorkbench({
                 停止
               </button>
             )}
-            <button disabled={disabled} title={actionTitle} onClick={() => onAction("sync")}>
-              <RotateCw size={16} />
-              同期
-            </button>
+            {!app.isSystem && app.sourceKind === "zip" ? (
+              <button disabled={disabled} title={actionTitle} onClick={() => setUpdatingZip(true)}>
+                <RotateCw size={16} /> ZIPで更新
+              </button>
+            ) : !app.isSystem ? (
+              <button disabled={disabled} title={actionTitle} onClick={() => onAction("sync")}>
+                <RotateCw size={16} /> 同期
+              </button>
+            ) : null}
             <button disabled={disabled} title={actionTitle} onClick={() => onAction("rebuild")}>
               <Settings2 size={16} />
               リビルド
             </button>
-            <button
-              disabled={disabled}
-              title={actionTitle}
-              onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}
-            >
-              <FileCog size={16} />
-              登録解除
-            </button>
+            {!app.isSystem && (
+              <button
+                disabled={disabled}
+                title={actionTitle}
+                onClick={() => onConfirm("登録を解除する", () => api.unregister(app))}
+              >
+                <FileCog size={16} />
+                登録解除
+              </button>
+            )}
           </>
         )}
-        <button
-          className="danger-outline"
-          disabled={disabled}
-          title={actionTitle}
-          onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}
-        >
-          <Trash2 size={16} />
-          完全削除
-        </button>
+        {!app.isSystem && (
+          <button
+            className="danger-outline"
+            disabled={disabled}
+            title={actionTitle}
+            onClick={() => onConfirm("アプリと保存データを完全に削除する", () => api.purge(app))}
+          >
+            <Trash2 size={16} />
+            完全削除
+          </button>
+        )}
       </div>
+      {updatingZip && (
+        <section className="zip-update">
+          <h3>ZIPでアプリを更新する</h3>
+          <p className="field-hint">新しいZIPの内容と公開先を確認してから更新します。</p>
+          <ImportForm
+            zipOnly
+            busy={disabled}
+            onCancel={() => setUpdatingZip(false)}
+            onSubmit={(input) => {
+              onRun(async () => {
+                const operation = await api.updateImport(app, input);
+                setUpdatingZip(false);
+                return operation;
+              });
+            }}
+          />
+        </section>
+      )}
       <section className="details-grid">
         <div>
-          <span>リポジトリ</span>
-          <code>{app.repositoryUrl}</code>
+          <span>{app.isSystem ? "提供元" : "取り込み元"}</span>
+          <code>
+            {app.isSystem
+              ? "LWS組み込みイメージ"
+              : app.sourceKind === "zip"
+                ? "ZIPファイル"
+                : app.repositoryUrl}
+          </code>
         </div>
-        <div>
-          <span>参照</span>
-          <code>{app.ref}</code>
-        </div>
+        {!app.isSystem && app.sourceKind !== "zip" && (
+          <div>
+            <span>参照</span>
+            <code>{app.ref}</code>
+          </div>
+        )}
+        {app.isSystem && (
+          <div>
+            <span>参照</span>
+            <code>LWSバージョンに追従</code>
+          </div>
+        )}
         <div>
           <span>Composeファイル</span>
           <code>{app.composeFile ?? "compose.yaml"}</code>
@@ -1116,26 +1290,31 @@ function AppWorkbench({
             <span className="eyebrow">環境設定</span>
             <h3>変数</h3>
           </div>
-          <button
-            className="primary small"
-            disabled={disabled || unregistered || configLoading || configError}
-            onClick={() =>
-              onConfirm(
-                app.registrationState === "CONFIGURING" ? "アプリを登録する" : "環境設定を更新する",
-                () =>
-                  api.saveConfiguration(
-                    app,
-                    save(),
-                    bindings.filter((binding) => binding.deviceId),
-                    ...publicArgs,
-                  ),
-                changeDetail,
-              )
-            }
-          >
-            {app.registrationState === "CONFIGURING" ? "登録" : "保存"}
-          </button>
+          {!app.isSystem && (
+            <button
+              className="primary small"
+              disabled={disabled || unregistered || configLoading || configError}
+              onClick={() =>
+                onConfirm(
+                  app.registrationState === "CONFIGURING"
+                    ? "アプリを登録する"
+                    : "環境設定を更新する",
+                  () =>
+                    api.saveConfiguration(
+                      app,
+                      save(),
+                      bindings.filter((binding) => binding.deviceId),
+                      ...publicArgs,
+                    ),
+                  changeDetail,
+                )
+              }
+            >
+              {app.registrationState === "CONFIGURING" ? "登録" : "保存"}
+            </button>
+          )}
         </div>
+        {app.isSystem && <p className="settings-note">Dashboardの設定はLWSが管理します。</p>}
         {configLoading ? (
           <p>設定を読み込んでいます</p>
         ) : configError ? (
@@ -1151,7 +1330,7 @@ function AppWorkbench({
                 <label>
                   公開するWebインターフェース
                   <select
-                    disabled={disabled || unregistered}
+                    disabled={disabled || unregistered || app.isSystem}
                     value={`${publicService}:${publicPort}`}
                     onChange={(event) => {
                       const [service, port] = event.target.value.split(":");
@@ -1192,7 +1371,7 @@ function AppWorkbench({
                         Compose hint: {device.sourceHint} · {device.permissions}
                       </small>
                       <select
-                        disabled={disabled || unregistered}
+                        disabled={disabled || unregistered || app.isSystem}
                         value={selected}
                         onChange={(event) =>
                           setDeviceValues((current) => ({
@@ -1221,7 +1400,7 @@ function AppWorkbench({
                   <code>{row.name}</code>
                   <input
                     aria-label={row.name}
-                    disabled={disabled || unregistered}
+                    disabled={disabled || unregistered || app.isSystem}
                     type={row.isSecret ? "password" : "text"}
                     value={row.value}
                     placeholder={

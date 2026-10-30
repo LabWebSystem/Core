@@ -1,6 +1,6 @@
-# LWS v0.1.11 開発版 利用マニュアル
+# LWS v0.1.12 利用マニュアル
 
-> この文書はCore v0.1.11の開発版を対象とします。公開済みリリースの最新タグはv0.1.10です。
+> この文書はCore v0.1.12を対象とします。
 
 ## LWSでできること
 
@@ -8,7 +8,7 @@ LWSは、研究室や家庭内LANで使うWebアプリを、決まったURLで�
 
 LWSを使うと、次のことができます。
 
-- WebアプリをGitHubリポジトリから登録する
+- WebアプリをGitHubリポジトリまたはZIPから登録する
 - アプリを設定確認後にDocker Composeで起動する
 - アプリごとに専用のURLを割り当てる
 - アプリを停止・再起動・再構成する
@@ -23,16 +23,16 @@ LWSを使うと、次のことができます。
 LWSの起動時にベースドメインを一つ設定します。
 
 ```text
-example.internal
+example.local
 ```
 
 登録したアプリにはサブドメインを割り当てます。例えば`予約システム`に`reserve`を割り当てると、次のURLでアクセスできます。
 
 ```text
-reserve.example.internal
+reserve.example.local
 ```
 
-Dashboardは`dashboard.example.internal`で開きます。URLの名前解決はLWSのDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用する端末がLWSホストのDNSを使うよう、LAN側のDHCPまたは端末のDNS設定を整えてください。
+Dashboardは`dashboard.example.local`で開きます。名前解決はmDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用端末とLWSホストが同じLAN上にあり、端末のmDNSが有効である必要があります。
 
 ## 利用を始める
 
@@ -43,14 +43,14 @@ Ubuntu系では`.deb`、AlmaLinux系では`.rpm`を使ってインストール�
 ### 2. LWSを初回起動する
 
 ```sh
-sudo lwsctl start --domain example.internal
+sudo lwsctl start --domain example.local
 ```
 
 初回起動時に、ベースドメインとLWSの実行環境が準備されます。
 
-ベースドメインには`localhost`も指定できます。
+ベースドメインは`.local`で終わる名前を指定します。
 
-起動前に、ホストの80番ポートと53番ポート（TCP/UDP）が空いている必要があります。
+起動前に、ホストの80/tcpと5353/udpが空いている必要があります。既にmDNSサービスが動作している場合は停止せず、LWSを起動できません。
 
 ### 3. 状態を確認する
 
@@ -88,17 +88,18 @@ sudo lwsctl down --purge --force
 
 ## アプリを登録する
 
-登録するアプリのGitHubリポジトリには、次の2ファイルが必要です。
+登録するアプリにはComposeファイルが必要です。GitHubリポジトリまたはZIPファイルから取り込めます。`lws.manifest.yaml`は任意です。
 
 ```text
 compose.yaml
 lws.manifest.yaml
 ```
 
-`lws.manifest.yaml`には、アプリの名前と、外部公開するCompose service・portを記載します。
+`lws.manifest.yaml`がある場合は、アプリの名前と、外部公開するCompose service・portを登録画面の初期値として使用します。
 
 ```yaml
 apiVersion: lws/v1
+composeFile: compose.yaml
 metadata:
   name: 研究室予約システム
   description: 研究室の設備予約を管理するWebアプリケーション
@@ -107,9 +108,9 @@ public:
   port: 3000
 ```
 
-Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdomainを指定して登録します。登録後、LWSがリポジトリを取得・検査し、アプリは`CONFIGURING`（設定待ち）になります。Dashboardで環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
+DashboardでGitHubのURLとref、またはZIPと公開subdomainを指定し、取り込み内容を確認します。manifestがない場合はアプリ名、メインCompose、公開serviceとportを指定します。ZIPは直下または直下の単一フォルダにアプリを配置してください。登録後は`CONFIGURING`（設定待ち）になります。環境変数とComposeのdevice割り当てを設定し、開始操作を行うとDocker Composeで起動します。
 
-アプリの公開serviceやportは推測されません。manifestに記載したserviceがCompose内に存在しない場合、アプリは起動されません。
+アプリの公開serviceやportは推測されません。選択したserviceがCompose内に存在しない場合、アプリは登録されません。ZIPアプリを更新する場合は「ZIPで更新」から新しいZIPを指定し、内容を確認します。
 
 ## アプリを管理する
 
@@ -130,11 +131,11 @@ Backend APIで、GitHubリポジトリ、ブランチまたはref、公開subdom
 APIを直接使う場合の最小例は次のとおりです。
 
 ```sh
-curl -X POST http://api.example.internal/api/v1/applications \
+curl -X POST http://api.example.local/api/v1/applications \
   -H 'Content-Type: application/json' \
   -d '{"repositoryUrl":"https://github.com/example/app","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}'
 
-curl http://api.example.internal/api/v1/operations/<operation-id>
+curl http://api.example.local/api/v1/operations/<operation-id>
 ```
 
 変更操作は`202`とOperation名を返します。完了状態はOperation APIまたはSSEで確認します。
@@ -143,7 +144,7 @@ curl http://api.example.internal/api/v1/operations/<operation-id>
 
 アプリごとに環境変数を設定できます。パスワードやAPIキーなどsecretとして登録した値は暗号化して保存され、取得時に値そのものは表示されません。
 
-ただし、LWS v0.1.11にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
+ただし、LWS v0.1.12にはAPIの認証・認可がありません。LWSへ到達できるLAN内端末を管理者として扱うため、信頼できるネットワーク内で使用してください。
 
 ## リソースプールと設定レイヤー
 
@@ -170,14 +171,14 @@ Dashboardのリソースプールでは、Composeから検出した名前付きV
 
 この操作は元に戻せないため、確認が必要です。
 
-## v0.1.11での注意点
+## v0.1.12での注意点
 
 - 管理操作の中心はBackend APIです。
-- Dashboardでは、アプリの登録、状態確認、開始・停止・同期・再構成、環境設定、ログ確認、登録解除、完全削除を行えます。LWS本体の起動・停止・更新は引き続き`lwsctl`で行います。
+- DashboardではGitHubまたはZIPからアプリを登録できます。LWS本体の起動・停止・更新は引き続き`lwsctl`で行います。
 - TypeScript SDKは開発途中です。
 - APIの認証・認可はありません。
 - WebSocketは使用せず、処理状態やログの通知にはSSEを使います。
-- LWSのDNSをLAN端末へ配布するDHCP設定は、利用者側で行います。
+- `.local`名の解決には端末のmDNS対応が必要です。ルーターのDNS設定は不要です。
 - 登録アプリはDocker Compose形式で用意する必要があります。
 
 ## 困ったとき

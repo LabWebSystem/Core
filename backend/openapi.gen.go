@@ -46,9 +46,28 @@ func (e ApplicationRegistrationState) Valid() bool {
 	}
 }
 
+// Defines values for ApplicationSourceKind.
+const (
+	Github ApplicationSourceKind = "github"
+	Zip    ApplicationSourceKind = "zip"
+)
+
+// Valid indicates whether the value is a known member of the ApplicationSourceKind enum.
+func (e ApplicationSourceKind) Valid() bool {
+	switch e {
+	case Github:
+		return true
+	case Zip:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LogEntryComponent.
 const (
 	LogEntryComponentApplication LogEntryComponent = "application"
+	LogEntryComponentAvahi       LogEntryComponent = "avahi"
 	LogEntryComponentBackend     LogEntryComponent = "backend"
 	LogEntryComponentCaddy       LogEntryComponent = "caddy"
 	LogEntryComponentCoredns     LogEntryComponent = "coredns"
@@ -59,6 +78,8 @@ const (
 func (e LogEntryComponent) Valid() bool {
 	switch e {
 	case LogEntryComponentApplication:
+		return true
+	case LogEntryComponentAvahi:
 		return true
 	case LogEntryComponentBackend:
 		return true
@@ -185,6 +206,7 @@ type Application struct {
 	ComposeFile       *string                      `json:"composeFile,omitempty"`
 	DesiredState      string                       `json:"desiredState"`
 	Etag              string                       `json:"etag"`
+	IsSystem          bool                         `json:"isSystem"`
 	LatestError       *string                      `json:"latestError,omitempty"`
 	LatestOperation   *string                      `json:"latestOperation,omitempty"`
 	Name              string                       `json:"name"`
@@ -195,11 +217,15 @@ type Application struct {
 	Ref               string                       `json:"ref"`
 	RegistrationState ApplicationRegistrationState `json:"registrationState"`
 	RepositoryUrl     string                       `json:"repositoryUrl"`
+	SourceKind        *ApplicationSourceKind       `json:"sourceKind,omitempty"`
 	Subdomain         string                       `json:"subdomain"`
 }
 
 // ApplicationRegistrationState defines model for Application.RegistrationState.
 type ApplicationRegistrationState string
+
+// ApplicationSourceKind defines model for Application.SourceKind.
+type ApplicationSourceKind string
 
 // ApplicationList defines model for ApplicationList.
 type ApplicationList struct {
@@ -264,12 +290,17 @@ type ConfigurationResponse struct {
 
 // CreateApplicationRequest defines model for CreateApplicationRequest.
 type CreateApplicationRequest struct {
-	ComposeFile   *string            `json:"composeFile,omitempty"`
-	OverrideFiles *[]string          `json:"overrideFiles,omitempty"`
-	Ref           string             `json:"ref"`
-	RepositoryUrl string             `json:"repositoryUrl"`
-	RequestId     openapi_types.UUID `json:"requestId"`
-	Subdomain     string             `json:"subdomain"`
+	ComposeFile   *string             `json:"composeFile,omitempty"`
+	Description   *string             `json:"description,omitempty"`
+	DisplayName   *string             `json:"displayName,omitempty"`
+	ImportId      *openapi_types.UUID `json:"importId,omitempty"`
+	OverrideFiles *[]string           `json:"overrideFiles,omitempty"`
+	PublicPort    *int                `json:"publicPort,omitempty"`
+	PublicService *string             `json:"publicService,omitempty"`
+	Ref           *string             `json:"ref,omitempty"`
+	RepositoryUrl *string             `json:"repositoryUrl,omitempty"`
+	RequestId     openapi_types.UUID  `json:"requestId"`
+	Subdomain     string              `json:"subdomain"`
 }
 
 // CreatePoolDeviceRequest defines model for CreatePoolDeviceRequest.
@@ -281,6 +312,34 @@ type CreatePoolDeviceRequest struct {
 // Error defines model for Error.
 type Error struct {
 	Error map[string]interface{} `json:"error"`
+}
+
+// ImportInspection defines model for ImportInspection.
+type ImportInspection struct {
+	ComposeFiles []struct {
+		Interfaces []struct {
+			Port    int    `json:"port"`
+			Service string `json:"service"`
+		} `json:"interfaces"`
+		Name     string   `json:"name"`
+		Services []string `json:"services"`
+	} `json:"composeFiles"`
+	ImportId openapi_types.UUID `json:"importId"`
+	Manifest ImportManifest     `json:"manifest"`
+}
+
+// ImportManifest defines model for ImportManifest.
+type ImportManifest struct {
+	ApiVersion  string  `json:"apiVersion"`
+	ComposeFile *string `json:"composeFile,omitempty"`
+	Metadata    struct {
+		Description string `json:"description"`
+		Name        string `json:"name"`
+	} `json:"metadata"`
+	Public struct {
+		Port    int    `json:"port"`
+		Service string `json:"service"`
+	} `json:"public"`
 }
 
 // LogEntry defines model for LogEntry.
@@ -404,6 +463,18 @@ type UpdateApplicationRequest struct {
 	Subdomain *string            `json:"subdomain,omitempty"`
 }
 
+// UpdateImportRequest defines model for UpdateImportRequest.
+type UpdateImportRequest struct {
+	ComposeFile   string             `json:"composeFile"`
+	Description   *string            `json:"description,omitempty"`
+	DisplayName   string             `json:"displayName"`
+	ImportId      openapi_types.UUID `json:"importId"`
+	OverrideFiles *[]string          `json:"overrideFiles,omitempty"`
+	PublicPort    int                `json:"publicPort"`
+	PublicService string             `json:"publicService"`
+	RequestId     openapi_types.UUID `json:"requestId"`
+}
+
 // Variable defines model for Variable.
 type Variable struct {
 	DefaultValue *string `json:"defaultValue,omitempty"`
@@ -429,6 +500,12 @@ type WatchLogEntriesParams struct {
 	After   *string `form:"after,omitempty" json:"after,omitempty"`
 }
 
+// PrepareGitImportJSONBody defines parameters for PrepareGitImport.
+type PrepareGitImportJSONBody struct {
+	Ref           string `json:"ref"`
+	RepositoryUrl string `json:"repositoryUrl"`
+}
+
 // ListResourcePoolsParams defines parameters for ListResourcePools.
 type ListResourcePoolsParams struct {
 	IncludeSystem *bool `form:"includeSystem,omitempty" json:"includeSystem,omitempty"`
@@ -445,6 +522,9 @@ type UpdateApplicationJSONRequestBody = UpdateApplicationRequest
 
 // UpdateConfigurationJSONRequestBody defines body for UpdateConfiguration for application/json ContentType.
 type UpdateConfigurationJSONRequestBody = ConfigurationRequest
+
+// UpdateApplicationImportJSONRequestBody defines body for UpdateApplicationImport for application/json ContentType.
+type UpdateApplicationImportJSONRequestBody = UpdateImportRequest
 
 // PurgeApplicationJSONRequestBody defines body for PurgeApplication for application/json ContentType.
 type PurgeApplicationJSONRequestBody = PurgeRequest
@@ -463,6 +543,9 @@ type StopApplicationJSONRequestBody = ActionRequest
 
 // SyncApplicationJSONRequestBody defines body for SyncApplication for application/json ContentType.
 type SyncApplicationJSONRequestBody = ActionRequest
+
+// PrepareGitImportJSONRequestBody defines body for PrepareGitImport for application/json ContentType.
+type PrepareGitImportJSONRequestBody PrepareGitImportJSONBody
 
 // CreatePoolDeviceJSONRequestBody defines body for CreatePoolDevice for application/json ContentType.
 type CreatePoolDeviceJSONRequestBody = CreatePoolDeviceRequest
@@ -582,6 +665,14 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	UpdateConfiguration(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// UpdateApplicationImportWithBody performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request,
+	// with any type of body and a specified content type.
+	UpdateApplicationImportWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateApplicationImport performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request.
+	// Takes a body of the `application/json` content type.
+	UpdateApplicationImport(ctx context.Context, application string, body UpdateApplicationImportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListLogEntries performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
 	ListLogEntries(ctx context.Context, application string, params *ListLogEntriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -641,6 +732,21 @@ type ClientInterface interface {
 
 	// HealthReady performs a GET /health/ready (the `HealthReady` operationId) request.
 	HealthReady(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PrepareGitImportWithBody performs a POST /imports/github (the `PrepareGitImport` operationId) request,
+	// with any type of body and a specified content type.
+	PrepareGitImportWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PrepareGitImport performs a POST /imports/github (the `PrepareGitImport` operationId) request.
+	// Takes a body of the `application/json` content type.
+	PrepareGitImport(ctx context.Context, body PrepareGitImportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PrepareZipImportWithBody performs a POST /imports/zip (the `PrepareZipImport` operationId) request,
+	// with any type of body and a specified content type.
+	PrepareZipImportWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DiscardImport performs a DELETE /imports/{importId} (the `DiscardImport` operationId) request.
+	DiscardImport(ctx context.Context, importId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOperation performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 	GetOperation(ctx context.Context, operation OperationID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -804,6 +910,34 @@ func (c *Client) UpdateConfigurationWithBody(ctx context.Context, application st
 // Takes a body of the `application/json` content type.
 func (c *Client) UpdateConfiguration(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateConfigurationRequest(c.Server, application, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateApplicationImportWithBody performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) UpdateApplicationImportWithBody(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateApplicationImportRequestWithBody(c.Server, application, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateApplicationImport performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) UpdateApplicationImport(ctx context.Context, application string, body UpdateApplicationImportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateApplicationImportRequest(c.Server, application, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1024,6 +1158,61 @@ func (c *Client) HealthLive(ctx context.Context, reqEditors ...RequestEditorFn) 
 // HealthReady performs a GET /health/ready (the `HealthReady` operationId) request.
 func (c *Client) HealthReady(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHealthReadyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PrepareGitImportWithBody performs a POST /imports/github (the `PrepareGitImport` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) PrepareGitImportWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPrepareGitImportRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PrepareGitImport performs a POST /imports/github (the `PrepareGitImport` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) PrepareGitImport(ctx context.Context, body PrepareGitImportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPrepareGitImportRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PrepareZipImportWithBody performs a POST /imports/zip (the `PrepareZipImport` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) PrepareZipImportWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPrepareZipImportRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DiscardImport performs a DELETE /imports/{importId} (the `DiscardImport` operationId) request.
+func (c *Client) DiscardImport(ctx context.Context, importId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDiscardImportRequest(c.Server, importId)
 	if err != nil {
 		return nil, err
 	}
@@ -1381,6 +1570,53 @@ func NewUpdateConfigurationRequestWithBody(server string, application string, co
 	}
 
 	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewUpdateApplicationImportRequest calls the generic UpdateApplicationImport builder with application/json body
+func NewUpdateApplicationImportRequest(server string, application string, body UpdateApplicationImportJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateApplicationImportRequestWithBody(server, application, "application/json", bodyReader)
+}
+
+// NewUpdateApplicationImportRequestWithBody constructs an http.Request for the UpdateApplicationImport method, with any body, and a specified content type
+func NewUpdateApplicationImportRequestWithBody(server string, application string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "application", application, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/applications/%s/imports", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1924,6 +2160,109 @@ func NewHealthReadyRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewPrepareGitImportRequest calls the generic PrepareGitImport builder with application/json body
+func NewPrepareGitImportRequest(server string, body PrepareGitImportJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPrepareGitImportRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPrepareGitImportRequestWithBody constructs an http.Request for the PrepareGitImport method, with any body, and a specified content type
+func NewPrepareGitImportRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/imports/github")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPrepareZipImportRequestWithBody constructs an http.Request for the PrepareZipImport method, with any body, and a specified content type
+func NewPrepareZipImportRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/imports/zip")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDiscardImportRequest constructs an http.Request for the DiscardImport method
+func NewDiscardImportRequest(server string, importId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "importId", importId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/imports/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetOperationRequest constructs an http.Request for the GetOperation method
 func NewGetOperationRequest(server string, operation OperationID) (*http.Request, error) {
 	var err error
@@ -2219,6 +2558,16 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	UpdateConfigurationWithResponse(ctx context.Context, application string, body UpdateConfigurationJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConfigurationResponse, error)
 
+	// UpdateApplicationImportWithBodyWithResponse performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	UpdateApplicationImportWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateApplicationImportResponse, error)
+
+	// UpdateApplicationImportWithResponse performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	UpdateApplicationImportWithResponse(ctx context.Context, application string, body UpdateApplicationImportJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateApplicationImportResponse, error)
+
 	// ListLogEntriesWithResponse performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -2298,6 +2647,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Returns a wrapper object for the known response body format(s).
 	HealthReadyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthReadyResponse, error)
+
+	// PrepareGitImportWithBodyWithResponse performs a POST /imports/github (the `PrepareGitImport` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PrepareGitImportWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PrepareGitImportResponse, error)
+
+	// PrepareGitImportWithResponse performs a POST /imports/github (the `PrepareGitImport` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	PrepareGitImportWithResponse(ctx context.Context, body PrepareGitImportJSONRequestBody, reqEditors ...RequestEditorFn) (*PrepareGitImportResponse, error)
+
+	// PrepareZipImportWithBodyWithResponse performs a POST /imports/zip (the `PrepareZipImport` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PrepareZipImportWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PrepareZipImportResponse, error)
+
+	// DiscardImportWithResponse performs a DELETE /imports/{importId} (the `DiscardImport` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DiscardImportWithResponse(ctx context.Context, importId openapi_types.UUID, reqEditors ...RequestEditorFn) (*DiscardImportResponse, error)
 
 	// GetOperationWithResponse performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 	//
@@ -2611,6 +2981,47 @@ func (r UpdateConfigurationResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateConfigurationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateApplicationImportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *OperationReference
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r UpdateApplicationImportResponse) GetJSON202() *OperationReference {
+	return r.JSON202
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateApplicationImportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateApplicationImportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateApplicationImportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateApplicationImportResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3006,6 +3417,122 @@ func (r HealthReadyResponse) ContentType() string {
 	return ""
 }
 
+type PrepareGitImportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ImportInspection
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PrepareGitImportResponse) GetJSON200() *ImportInspection {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PrepareGitImportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PrepareGitImportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PrepareGitImportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PrepareGitImportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PrepareZipImportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ImportInspection
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PrepareZipImportResponse) GetJSON200() *ImportInspection {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PrepareZipImportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PrepareZipImportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PrepareZipImportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PrepareZipImportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DiscardImportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DiscardImportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DiscardImportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DiscardImportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DiscardImportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetOperationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3325,6 +3852,28 @@ func (c *ClientWithResponses) UpdateConfigurationWithResponse(ctx context.Contex
 	return ParseUpdateConfigurationResponse(rsp)
 }
 
+// UpdateApplicationImportWithBodyWithResponse performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) UpdateApplicationImportWithBodyWithResponse(ctx context.Context, application string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateApplicationImportResponse, error) {
+	rsp, err := c.UpdateApplicationImportWithBody(ctx, application, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateApplicationImportResponse(rsp)
+}
+
+// UpdateApplicationImportWithResponse performs a POST /applications/{application}/imports (the `UpdateApplicationImport` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) UpdateApplicationImportWithResponse(ctx context.Context, application string, body UpdateApplicationImportJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateApplicationImportResponse, error) {
+	rsp, err := c.UpdateApplicationImport(ctx, application, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateApplicationImportResponse(rsp)
+}
+
 // ListLogEntriesWithResponse performs a GET /applications/{application}/logEntries (the `ListLogEntries` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3501,6 +4050,51 @@ func (c *ClientWithResponses) HealthReadyWithResponse(ctx context.Context, reqEd
 	return ParseHealthReadyResponse(rsp)
 }
 
+// PrepareGitImportWithBodyWithResponse performs a POST /imports/github (the `PrepareGitImport` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PrepareGitImportWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PrepareGitImportResponse, error) {
+	rsp, err := c.PrepareGitImportWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePrepareGitImportResponse(rsp)
+}
+
+// PrepareGitImportWithResponse performs a POST /imports/github (the `PrepareGitImport` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PrepareGitImportWithResponse(ctx context.Context, body PrepareGitImportJSONRequestBody, reqEditors ...RequestEditorFn) (*PrepareGitImportResponse, error) {
+	rsp, err := c.PrepareGitImport(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePrepareGitImportResponse(rsp)
+}
+
+// PrepareZipImportWithBodyWithResponse performs a POST /imports/zip (the `PrepareZipImport` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PrepareZipImportWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PrepareZipImportResponse, error) {
+	rsp, err := c.PrepareZipImportWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePrepareZipImportResponse(rsp)
+}
+
+// DiscardImportWithResponse performs a DELETE /imports/{importId} (the `DiscardImport` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DiscardImportWithResponse(ctx context.Context, importId openapi_types.UUID, reqEditors ...RequestEditorFn) (*DiscardImportResponse, error) {
+	rsp, err := c.DiscardImport(ctx, importId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDiscardImportResponse(rsp)
+}
+
 // GetOperationWithResponse performs a GET /operations/{operation} (the `GetOperation` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3640,6 +4234,9 @@ func ParseUnregisterApplicationResponse(rsp *http.Response) (*UnregisterApplicat
 		}
 		response.JSON202 = &dest
 
+	case rsp.StatusCode == 409:
+		break // No content-type
+
 	}
 
 	return response, nil
@@ -3695,6 +4292,9 @@ func ParseUpdateApplicationResponse(rsp *http.Response) (*UpdateApplicationRespo
 		}
 		response.JSON202 = &dest
 
+	case rsp.StatusCode == 409:
+		break // No content-type
+
 	}
 
 	return response, nil
@@ -3749,6 +4349,38 @@ func ParseUpdateConfigurationResponse(rsp *http.Response) (*UpdateConfigurationR
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case rsp.StatusCode == 409:
+		break // No content-type
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateApplicationImportResponse parses an HTTP response from a UpdateApplicationImportWithResponse call
+func ParseUpdateApplicationImportResponse(rsp *http.Response) (*UpdateApplicationImportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateApplicationImportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest OperationReference
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case rsp.StatusCode == 409:
+		break // No content-type
 
 	}
 
@@ -3823,6 +4455,9 @@ func ParsePurgeApplicationResponse(rsp *http.Response) (*PurgeApplicationRespons
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case rsp.StatusCode == 409:
+		break // No content-type
 
 	}
 
@@ -3991,6 +4626,74 @@ func ParseHealthReadyResponse(rsp *http.Response) (*HealthReadyResponse, error) 
 	return response, nil
 }
 
+// ParsePrepareGitImportResponse parses an HTTP response from a PrepareGitImportWithResponse call
+func ParsePrepareGitImportResponse(rsp *http.Response) (*PrepareGitImportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PrepareGitImportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ImportInspection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePrepareZipImportResponse parses an HTTP response from a PrepareZipImportWithResponse call
+func ParsePrepareZipImportResponse(rsp *http.Response) (*PrepareZipImportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PrepareZipImportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ImportInspection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDiscardImportResponse parses an HTTP response from a DiscardImportWithResponse call
+func ParseDiscardImportResponse(rsp *http.Response) (*DiscardImportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DiscardImportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseGetOperationResponse parses an HTTP response from a GetOperationWithResponse call
 func ParseGetOperationResponse(rsp *http.Response) (*GetOperationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4141,6 +4844,9 @@ type ServerInterface interface {
 	// (PATCH /applications/{application}/configuration)
 	UpdateConfiguration(w http.ResponseWriter, r *http.Request, application string)
 
+	// (POST /applications/{application}/imports)
+	UpdateApplicationImport(w http.ResponseWriter, r *http.Request, application string)
+
 	// (GET /applications/{application}/logEntries)
 	ListLogEntries(w http.ResponseWriter, r *http.Request, application string, params ListLogEntriesParams)
 
@@ -4170,6 +4876,15 @@ type ServerInterface interface {
 
 	// (GET /health/ready)
 	HealthReady(w http.ResponseWriter, r *http.Request)
+
+	// (POST /imports/github)
+	PrepareGitImport(w http.ResponseWriter, r *http.Request)
+
+	// (POST /imports/zip)
+	PrepareZipImport(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /imports/{importId})
+	DiscardImport(w http.ResponseWriter, r *http.Request, importId openapi_types.UUID)
 
 	// (GET /operations/{operation})
 	GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID)
@@ -4345,6 +5060,32 @@ func (siw *ServerInterfaceWrapper) UpdateConfiguration(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateConfiguration(w, r, application)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateApplicationImport operation middleware
+func (siw *ServerInterfaceWrapper) UpdateApplicationImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "application" -------------
+	var application string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "application", r.PathValue("application"), &application, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "application", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateApplicationImport(w, r, application)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4713,6 +5454,60 @@ func (siw *ServerInterfaceWrapper) HealthReady(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// PrepareGitImport operation middleware
+func (siw *ServerInterfaceWrapper) PrepareGitImport(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PrepareGitImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PrepareZipImport operation middleware
+func (siw *ServerInterfaceWrapper) PrepareZipImport(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PrepareZipImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DiscardImport operation middleware
+func (siw *ServerInterfaceWrapper) DiscardImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "importId" -------------
+	var importId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "importId", r.PathValue("importId"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "importId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiscardImport(w, r, importId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOperation operation middleware
 func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
 
@@ -4963,6 +5758,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/resource-pools", wrapper.ListResourcePools)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/resource-pools/devices", wrapper.CreatePoolDevice)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/resource-pools/volumes/{volume}", wrapper.DeleteResourcePoolVolume)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/imports/github", wrapper.PrepareGitImport)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/imports/zip", wrapper.PrepareZipImport)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/imports/{importId}", wrapper.DiscardImport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications", wrapper.ListApplications)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications", wrapper.CreateApplication)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/applications/{application}", wrapper.UnregisterApplication)
@@ -4976,6 +5774,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}:purge", wrapper.PurgeApplication)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications/{application}/configuration", wrapper.GetConfiguration)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/applications/{application}/configuration", wrapper.UpdateConfiguration)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/applications/{application}/imports", wrapper.UpdateApplicationImport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/operations/{operation}", wrapper.GetOperation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/operations/{operation}:watch", wrapper.WatchOperation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/applications/{application}/logEntries", wrapper.ListLogEntries)
@@ -5050,6 +5849,14 @@ func (response UnregisterApplication202JSONResponse) VisitUnregisterApplicationR
 	return err
 }
 
+type UnregisterApplication409Response struct {
+}
+
+func (response UnregisterApplication409Response) VisitUnregisterApplicationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
 type GetApplicationRequestObject struct {
 	Application string `json:"application"`
 }
@@ -5103,6 +5910,14 @@ func (response UpdateApplication202JSONResponse) VisitUpdateApplicationResponse(
 	return err
 }
 
+type UpdateApplication409Response struct {
+}
+
+func (response UpdateApplication409Response) VisitUpdateApplicationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
 type GetConfigurationRequestObject struct {
 	Application string `json:"application"`
 }
@@ -5154,6 +5969,45 @@ func (response UpdateConfiguration202JSONResponse) VisitUpdateConfigurationRespo
 	w.WriteHeader(202)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type UpdateConfiguration409Response struct {
+}
+
+func (response UpdateConfiguration409Response) VisitUpdateConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type UpdateApplicationImportRequestObject struct {
+	Application string `json:"application"`
+	Body        *UpdateApplicationImportJSONRequestBody
+}
+
+type UpdateApplicationImportResponseObject interface {
+	VisitUpdateApplicationImportResponse(w http.ResponseWriter) error
+}
+
+type UpdateApplicationImport202JSONResponse OperationReference
+
+func (response UpdateApplicationImport202JSONResponse) VisitUpdateApplicationImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateApplicationImport409Response struct {
+}
+
+func (response UpdateApplicationImport409Response) VisitUpdateApplicationImportResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
 }
 
 type ListLogEntriesRequestObject struct {
@@ -5284,6 +6138,14 @@ func (response PurgeApplication202JSONResponse) VisitPurgeApplicationResponse(w 
 	w.WriteHeader(202)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type PurgeApplication409Response struct {
+}
+
+func (response PurgeApplication409Response) VisitPurgeApplicationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
 }
 
 type RebuildApplicationRequestObject struct {
@@ -5436,6 +6298,66 @@ type HealthReady503Response struct {
 
 func (response HealthReady503Response) VisitHealthReadyResponse(w http.ResponseWriter) error {
 	w.WriteHeader(503)
+	return nil
+}
+
+type PrepareGitImportRequestObject struct {
+	Body *PrepareGitImportJSONRequestBody
+}
+
+type PrepareGitImportResponseObject interface {
+	VisitPrepareGitImportResponse(w http.ResponseWriter) error
+}
+
+type PrepareGitImport200JSONResponse ImportInspection
+
+func (response PrepareGitImport200JSONResponse) VisitPrepareGitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PrepareZipImportRequestObject struct {
+	Body io.Reader
+}
+
+type PrepareZipImportResponseObject interface {
+	VisitPrepareZipImportResponse(w http.ResponseWriter) error
+}
+
+type PrepareZipImport200JSONResponse ImportInspection
+
+func (response PrepareZipImport200JSONResponse) VisitPrepareZipImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DiscardImportRequestObject struct {
+	ImportId openapi_types.UUID `json:"importId"`
+}
+
+type DiscardImportResponseObject interface {
+	VisitDiscardImportResponse(w http.ResponseWriter) error
+}
+
+type DiscardImport204Response struct {
+}
+
+func (response DiscardImport204Response) VisitDiscardImportResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
 	return nil
 }
 
@@ -5618,6 +6540,9 @@ type StrictServerInterface interface {
 	// (PATCH /applications/{application}/configuration)
 	UpdateConfiguration(ctx context.Context, request UpdateConfigurationRequestObject) (UpdateConfigurationResponseObject, error)
 
+	// (POST /applications/{application}/imports)
+	UpdateApplicationImport(ctx context.Context, request UpdateApplicationImportRequestObject) (UpdateApplicationImportResponseObject, error)
+
 	// (GET /applications/{application}/logEntries)
 	ListLogEntries(ctx context.Context, request ListLogEntriesRequestObject) (ListLogEntriesResponseObject, error)
 
@@ -5647,6 +6572,15 @@ type StrictServerInterface interface {
 
 	// (GET /health/ready)
 	HealthReady(ctx context.Context, request HealthReadyRequestObject) (HealthReadyResponseObject, error)
+
+	// (POST /imports/github)
+	PrepareGitImport(ctx context.Context, request PrepareGitImportRequestObject) (PrepareGitImportResponseObject, error)
+
+	// (POST /imports/zip)
+	PrepareZipImport(ctx context.Context, request PrepareZipImportRequestObject) (PrepareZipImportResponseObject, error)
+
+	// (DELETE /imports/{importId})
+	DiscardImport(ctx context.Context, request DiscardImportRequestObject) (DiscardImportResponseObject, error)
 
 	// (GET /operations/{operation})
 	GetOperation(ctx context.Context, request GetOperationRequestObject) (GetOperationResponseObject, error)
@@ -5902,6 +6836,39 @@ func (sh *strictHandler) UpdateConfiguration(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateConfigurationResponseObject); ok {
 		if err := validResponse.VisitUpdateConfigurationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateApplicationImport operation middleware
+func (sh *strictHandler) UpdateApplicationImport(w http.ResponseWriter, r *http.Request, application string) {
+	var request UpdateApplicationImportRequestObject
+
+	request.Application = application
+
+	var body UpdateApplicationImportJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateApplicationImport(ctx, request.(UpdateApplicationImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateApplicationImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateApplicationImportResponseObject); ok {
+		if err := validResponse.VisitUpdateApplicationImportResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -6209,6 +7176,89 @@ func (sh *strictHandler) HealthReady(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PrepareGitImport operation middleware
+func (sh *strictHandler) PrepareGitImport(w http.ResponseWriter, r *http.Request) {
+	var request PrepareGitImportRequestObject
+
+	var body PrepareGitImportJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PrepareGitImport(ctx, request.(PrepareGitImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PrepareGitImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PrepareGitImportResponseObject); ok {
+		if err := validResponse.VisitPrepareGitImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PrepareZipImport operation middleware
+func (sh *strictHandler) PrepareZipImport(w http.ResponseWriter, r *http.Request) {
+	var request PrepareZipImportRequestObject
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PrepareZipImport(ctx, request.(PrepareZipImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PrepareZipImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PrepareZipImportResponseObject); ok {
+		if err := validResponse.VisitPrepareZipImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DiscardImport operation middleware
+func (sh *strictHandler) DiscardImport(w http.ResponseWriter, r *http.Request, importId openapi_types.UUID) {
+	var request DiscardImportRequestObject
+
+	request.ImportId = importId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DiscardImport(ctx, request.(DiscardImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DiscardImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DiscardImportResponseObject); ok {
+		if err := validResponse.VisitDiscardImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetOperation operation middleware
 func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, operation OperationID) {
 	var request GetOperationRequestObject
@@ -6349,53 +7399,60 @@ func (sh *strictHandler) DeleteResourcePoolVolume(w http.ResponseWriter, r *http
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"7BttbxTH+a9E23yAZs93BpuE+2IZ7BBLLrHsGKSCW83tPneeeN+YmT1zdU/i7AhIBQJFURERVZUUNZQK",
-	"U1VVRRJIfsz6bPiUv1Dt+9vM3p7x4Qb52+3Os888728ztyEppm6ZBhiMSvUNiSqroCPv57TCsGkswhUb",
-	"KHNfWMS0gDAM3jLxF+ZU96FpEh0xqS7ZNlYlWWIdC6S6RBnBRkvqdmUPHBNQpfqlxKcrEajZ+BQUJnVl",
-	"adqyNKwgd/P8rh61FD7EGniLiDEghlSXfndsqq6ayhqQyvGpAOrYVP3y5bFL05XfosofapXTv6+svHf8",
-	"15cvjx2bqneQrv2xo2vH382TK0sqUJfYJYaYt08OABhqcRc0xICyWUJMUrD+sQUk4jAHYyA9yx2KhUKr",
-	"Y+9xiTYbFEgb1GmWUomKGFQY1qHoGzGnZhsIwaonck8FmIFOM+QlZDxWWXnPFXGxgIMXiBDUkTzzUExD",
-	"wZq7HFPRME0NkOEDNLnkEWhhynxhRkyAYeuuoU2f/WTuwqwkS2c/Pv/h3Lnlxbnz5yRZWj6/OHtubumT",
-	"2cXZmYQJJpFaJsXMJJ1lonG3pXZDNXWEeQrMWLunzeQXWfw+cxmjy6qGx2lK5WkZBhY6wL/mMc+zk7aW",
-	"Uvi7nhKkX1XjmFENAkY16bU5/WYkktqAR+JZ02jilu3zKoxAKrSxAmewoWKjlTFNDqAfqfKaBOKuctcY",
-	"Ii1gC4itDlZziCf1lRzvzeMz6wWW3dCwsmASj1sdXcW6a8inJidPTsqSjg3/eTz6EhsMWkDib5cKuBkm",
-	"YstSGxGMGoHPI1XFri6QtpCSbJFFXAgQJBgNOc+ILt5KHpAbMoZBLdOgIFL4tKIA5ZgD0jRzHVR+nNGB",
-	"UtSCwfoOscSf8Aj2KSkyTiVgSURQofFaQHRMaeipQxk3NW2iwEfYYAdo+wmkGUdIkionuS7jGNBsgsJw",
-	"G876mZ2fWtfpx0GyKgLTkYGbQNnCazhbGkeR0xnA1k2yltd7mOTzOrWJgHZ+YgnheXIcdUBBaodvtano",
-	"sW/LbyJbYxeQZvP3X0V0xofhI8B0CRQCglWhAmIZ8znjk8NXTkRCyuQToCkuyrhC29RsvVCuAsZ4BJbZ",
-	"cB0acwYD0kTFgczal5WJI5QwxngbDaa8IMmEMozdM47Ucjp7hFbODS+cwJSVlyhWcONQ1ulSDszNhwQQ",
-	"g0TtJSyW3lDj9Ka6Ba8Z0LExD0bLzVDjZar4uOYhWJJft0BKtQBJ7nzWVo5N1YOflZWNmnxqvBuuHJ96",
-	"t0SPzGsR0k1EYaXkWcaCaWoznjmLDQMZKnZ7xCXmuofP/ADJhhGmEIwfEPPb8aiP+uc0rZBpqwX1pA/G",
-	"wztvtmYNRjqFTY+g1opK3GSH2UDKGhiqx5jqhQnFJKB6NY6K6GrDRMRdTaDndpyKaTCEDSDnRVlJsQkV",
-	"zBQwn2AN2qAliVWhYbutITaaphuoEHHtKCutRKUkrIVlyVQUm5Ahhw3h1GPoViyjYM8hA4GkSAmZTmqr",
-	"uEAPLYLfCoPBCIbyXXBkX5ygpblZQqxEA64y4XLWwAOyUkh53EVzprkZvy+iCsGWP3iKF53e9s6za7uf",
-	"3XF6j+dmnGub0crOiwe7N+9OL8w5vVsvf/rS6d133fjn5zcjVdLqRvS7+/Pzz53edvT8autR/+Z1Z/OL",
-	"3Vs3+ttfOb17Tu9Hp3ffubbp2t1VpFtuNpImJ2vwwUStVoETpxuViXF1ooLeHz9VmZg4dWpycmKiVqvV",
-	"JDkXkZMxt1Y5jSrN6cqHKxsfdCvJx4luZSL5fLJbufTBaTTdOLOSfZ14HD/R5WaiSDKhn4pF6mw9djZf",
-	"OFvPnc3v+ndvZ5lOSLAk/wl+Ex+/edYXoQkEDAXEpWeRj6RFWLosTWzvN5mcVOblvKFCkoqppaHObwoi",
-	"nRcfiwDWsKEWznGHkIYsWatI0LjS7Hjzig22303YhuFP/aitKACq97aJsAZ+ajIU0LRUrx2jtS11OKnx",
-	"E7snhZBIOaGL5A48xS6sdihWUFSnCLWLGLRMP3eHErApuBmAdigDnZ9Y3dRgiOYYbm5gSEUMFU25RPVo",
-	"zIOwl6SJompAfxNCpmmW48IpYD9BM1ecUcnHEeEAYQgKicOTkW9PNi1ZEoSjdpEoA2SlJVgQ6bBaiiYR",
-	"frGZo/TxV04giXVhraiCBp4MBHMRY5kKlsJYFjoYqC0Iq6nUjCkf5fatukBrScbzbEbouBK1SaugwzGN",
-	"JiZ68NOFYMQGmXvIdABnmnK0IY/UUPGuEQiPKsoXnAlv55ScwXRjOHSRafIOKFKxegi8/Bhfcry1f4oz",
-	"SopnPFlGODMhvqkte7mszMRFfGK57ynD6xyrR8cxHJsbMGddA7D44YIWzFdLDkoDFHmSu92gU81V2fMX",
-	"l9z6evMbZ+ues/V4b/vrvbvXpxfmXPlh5lXX86hxERpLXl3wzhm/SX/HB2kDoT6e8bHaWC1oTA1kYaku",
-	"nRwbHwtq7VVPONXsaWjL5zfVy0pu9zidBHR59E+nvI9O1GpB+GHBACGBtvop9WO9b9NDnLR6TasnqLSA",
-	"ItHsPLv28u/f+iCWSTmU5yaI8WTpjOlP9w+EauGksps2CDc0d3PSO3FgdHC6GI4A4z5u8wu/B3ahunLa",
-	"HKobiaeub6ca+DV6WsrLhn96D2T0kk7f2/kFiVfm+9Y5YFmhjd6zCr2qf+fP/R/vuYFjojaRD0+7Dx7v",
-	"PnzQv/F94HeIIB0YECrVL21IbiT3wktYr9YzlU9aWXKC9mwgXfHilLLKsbdslhqRrQmz4Vvj1VUleeVA",
-	"mADOAUvdTRilmfIvQXD4ffnoSX/7q1+KteblN4IsxLtY9PbYquaPn4O6TlipzMdgIzTT1GSdF063njib",
-	"/worFNc6axzrfPhg7z/f7P7l650f/uv0bu08u7375G+Hb8tygO2KDd5EJkDXxrBeiCdsqxmia7mWl4CG",
-	"GHdIJ9ovce8m2oJzEnkpOsXdqMnjJ97vco8fBVswRJg3xYu3KDck5OMDQz1AbNEZUIxuwJkkH4+GdZym",
-	"KrrFMFmrFd9h6K6U9sr6ehgAub550V0dxjkZXGVVaIPBKpQRQHraO7PM51xwaWn2yPP+Xz0PNRkMY9oD",
-	"zLBu2aQV3P0YZYrndpnegG705WhqDvjWpPU6gYaNNfWQdLfo737UuO5ffX7rf2j6O5o8vJ4CvRrokLS3",
-	"5NVfR6rbt+pM69A0Z1pHitu34jqGcliK6xjKkeIKFbcKSGOrVQ23QdjNfOTBzLsg/EYmvdneo+f9rds7",
-	"z55k9oj+ZFCwyWJwRXvwLv2b/9j78lH/ztOXWy/cZmaydlIEtPPsdv/O05Aa/oW3onlg/B/PEQ5Z8rei",
-	"ivQYjgLLtWhmigGRW5Wibm4mbFD4cizTGA8hzwPpiw9RSCRQZsUKbwkIZ3np+wR8ijONJTYUzVbBPxxN",
-	"NZhq+G+aJtIo54aEGzNHZsppTjhamb+4lLxT6Z3FPHe2/hm6aFpq1cRViqKjz8QNilGefOZv4pcK+eMH",
-	"1xtzbjVxp7I3nK27zuZDZ/O7vfs/vLr17/72rZ3vrwuEHNyaqG74PwoPQWe890k1X/A+GmV8LMm1T0j/",
-	"8z+9uv8w5HfwpMuFOJ2H2Hnxk5c+nni3nf/q9J76iJ3et07vttN77PQ+CzgvGWTasZxEEWbQbCi4Xh9u",
-	"YhNNqrsFGK62x6XuSvd/AQAA//8=",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

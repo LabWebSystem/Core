@@ -1,6 +1,10 @@
 package backend
 
-import "net/http"
+import (
+	"net/http"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
+)
 
 // generatedAPIはOpenAPI生成server interfaceと業務handlerを接続する薄いadapterです。
 // routeと引数の定義はopenapi.yaml・生成物を正本とし、業務処理はServerへ委譲します。
@@ -8,6 +12,18 @@ type generatedAPI struct{ server *Server }
 
 var _ ServerInterface = generatedAPI{}
 
+func (a generatedAPI) PrepareGitImport(w http.ResponseWriter, r *http.Request) {
+	a.server.prepareGitImport(w, r)
+}
+func (a generatedAPI) PrepareZipImport(w http.ResponseWriter, r *http.Request) {
+	a.server.prepareZipImport(w, r)
+}
+func (a generatedAPI) DiscardImport(w http.ResponseWriter, _ *http.Request, importID openapi_types.UUID) {
+	a.server.discardImport(w, importID.String())
+}
+func (a generatedAPI) UpdateApplicationImport(w http.ResponseWriter, r *http.Request, application string) {
+	a.server.updateApplicationImport(w, withApplicationPath(r, application))
+}
 func (a generatedAPI) ListApplications(w http.ResponseWriter, r *http.Request) {
 	a.server.listApplications(w, r)
 }

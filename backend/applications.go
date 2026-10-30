@@ -383,6 +383,18 @@ func (s *Server) patchConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "INVALID_CONTENT_TYPE", "状態を変更する要求はJSONで指定してください", "contentType")
 		return
 	}
+	var isSystem int
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT is_system FROM applications WHERE id=?`, appID(r)).Scan(&isSystem); err == sql.ErrNoRows {
+		writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "アプリが見つかりません", "application")
+		return
+	} else if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリを取得できません", "")
+		return
+	}
+	if isSystem != 0 {
+		writeAPIError(w, http.StatusConflict, "SYSTEM_APPLICATION_PROTECTED", "システムアプリの設定は変更できません", "application")
+		return
+	}
 	var req struct {
 		Variables map[string]struct {
 			Value  string `json:"value"`
@@ -650,8 +662,9 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "データベースを利用できません", "")
 		return
 	}
-	var id, sub, repo, ref, desired, observed, state, latestError, created, updated string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,desired_state,observed_state,registration_state,latest_error,created_at,updated_at FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &desired, &observed, &state, &latestError, &created, &updated)
+	var id, sub, repo, ref, sourceKind, desired, observed, state, latestError, created, updated string
+	var isSystem int
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id,subdomain,repository_url,git_ref,source_kind,desired_state,observed_state,registration_state,latest_error,created_at,updated_at,is_system FROM applications WHERE id=?`, appID(r)).Scan(&id, &sub, &repo, &ref, &sourceKind, &desired, &observed, &state, &latestError, &created, &updated, &isSystem)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, 404, "NOT_FOUND", "アプリが見つかりません", "application")
 		return
@@ -675,6 +688,8 @@ func (s *Server) getApplication(w http.ResponseWriter, r *http.Request) {
 		"subdomain":         sub,
 		"repositoryUrl":     repo,
 		"ref":               ref,
+		"sourceKind":        sourceKind,
+		"isSystem":          isSystem != 0,
 		"desiredState":      desired,
 		"observedState":     observed,
 		"registrationState": state,
@@ -694,6 +709,18 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !requireJSON(w, r) {
+		return
+	}
+	var isSystem int
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT is_system FROM applications WHERE id=?`, appID(r)).Scan(&isSystem); err == sql.ErrNoRows {
+		writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "アプリが見つかりません", "application")
+		return
+	} else if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "DATABASE_UNAVAILABLE", "アプリを取得できません", "")
+		return
+	}
+	if isSystem != 0 {
+		writeAPIError(w, http.StatusConflict, "SYSTEM_APPLICATION_PROTECTED", "システムアプリの参照先と公開名は変更できません", "application")
 		return
 	}
 	var p struct {
@@ -810,11 +837,15 @@ func (s *Server) appOperation(w http.ResponseWriter, r *http.Request) {
 func (s *Server) makeAppOp(r *http.Request, kind string) (Operation, error) {
 	id := appID(r)
 	var registrationState string
-	if err := s.DB.QueryRowContext(context.Background(), `SELECT registration_state FROM applications WHERE id=?`, id).Scan(&registrationState); err != nil {
+	var isSystem int
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT registration_state,is_system FROM applications WHERE id=?`, id).Scan(&registrationState, &isSystem); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Operation{}, errors.New("アプリが見つかりません")
 		}
 		return Operation{}, err
+	}
+	if isSystem != 0 && (kind == "UNREGISTER" || kind == "PURGE" || kind == "REGISTER" || kind == "SYNC") {
+		return Operation{}, &ConflictError{Message: "システムアプリは登録解除・削除・同期できません"}
 	}
 	if kind == "REGISTER" && registrationState != "UNREGISTERED" {
 		return Operation{}, errors.New("再登録は登録解除済みアプリだけに実行できます")

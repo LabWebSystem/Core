@@ -1,0 +1,7 @@
+services:
+  backend:
+    environment:
+      LWS_AVAHI_CONTAINER: ""
+
+  avahi:
+    profiles: [development-disabled]

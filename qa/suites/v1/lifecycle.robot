@@ -18,7 +18,7 @@ FT-V1-005 不正domainでstartを拒否する
     Should Not Be Equal As Integers    ${result.rc}    0
     File Should Exist    ${QA_ROOT}/etc/config.env
     ${config}=    Get File    ${QA_ROOT}/etc/config.env
-    Should Contain    ${config}    LWS_BASE_DOMAIN=qa.example.internal
+    Should Contain    ${config}    LWS_BASE_DOMAIN=qa.example.local
 
 FT-V1-006 start済みLWSをstop/status/rebuildする
     [Documentation]    stop、status、rebuildが対象だけを操作し設定を保持する。

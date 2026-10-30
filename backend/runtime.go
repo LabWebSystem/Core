@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +24,46 @@ type RuntimeExecutor struct {
 	SecretKey      []byte
 	InstallationID string
 	DeviceScanner  DeviceScanner
+}
+
+type runtimeFileSnapshot struct {
+	path   string
+	data   []byte
+	exists bool
+}
+
+type restorationFailure struct{ message string }
+
+func (e *restorationFailure) Error() string { return e.message }
+
+func restorationError(label string, err, original error) error {
+	return &restorationFailure{message: fmt.Sprintf("%s: %v（元のエラー: %v）", label, err, original)}
+}
+
+func snapshotRuntimeFiles(runtime string) ([]runtimeFileSnapshot, error) {
+	files := make([]runtimeFileSnapshot, 0, 2)
+	for _, name := range []string{"lws.override.yaml", "lws.effective.yaml"} {
+		path := filepath.Join(runtime, name)
+		data, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("実行設定を保存できません: %w", err)
+		}
+		files = append(files, runtimeFileSnapshot{path: path, data: data, exists: err == nil})
+	}
+	return files, nil
+}
+
+func restoreRuntimeFiles(files []runtimeFileSnapshot) error {
+	for _, file := range files {
+		if file.exists {
+			if err := WriteAtomic(file.path, file.data, 0600); err != nil {
+				return err
+			}
+		} else if err := os.Remove(file.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func NewRuntimeExecutor(db *sql.DB, root string) *RuntimeExecutor {
@@ -61,14 +102,47 @@ func (e *RuntimeExecutor) ReconcileStartup(ctx context.Context) error {
 	if err := e.ReconcileActive(ctx); err != nil {
 		return err
 	}
+	rows, err := e.DB.QueryContext(ctx, `SELECT id FROM applications WHERE is_system=1 AND registration_state='ACTIVE' AND desired_state='RUNNING' ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	var systemApplications []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		systemApplications = append(systemApplications, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, id := range systemApplications {
+		if err := e.Run(ctx, Operation{ApplicationID: id, Kind: "START"}); err != nil {
+			return fmt.Errorf("システムアプリ%sを起動できません: %w", id, err)
+		}
+	}
 	return e.syncDerived(ctx)
 }
 
 func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) {
-	var repo, ref, state, desired, previousName, previousDescription, previousRevision, manifestService, composeFile, overrideFilesJSON, previousService string
+	var repo, ref, sourceKind, state, desired, previousName, previousDescription, previousRevision, manifestService, composeFile, overrideFilesJSON, previousService string
 	var previousPort, manifestPort int
-	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port,public_service,public_port,compose_file,override_files FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &state, &desired, &previousName, &previousDescription, &previousRevision, &manifestService, &manifestPort, &previousService, &previousPort, &composeFile, &overrideFilesJSON); err != nil {
+	var isSystem int
+	if err := e.DB.QueryRowContext(ctx, `SELECT repository_url,git_ref,source_kind,registration_state,desired_state,manifest_name,manifest_description,revision,manifest_service,manifest_port,public_service,public_port,compose_file,override_files,is_system FROM applications WHERE id=?`, op.ApplicationID).Scan(&repo, &ref, &sourceKind, &state, &desired, &previousName, &previousDescription, &previousRevision, &manifestService, &manifestPort, &previousService, &previousPort, &composeFile, &overrideFilesJSON, &isSystem); err != nil {
 		return fmt.Errorf("アプリ情報を取得できません")
+	}
+	storedService, storedPort, storedCompose := previousService, previousPort, composeFile
+	if isSystem != 0 {
+		switch op.Kind {
+		case "CREATE", "SYNC", "UPDATE", "UNREGISTER", "REGISTER", "PURGE", "CONFIGURE":
+			return fmt.Errorf("システムアプリにはこの操作を実行できません")
+		}
 	}
 	if previousService == "" {
 		previousService, previousPort = manifestService, manifestPort
@@ -126,10 +200,24 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if request.Subdomain != "" {
 			newSubdomain = request.Subdomain
 		}
-		if err := ValidateRef(newRef); err != nil {
+		if err := ValidateSubdomain(newSubdomain); err != nil {
 			return err
 		}
-		if err := ValidateSubdomain(newSubdomain); err != nil {
+		if sourceKind == "zip" {
+			if request.Ref != "" {
+				return fmt.Errorf("ZIPアプリにはrefを指定できません")
+			}
+			if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,updated_at=datetime('now') WHERE id=?`, newSubdomain, op.ApplicationID); err != nil {
+				return err
+			}
+			if err := e.syncDerived(ctx); err != nil {
+				_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,updated_at=datetime('now') WHERE id=?`, oldSubdomain, op.ApplicationID)
+				_ = e.syncDerived(ctx)
+				return err
+			}
+			return nil
+		}
+		if err := ValidateRef(newRef); err != nil {
 			return err
 		}
 		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET subdomain=?,git_ref=?,updated_at=datetime('now') WHERE id=?`, newSubdomain, newRef, op.ApplicationID); err != nil {
@@ -141,22 +229,30 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		}
 		return nil
 	case "CREATE", "SYNC":
-		reportOperationPhase(ctx, "source_prepare", "GitHubリポジトリの取得を準備しています")
-		if err := ValidateRef(ref); err != nil {
-			return err
-		}
-		if err := ValidateRepositoryURL(repo); err != nil {
+		reportOperationPhase(ctx, "source_prepare", "アプリの取得を準備しています")
+		previousRuntime, err := snapshotRuntimeFiles(runtime)
+		if err != nil {
 			return err
 		}
 		requestedCompose := composeFile
 		var requestedOverrides []string
+		var prepared bool
+		var importedSelection *ImportSelection
 		_ = json.Unmarshal([]byte(overrideFilesJSON), &requestedOverrides)
 		if op.Payload != "" {
 			var p struct {
-				ComposeFile   string   `json:"composeFile"`
-				OverrideFiles []string `json:"overrideFiles"`
+				ComposeFile   string           `json:"composeFile"`
+				OverrideFiles []string         `json:"overrideFiles"`
+				Prepared      bool             `json:"prepared"`
+				Selection     *ImportSelection `json:"selection"`
 			}
 			_ = json.Unmarshal([]byte(op.Payload), &p)
+			prepared = p.Prepared
+			importedSelection = p.Selection
+			if importedSelection != nil {
+				requestedCompose = importedSelection.ComposeFile
+				requestedOverrides = importedSelection.OverrideFiles
+			}
 			if p.ComposeFile != "" {
 				requestedCompose = p.ComposeFile
 			}
@@ -164,41 +260,99 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 				requestedOverrides = p.OverrideFiles
 			}
 		}
-		selectedCompose, err := CloneAndValidateWithOverrides(ctx, e.Runner, repo, ref, requestedCompose, requestedOverrides, source)
+		var selectedCompose string
+		err = nil
+		if prepared {
+			if ValidateRequestID(op.ID) != nil {
+				return fmt.Errorf("Operation IDが不正です")
+			}
+			pending := filepath.Join(root, "pending-"+op.ID)
+			defer os.RemoveAll(pending)
+			selection := ImportSelection{ComposeFile: requestedCompose, OverrideFiles: requestedOverrides, DisplayName: previousName, Description: previousDescription, PublicService: previousService, PublicPort: previousPort}
+			if importedSelection != nil {
+				selection = *importedSelection
+			}
+			if err := ValidateImportedSelection(filepath.Join(pending, "source"), selection); err != nil {
+				return err
+			}
+			_ = os.RemoveAll(source + ".tmp")
+			if err := os.Rename(filepath.Join(pending, "source"), source+".tmp"); err != nil {
+				return fmt.Errorf("取り込みsourceを準備できません")
+			}
+			if err := activatePreparedSource(source+".tmp", source); err != nil {
+				return err
+			}
+			selectedCompose = requestedCompose
+		} else {
+			if err := ValidateRef(ref); err != nil {
+				return err
+			}
+			if err := ValidateRepositoryURL(repo); err != nil {
+				return err
+			}
+			selectedCompose, err = cloneAndValidateSource(ctx, e.Runner, repo, ref, requestedCompose, requestedOverrides, source, op.Kind == "SYNC")
+		}
 		if err != nil {
 			return err
 		}
 		composeFile = selectedCompose
 		reportOperationPhase(ctx, "runtime_prepare", "アプリの実行設定を準備しています")
-		sourceSwapActive := true
 		metadataUpdated := false
+		reconcileAttempted := false
 		defer func() {
-			if !sourceSwapActive {
-				return
-			}
 			if runErr != nil {
+				rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
 				if metadataUpdated {
-					_, _ = e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, manifestService, manifestPort, op.ApplicationID)
+					if _, err := e.DB.ExecContext(rollbackCtx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,public_service=?,public_port=?,compose_file=?,override_files=?,updated_at=datetime('now') WHERE id=?`, previousName, previousDescription, previousRevision, manifestService, manifestPort, storedService, storedPort, storedCompose, overrideFilesJSON, op.ApplicationID); err != nil {
+						runErr = restorationError("アプリ設定を復元できません", err, runErr)
+					}
 				}
 				if err := RestoreSourceSwap(source); err != nil {
-					runErr = fmt.Errorf("sourceを復元できません: %w（元のエラー: %v）", err, runErr)
+					runErr = restorationError("sourceを復元できません", err, runErr)
+					return
+				}
+				if err := restoreRuntimeFiles(previousRuntime); err != nil {
+					runErr = restorationError("実行設定を復元できません", err, runErr)
+					return
+				}
+				if reconcileAttempted && desired == "RUNNING" {
+					if err := e.reconcile(rollbackCtx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
+						runErr = restorationError("以前の実行状態を復元できません", err, runErr)
+						return
+					}
+					if err := e.syncDerived(rollbackCtx); err != nil {
+						runErr = restorationError("公開設定を復元できません", err, runErr)
+					}
 				}
 				return
 			}
 			if err := FinalizeSourceSwap(source); err != nil {
-				runErr = fmt.Errorf("旧sourceを整理できません: %w", err)
+				reportOperationOutput(ctx, "source整理", "旧sourceを整理できませんでした", "warn")
 			}
 		}()
 		if err := os.MkdirAll(runtime, 0700); err != nil {
 			return err
 		}
-		manifestData, err := os.ReadFile(filepath.Join(source, "lws.manifest.yaml"))
-		if err != nil {
-			return fmt.Errorf("manifestを読み取れません")
+		manifest := Manifest{}
+		if !prepared {
+			parsed, readErr := readSourceManifest(source)
+			if readErr != nil {
+				return readErr
+			}
+			if parsed != nil {
+				manifest = *parsed
+			}
 		}
-		manifest, err := ValidateManifest(manifestData)
-		if err != nil {
-			return err
+		if importedSelection != nil {
+			manifest.Metadata.Name, manifest.Metadata.Description = importedSelection.DisplayName, importedSelection.Description
+			manifest.Public.Service, manifest.Public.Port = importedSelection.PublicService, importedSelection.PublicPort
+		} else if prepared || manifest.Metadata.Name == "" {
+			manifest.Metadata.Name, manifest.Metadata.Description = previousName, previousDescription
+			manifest.Public.Service, manifest.Public.Port = previousService, previousPort
+		}
+		if manifest.Metadata.Name == "" || manifest.Public.Service == "" || manifest.Public.Port < 1 {
+			return fmt.Errorf("アプリ名と公開先の設定が必要です")
 		}
 		composePath := filepath.Join(source, composeFile)
 		overridePaths := make([]string, 0, len(requestedOverrides))
@@ -212,7 +366,7 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 			return err
 		}
 		overridesJSON, _ := json.Marshal(requestedOverrides)
-		if previousService == "" || op.Kind == "CREATE" {
+		if previousService == "" || op.Kind == "CREATE" || importedSelection != nil {
 			previousService, previousPort = manifest.Public.Service, manifest.Public.Port
 		}
 		if _, err := e.DB.ExecContext(ctx, `UPDATE applications SET manifest_name=?,manifest_description=?,revision=?,manifest_service=?,manifest_port=?,public_service=?,public_port=?,compose_file=?,override_files=?,updated_at=datetime('now') WHERE id=?`, manifest.Metadata.Name, manifest.Metadata.Description, ref, manifest.Public.Service, manifest.Public.Port, previousService, previousPort, composeFile, string(overridesJSON), op.ApplicationID); err != nil {
@@ -226,13 +380,13 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 				return err
 			}
 			reportOperationPhase(ctx, "configuration_required", "設定レイヤーで環境変数とデバイスを確認してください")
-			sourceSwapActive = false
 			return nil
 		}
 		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, composeFile)); err != nil {
 			return err
 		}
 		reportOperationPhase(ctx, "compose_up", "Docker containerを作成しています")
+		reconcileAttempted = true
 		if err := e.reconcile(ctx, op.ApplicationID, source, runtime, "up", "-d"); err != nil {
 			return err
 		}
@@ -243,7 +397,6 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if err := e.markApplicationState(ctx, op.ApplicationID, "RUNNING", "RUNNING", ""); err != nil {
 			return err
 		}
-		sourceSwapActive = false
 		return nil
 	case "START", "REBUILD":
 		if err := e.ensureConfigurationReady(ctx, op.ApplicationID, filepath.Join(source, composeFile)); err != nil {
@@ -462,19 +615,13 @@ func (e *RuntimeExecutor) reconcile(ctx context.Context, id, source, runtime str
 		}
 	}
 	if len(action) > 0 && action[0] == "up" {
-		manifestData, err := os.ReadFile(filepath.Join(source, "lws.manifest.yaml"))
-		if err != nil {
-			return fmt.Errorf("manifestが見つかりません")
+		var publicService, defaultService string
+		var publicPort, defaultPort int
+		if err := e.DB.QueryRowContext(ctx, `SELECT public_service,public_port,manifest_service,manifest_port FROM applications WHERE id=?`, id).Scan(&publicService, &publicPort, &defaultService, &defaultPort); err != nil {
+			return fmt.Errorf("公開先を取得できません")
 		}
-		manifest, err := ValidateManifest(manifestData)
-		if err != nil {
-			return err
-		}
-		publicService, publicPort := manifest.Public.Service, manifest.Public.Port
-		var configuredService string
-		var configuredPort int
-		if err := e.DB.QueryRowContext(ctx, `SELECT public_service,public_port FROM applications WHERE id=?`, id).Scan(&configuredService, &configuredPort); err == nil && configuredService != "" && configuredPort > 0 {
-			publicService, publicPort = configuredService, configuredPort
+		if publicService == "" || publicPort < 1 {
+			publicService, publicPort = defaultService, defaultPort
 		}
 		reportOperationPhase(ctx, "compose_validate", "公開用のCompose設定を検証しています")
 		if err := e.validateEffectiveCompose(ctx, id, compose, override, runtime, publicService, publicPort); err != nil {
@@ -651,7 +798,11 @@ func (e *RuntimeExecutor) validateEffectiveCompose(ctx context.Context, id, comp
 	if override == "" {
 		return ValidateEffectiveCompose(out, service, port)
 	}
-	return ValidateEffectiveComposeWithOwnedNetwork(out, service, port, EdgeNetworkName(id))
+	var isSystem int
+	if err := e.DB.QueryRowContext(ctx, `SELECT is_system FROM applications WHERE id=?`, id).Scan(&isSystem); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	return validateEffectiveCompose(out, service, port, EdgeNetworkName(id), isSystem != 0)
 }
 
 // GenerateEffectiveComposeは、利用者が選択したCompose群とLWS overrideを

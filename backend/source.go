@@ -142,9 +142,14 @@ func CloneAndValidateWithCompose(ctx context.Context, runner CommandRunner, url,
 }
 
 func CloneAndValidateWithOverrides(ctx context.Context, runner CommandRunner, url, ref, requestedCompose string, requestedOverrides []string, dest string) (string, error) {
+	return cloneAndValidateSource(ctx, runner, url, ref, requestedCompose, requestedOverrides, dest, false)
+}
+
+func cloneAndValidateSource(ctx context.Context, runner CommandRunner, url, ref, requestedCompose string, requestedOverrides []string, dest string, allowMissingManifest bool) (string, error) {
 	url, ref = RepositoryURLAndRef(url, ref)
 	tmp := dest + ".tmp"
 	_ = os.RemoveAll(tmp)
+	defer os.RemoveAll(tmp)
 	if err := os.MkdirAll(filepath.Dir(tmp), 0700); err != nil {
 		return "", err
 	}
@@ -157,61 +162,107 @@ func CloneAndValidateWithOverrides(ctx context.Context, runner CommandRunner, ur
 		}
 		return "", fmt.Errorf("リポジトリ取得に失敗しました")
 	}
-	reportOperationPhase(ctx, "source_validate", "取得したファイルを検証しています")
-	if err := ValidateSourceTree(tmp); err != nil {
-		return "", err
-	}
-	reportOperationPhase(ctx, "manifest_validate", "アプリ定義を検証しています")
-	data, err := os.ReadFile(filepath.Join(tmp, "lws.manifest.yaml"))
+	composeFile, _, err := validatePreparedSource(tmp, requestedCompose, requestedOverrides, allowMissingManifest)
 	if err != nil {
-		return "", fmt.Errorf("manifestが見つかりません")
-	}
-	if _, err = ValidateManifest(data); err != nil {
 		return "", err
 	}
-	reportOperationPhase(ctx, "compose_validate", "Compose定義を検証しています")
+	reportOperationPhase(ctx, "source_activate", "検証済みのアプリ定義を反映しています")
+	if err := activatePreparedSource(tmp, dest); err != nil {
+		return "", err
+	}
+	return composeFile, nil
+}
+
+func validatePreparedSource(root, requestedCompose string, requestedOverrides []string, allowMissingManifest bool) (string, *Manifest, error) {
+	if err := ValidateSourceTree(root); err != nil {
+		return "", nil, err
+	}
+	manifest, err := readSourceManifest(root)
+	if err != nil {
+		return "", nil, err
+	}
+	if manifest == nil && !allowMissingManifest {
+		return "", nil, fmt.Errorf("manifestが見つかりません")
+	}
 	composeFile := requestedCompose
+	if composeFile == "" && manifest != nil {
+		composeFile = manifest.ComposeFile
+	}
 	if composeFile == "" {
 		for _, candidate := range composeFilePriority {
-			if _, e := os.Stat(filepath.Join(tmp, candidate)); e == nil {
+			if _, e := os.Stat(filepath.Join(root, candidate)); e == nil {
 				composeFile = candidate
 				break
 			}
 		}
 	}
 	if !containsComposeFile(composeFile) {
-		return "", fmt.Errorf("使用できるComposeファイルが見つかりません")
+		return "", nil, fmt.Errorf("使用できるComposeファイルが見つかりません")
 	}
-	compose, err := os.ReadFile(filepath.Join(tmp, composeFile))
+	compose, err := readComposeFile(root, composeFile)
 	if err != nil {
-		return "", fmt.Errorf("指定したComposeファイルが見つかりません")
+		return "", nil, fmt.Errorf("指定したComposeファイルが見つかりません")
 	}
-	if err = ValidateComposeSource(tmp, compose); err != nil {
-		return "", err
+	if err = ValidateComposeSource(root, compose); err != nil {
+		return "", nil, err
 	}
 	for _, override := range requestedOverrides {
 		if !validComposeFilename(override) {
-			return "", fmt.Errorf("override Composeファイル名が不正です")
+			return "", nil, fmt.Errorf("override Composeファイル名が不正です")
 		}
-		data, readErr := os.ReadFile(filepath.Join(tmp, override))
+		data, readErr := readComposeFile(root, override)
 		if readErr != nil {
-			return "", fmt.Errorf("指定したoverride Composeファイルが見つかりません")
+			return "", nil, fmt.Errorf("指定したoverride Composeファイルが見つかりません")
 		}
-		if readErr = ValidateComposeSource(tmp, data); readErr != nil {
-			return "", readErr
+		if readErr = ValidateComposeSource(root, data); readErr != nil {
+			return "", nil, readErr
 		}
 	}
-	reportOperationPhase(ctx, "source_activate", "検証済みのアプリ定義を反映しています")
+	return composeFile, manifest, nil
+}
+
+func readSourceManifest(root string) (*Manifest, error) {
+	path := filepath.Join(root, "lws.manifest.yaml")
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("manifestは通常ファイルで指定してください")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("manifestを読み取れません")
+	}
+	defer file.Close()
+	info, err = file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("manifestは通常ファイルで指定してください")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, 8193))
+	if err != nil {
+		return nil, fmt.Errorf("manifestを読み取れません")
+	}
+	manifest, err := ValidateManifest(data)
+	if err != nil {
+		return nil, err
+	}
+	return &manifest, nil
+}
+
+func activatePreparedSource(tmp, dest string) error {
 	old := dest + ".old"
 	_ = os.RemoveAll(old)
-	if err = os.Rename(dest, old); err != nil && !os.IsNotExist(err) {
-		return "", err
+	if err := os.Rename(dest, old); err != nil && !os.IsNotExist(err) {
+		return err
 	}
-	if err = os.Rename(tmp, dest); err != nil {
-		_ = os.Rename(old, dest)
-		return "", err
+	if err := os.Rename(tmp, dest); err != nil {
+		if restoreErr := os.Rename(old, dest); restoreErr != nil && !os.IsNotExist(restoreErr) {
+			return restorationError("sourceを復元できません", restoreErr, err)
+		}
+		return err
 	}
-	return composeFile, nil
+	return nil
 }
 
 func validComposeFilename(value string) bool {

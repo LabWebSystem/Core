@@ -45,6 +45,36 @@ paths:
         '200': { description: Volume削除完了, content: { application/json: { schema: { $ref: '#/components/schemas/PoolDeviceReference' } } } }
         '409': { description: 使用中または削除できないVolume }
         '404': { description: 未検出 }
+  /imports/github:
+    post:
+      operationId: prepareGitImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repositoryUrl, ref]
+              properties:
+                repositoryUrl: { type: string }
+                ref: { type: string }
+      responses:
+        '200': { description: 検査結果, content: { application/json: { schema: { $ref: '#/components/schemas/ImportInspection' } } } }
+  /imports/zip:
+    post:
+      operationId: prepareZipImport
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: { type: string, format: binary }
+      responses:
+        '200': { description: 検査結果, content: { application/json: { schema: { $ref: '#/components/schemas/ImportInspection' } } } }
+  /imports/{importId}:
+    parameters: [{ name: importId, in: path, required: true, schema: { type: string, format: uuid } }]
+    delete:
+      operationId: discardImport
+      responses: { '204': { description: 一時取り込みを破棄 } }
   /applications:
     get:
       operationId: listApplications
@@ -71,7 +101,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UpdateApplicationRequest'
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリの公開名と参照先は変更できません } }
     delete:
       operationId: unregisterApplication
       requestBody:
@@ -79,7 +109,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ActionRequest' }
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリは登録解除できません } }
   /applications/{application}:start:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     post:
@@ -115,7 +145,7 @@ paths:
     post:
       operationId: purgeApplication
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PurgeRequest' } } } }
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリはpurgeできません } }
   /applications/{application}/configuration:
     parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
     get: { operationId: getConfiguration, responses: { '200': { description: 設定取得, content: { application/json: { schema: { $ref: '#/components/schemas/ConfigurationResponse' } } } }, '404': { description: 未検出 } } }
@@ -127,7 +157,17 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ConfigurationRequest'
-      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } } }
+      responses: { '202': { description: Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリの設定は変更できません } }
+  /applications/{application}/imports:
+    parameters: [{ name: application, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: updateApplicationImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateImportRequest' }
+      responses: { '202': { description: 更新Operationを作成, content: { application/json: { schema: { $ref: '#/components/schemas/OperationReference' } } } }, '409': { description: システムアプリは更新できません } }
   /operations/{operation}:
     parameters: [{ name: operation, in: path, required: true, schema: { $ref: '#/components/schemas/OperationID' } }]
     get: { operationId: getOperation, responses: { '200': { description: Operation取得, content: { application/json: { schema: { $ref: '#/components/schemas/OperationResource' } } } } } }
@@ -163,6 +203,48 @@ paths:
         '404': { description: 未検出 }
 components:
   schemas:
+    ImportInspection:
+      type: object
+      required: [importId, manifest, composeFiles]
+      properties:
+        importId: { type: string, format: uuid }
+        manifest:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ImportManifest' }]
+        composeFiles:
+          type: array
+          items:
+            type: object
+            required: [name, services, interfaces]
+            properties:
+              name: { type: string }
+              services: { type: array, items: { type: string } }
+              interfaces:
+                type: array
+                items:
+                  type: object
+                  required: [service, port]
+                  properties:
+                    service: { type: string }
+                    port: { type: integer }
+    ImportManifest:
+      type: object
+      required: [apiVersion, metadata, public]
+      properties:
+        apiVersion: { type: string }
+        composeFile: { type: string }
+        metadata:
+          type: object
+          required: [name, description]
+          properties:
+            name: { type: string }
+            description: { type: string }
+        public:
+          type: object
+          required: [service, port]
+          properties:
+            service: { type: string }
+            port: { type: integer }
     OperationID:
       type: string
       format: uuid
@@ -193,14 +275,16 @@ components:
         updatedAt: { type: string, format: date-time }
     Application:
       type: object
-      required: [name, subdomain, repositoryUrl, ref, desiredState, observedState, registrationState, observedAt, reconciling, etag]
+      required: [name, subdomain, repositoryUrl, ref, isSystem, desiredState, observedState, registrationState, observedAt, reconciling, etag]
       properties:
         name: { type: string, pattern: '^applications/.+$' }
-        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
-        overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
+        composeFile: { type: string }
+        overrideFiles: { type: array, items: { type: string } }
         subdomain: { type: string }
         repositoryUrl: { type: string }
         ref: { type: string }
+        sourceKind: { type: string, enum: [github, zip] }
+        isSystem: { type: boolean }
         desiredState: { type: string }
         observedState: { type: string }
         registrationState: { type: string, enum: [ACTIVE, CONFIGURING, UNREGISTERED] }
@@ -222,7 +306,7 @@ components:
         cursor: { type: string }
         occurredAt: { type: string, format: date-time }
         level: { type: string, enum: [debug, info, warn, error] }
-        component: { type: string, enum: [backend, caddy, coredns, dashboard, application] }
+        component: { type: string, enum: [backend, caddy, coredns, avahi, dashboard, application] }
         applicationId: { type: string }
         operationId: { type: string }
         service: { type: string }
@@ -300,13 +384,18 @@ components:
         publicPort: { type: integer, minimum: 1, maximum: 65535 }
     CreateApplicationRequest:
       type: object
-      required: [repositoryUrl, ref, subdomain, requestId]
+      required: [subdomain, requestId]
       properties:
         repositoryUrl: { type: string, format: uri }
         ref: { type: string, minLength: 1 }
+        importId: { type: string, format: uuid }
         subdomain: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$' }
-        composeFile: { type: string, pattern: '^(?:docker-)?compose(?:\.[A-Za-z0-9_-]+)*\.(?:yaml|yml)$' }
-        overrideFiles: { type: array, items: { type: string, pattern: '^[A-Za-z0-9_.-]+\.(yaml|yml)$' } }
+        composeFile: { type: string }
+        overrideFiles: { type: array, items: { type: string } }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        publicService: { type: string }
+        publicPort: { type: integer, minimum: 1, maximum: 65535 }
         requestId: { type: string, format: uuid }
     UpdateApplicationRequest:
       type: object
@@ -314,6 +403,18 @@ components:
       properties:
         ref: { type: string }
         subdomain: { type: string }
+        requestId: { type: string, format: uuid }
+    UpdateImportRequest:
+      type: object
+      required: [importId, composeFile, displayName, publicService, publicPort, requestId]
+      properties:
+        importId: { type: string, format: uuid }
+        composeFile: { type: string }
+        overrideFiles: { type: array, items: { type: string } }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        publicService: { type: string }
+        publicPort: { type: integer, minimum: 1, maximum: 65535 }
         requestId: { type: string, format: uuid }
     ConfigurationRequest:
       type: object

@@ -58,6 +58,15 @@ func main() {
 		slog.Error("installation ID設定失敗", "error", err)
 		os.Exit(1)
 	}
+	dashboardID, err := backend.EnsureSystemDashboard(
+		context.Background(), db, appsRoot, runtime.InstallationID,
+		os.Getenv("LWS_VERSION"), os.Getenv("LWS_DASHBOARD_IMAGE"), os.Getenv("LWS_DASHBOARD_DEV_SOURCE"),
+	)
+	if err != nil {
+		slog.Error("Dashboardアプリを初期化できません", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Dashboardをシステムアプリとして登録しました", "application_id", dashboardID)
 	runtime.Docker = backend.NewDockerResources(runtime.Runner, runtime.InstallationID)
 	if caddy := os.Getenv("LWS_CADDY_CONTAINER"); caddy != "" {
 		runtime.Docker.CaddyContainer = caddy
@@ -70,7 +79,7 @@ func main() {
 		}
 		derived.Docker = runtime.Docker
 		derived.CaddyContainer = runtime.Docker.CaddyContainer
-		derived.CoreDNSContainer = os.Getenv("LWS_COREDNS_CONTAINER")
+		derived.AvahiContainer = os.Getenv("LWS_AVAHI_CONTAINER")
 		runtime.Derived = derived
 		go func() {
 			for attempt := 0; attempt < 60; attempt++ {

@@ -40,8 +40,15 @@ func TestParseDownOptions(t *testing.T) {
 	}
 }
 
-func TestDomainPatternAllowsLocalhost(t *testing.T) {
-	if !domainPattern.MatchString("localhost") {
-		t.Fatal("localhostをベースドメインとして受理できません")
+func TestDomainPatternRequiresLocalDomain(t *testing.T) {
+	for _, domain := range []string{"home.local", "lab.home.local"} {
+		if !domainPattern.MatchString(domain) {
+			t.Fatalf("mDNS向けドメインを拒否しました: %s", domain)
+		}
+	}
+	for _, domain := range []string{"localhost", "lws.localhost", "example.internal"} {
+		if domainPattern.MatchString(domain) {
+			t.Fatalf("mDNSで使えないドメインを受理しました: %s", domain)
+		}
 	}
 }
