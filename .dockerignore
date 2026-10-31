@@ -3,6 +3,8 @@
 !go.sum
 !backend/
 !backend/**
+!internal/
+!internal/**
 !version/
 !version/**
 !infrastructure/
