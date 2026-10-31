@@ -3,11 +3,22 @@ set -Eeuo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly HOST_PATH="$PATH"
+source "$ROOT/scripts/timing.sh"
 
 TMP=""
 
 cleanup() {
   [[ -z "$TMP" ]] || rm -rf "$TMP"
+}
+
+on_exit() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "${LWS_TIMING_LABEL:-}" ]]; then
+    timing_end "$status"
+  fi
+  cleanup
+  exit "$status"
 }
 
 setup_cli_environment() {
@@ -522,7 +533,7 @@ EOF
       --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local \
       --base-domain qa.example.local \
       --installation-id 123e4567-e89b-42d3-a456-426614174000
-  python3 - "$output" <<'PY'
+  python3 - "$output" "$ROOT" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as source:
@@ -530,9 +541,11 @@ with open(sys.argv[1], encoding="utf-8") as source:
 assert compose["services"]["backend"]["environment"]["LWS_BASE_DOMAIN"] == "qa.example.local"
 assert compose["services"]["backend"]["environment"]["LWS_INSTALLATION_ID"] == "123e4567-e89b-42d3-a456-426614174000"
 assert compose["services"]["backend"]["image"] == "lws-qa-test-backend:local"
-assert compose["services"]["backend"]["pull_policy"] == "build"
+assert compose["services"]["backend"]["pull_policy"] == "never"
+assert compose["services"]["backend"]["build"]["context"] == sys.argv[2]
 assert compose["services"]["backend"]["build"]["dockerfile"] == "backend/Dockerfile"
 assert compose["services"]["avahi"]["image"] == "lws-qa-test-avahi:local"
+assert compose["services"]["avahi"]["pull_policy"] == "never"
 assert compose["networks"]["lws-internal"]["name"] == "lws-qa-test-internal"
 PY
 
@@ -579,6 +592,29 @@ EOF
   PATH="$fake_bin:$PATH" LWS_TEST_IMAGE_MARKER="$marker" LWS_TEST_IMAGE_LOG="$log" \
     "$ROOT/scripts/run-with-image-cleanup.sh" touch "$marker" >/dev/null
   grep -q '^removed$' "$log"
+}
+
+test_build_test_image_uses_actions_cache_when_available() {
+  local fake_bin="$TMP/build-cache-bin"
+  local log="$TMP/build-cache.log"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${LWS_TEST_DOCKER_LOG:?}"
+EOF
+  chmod +x "$fake_bin/docker"
+
+  PATH="$fake_bin:$PATH" LWS_TEST_DOCKER_LOG="$log" \
+    "$ROOT/scripts/build-test-image.sh" backend/Dockerfile lws-test-backend:local lws-backend "$ROOT"
+  grep -qF 'build --network host --file backend/Dockerfile --tag lws-test-backend:local' "$log"
+  grep -qF "$ROOT" "$log"
+
+  : >"$log"
+  PATH="$fake_bin:$PATH" LWS_TEST_DOCKER_LOG="$log" \
+    ACTIONS_RUNTIME_TOKEN=test ACTIONS_CACHE_URL=https://cache.invalid \
+    "$ROOT/scripts/build-test-image.sh" backend/Dockerfile lws-test-backend:local lws-backend "$ROOT"
+  grep -qF 'buildx build --load --allow network.host --network host --file backend/Dockerfile --tag lws-test-backend:local --cache-from type=gha,scope=lws-backend --cache-to type=gha,scope=lws-backend,mode=max,ignore-error=true' "$log"
+  grep -qF "$ROOT" "$log"
 }
 
 test_release_selected_components() {
@@ -689,7 +725,7 @@ main() {
   local target="${1:-all}"
 
   case "$target" in
-    all|fast|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure|architecture) ;;
+    all|fast|full|fixtures|cli|installer|release|backend|backend-http|backend-docker|infrastructure|architecture) ;;
     *)
       printf '不明なテスト対象です: %s\n' "$target" >&2
       return 2
@@ -697,16 +733,21 @@ main() {
   esac
 
   TMP="$(mktemp -d)"
-  trap cleanup EXIT
+  trap on_exit EXIT
 
   if [[ "$target" == all || "$target" == fast || "$target" == fixtures ]]; then
+    timing_begin "fixtures"
     "$ROOT/scripts/test-fixtures.sh"
+    timing_end
   fi
   if [[ "$target" == all || "$target" == fast || "$target" == architecture ]]; then
+    timing_begin "quality architecture/verify dispatch"
     "$ROOT/scripts/test-quality-architecture.sh"
     "$ROOT/scripts/test-verify-dispatch.sh"
+    timing_end
   fi
-  if [[ "$target" == all || "$target" == cli ]]; then
+  if [[ "$target" == all || "$target" == full || "$target" == cli ]]; then
+    timing_begin "CLI lifecycle tests"
     setup_cli_environment
     test_help
     test_update_before_start
@@ -720,11 +761,14 @@ main() {
     test_update_with_current_images
     test_down
     test_version_sources
+    timing_end
   fi
-  if [[ "$target" == all || "$target" == installer ]]; then
+  if [[ "$target" == all || "$target" == full || "$target" == installer ]]; then
+    timing_begin "installer tests"
     test_package_upgrade_config_hook
     test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
     test_installer_almalinux 'lws-0.1.0.rpm'
+    timing_end
   fi
   if [[ "$target" == all || "$target" == fast || "$target" == architecture || "$target" == release ]]; then
     test_release_digest_validation
@@ -732,27 +776,42 @@ main() {
   if [[ "$target" == all || "$target" == fast || "$target" == architecture ]]; then
     test_lifecycle_compose_fixture
     test_image_cleanup_preserves_container_images
+    test_build_test_image_uses_actions_cache_when_available
   fi
-  if [[ "$target" == all || "$target" == release ]]; then
+  if [[ "$target" == all || "$target" == full || "$target" == release ]]; then
+    timing_begin "release selection tests"
     test_release_selected_components
+    timing_end
   fi
 
   if [[ "$target" == all || "$target" == fast || "$target" == backend ]]; then
+    timing_begin "Backend full tests"
     (cd "$ROOT" && go test -count=1 ./backend/...)
+    timing_end
   fi
-  if [[ "$target" == all || "$target" == backend-http ]]; then
+  if [[ "$target" == backend-http ]]; then
+    timing_begin "Backend HTTP tests and OpenAPI check"
     (cd "$ROOT" && mise run check-openapi)
     (cd "$ROOT" && go test -list 'TestHTTP' ./backend/... | grep -q '^TestHTTP') || { printf 'backend-http対象テストがありません\n' >&2; return 1; }
     (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestHTTP')
+    timing_end
   fi
-  if [[ "$target" == all || "$target" == backend-docker ]]; then
+  if [[ "$target" == backend-docker ]]; then
+    timing_begin "Backend Docker tests"
     (cd "$ROOT" && go test -list 'Test(Runtime|OSRunner|Compose|Docker|Ownership)' ./backend/... | grep -Eq '^Test(Runtime|OSRunner|Compose|Docker|Ownership)') || { printf 'backend-docker対象テストがありません\n' >&2; return 1; }
     (cd "$ROOT" && go test -count=1 ./backend/... -run '^Test(Runtime|OSRunner|Compose|Docker|Ownership)')
+    timing_end
   fi
-  if [[ "$target" == all || "$target" == infrastructure ]]; then
+  if [[ "$target" == infrastructure ]]; then
+    timing_begin "Infrastructure targeted tests"
     (cd "$ROOT" && go test -list '^TestDerived' ./backend/... | grep -q '^TestDerived') || { printf 'infrastructure対象テストがありません\n' >&2; return 1; }
     (cd "$ROOT" && go test -count=1 ./backend/... -run '^TestDerived')
     PATH="$HOST_PATH" "$ROOT/scripts/run-with-image-cleanup.sh" "$ROOT/scripts/test-infrastructure.sh"
+    timing_end
+  elif [[ "$target" == all || "$target" == full ]]; then
+    timing_begin "Infrastructure integration"
+    PATH="$HOST_PATH" "$ROOT/scripts/run-with-image-cleanup.sh" "$ROOT/scripts/test-infrastructure.sh"
+    timing_end
   fi
 
   printf 'テスト: 成功\n'

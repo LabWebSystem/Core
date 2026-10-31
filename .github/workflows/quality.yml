@@ -27,6 +27,7 @@ on:
         type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   static:
     name: 静的検査
@@ -34,6 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
+      - uses: ./.github/actions/go-cache
       - run: mise run lint
       - name: 検証結果を保存
         if: always()
@@ -49,6 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
+      - uses: ./.github/actions/go-cache
       - run: mise run test fast
       - name: 検証結果を保存
         if: always()
@@ -96,7 +99,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
-      - run: mise run test
+      - uses: ./.github/actions/go-cache
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+      - run: mise run test full
       - name: 検証結果を保存
         if: always()
         uses: actions/upload-artifact@v7
@@ -130,6 +136,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
+      - uses: ./.github/actions/go-cache
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
       - run: mise run qa-lifecycle
       - name: Robot結果を保存
         if: always()
@@ -164,6 +173,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
+      - uses: ./.github/actions/go-cache
+      - uses: actions/cache@v4
+        name: Playwright browser cacheを復元
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('dashboard/package-lock.json') }}
       - run: mise run test-import-e2e
       - name: 検証結果を保存
         if: always()
@@ -192,9 +207,12 @@ jobs:
         env:
           PROFILE: ${{ inputs.profile }}
           JOB_RESULTS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
           SUMMARY_FILE: ${{ runner.temp }}/quality-summary.md
         run: |
-          python3 - <<'PY'
+          JOB_TIMINGS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" --jq '.jobs[] | [.name, .started_at // "", .completed_at // ""] | @tsv' || true)"
+          JOB_TIMINGS="$JOB_TIMINGS" python3 - <<'PY'
+          from datetime import datetime
           import json
           import os
           import sys
@@ -202,13 +220,46 @@ jobs:
           profile = os.environ["PROFILE"]
           jobs = json.loads(os.environ["JOB_RESULTS"])
           full_jobs = {"core-integration", "qa-current", "qa-lifecycle", "qa-docs", "import-e2e"}
-          lines = [f"## LWS品質検証: {profile}", "", "| ジョブ | 結果 |", "|---|---|"]
+          display_names = {
+              "static": "静的検査",
+              "core-fast": "Core高速テスト",
+              "sdk": "SDKテストとbuild",
+              "dashboard": "Dashboard検証",
+              "core-integration": "Core統合テスト",
+              "qa-current": "自己完結Robot QA",
+              "qa-lifecycle": "隔離ライフサイクルRobot QA",
+              "qa-docs": "QAテスト項目ドキュメント生成",
+              "import-e2e": "ZIP取り込みブラウザ結合テスト",
+              "summary": "品質ゲート集約",
+          }
+          timing_by_name = {}
+          quality_starts = []
+          quality_ends = []
+          for line in os.environ["JOB_TIMINGS"].splitlines():
+              name, started, completed = line.split("\t")
+              label = name.removeprefix("quality / ")
+              if label not in display_names.values() or not started or not completed:
+                  continue
+              start = datetime.fromisoformat(started.replace("Z", "+00:00"))
+              end = datetime.fromisoformat(completed.replace("Z", "+00:00"))
+              seconds = max(0, round((end - start).total_seconds()))
+              timing_by_name[label] = f"{seconds // 60}m {seconds % 60:02d}s"
+              quality_starts.append(start)
+              quality_ends.append(end)
+
+          lines = [f"## LWS品質検証: {profile}", ""]
+          if quality_starts and quality_ends:
+              elapsed = max(0, round((max(quality_ends) - min(quality_starts)).total_seconds()))
+              lines.extend([f"品質ゲート実時間（Actions上）: **{elapsed // 60}m {elapsed % 60:02d}s**", ""])
+          lines.extend(["| ジョブ | 結果 | Actions実時間 |", "|---|---|---:|"])
           failed = False
           for name, result in jobs.items():
               state = result["result"]
               expected_skip = profile == "fast" and name in full_jobs
               shown = "SKIP（fast profile）" if expected_skip and state == "skipped" else state.upper()
-              lines.append(f"| `{name}` | {shown} |")
+              label = display_names.get(name, name)
+              duration = timing_by_name.get(label, "—")
+              lines.append(f"| `{label}` | {shown} | {duration} |")
               if expected_skip:
                   continue
               if state != "success":

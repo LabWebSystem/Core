@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/timing.sh"
 
 check_shell() {
   local file
@@ -24,13 +25,22 @@ check_go_format() {
 }
 
 main() {
-  check_shell
-  check_go_format
+  trap timing_report_on_exit EXIT
 
+  timing_begin "shell syntax"
+  check_shell
+  timing_end
+
+  timing_begin "gofmt check"
+  check_go_format
+  timing_end
+
+  timing_begin "go vet"
   (
     cd "$ROOT"
     go vet ./...
   )
+  timing_end
 
   printf '静的検査: 成功\n'
 }

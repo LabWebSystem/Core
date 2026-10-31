@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/timing.sh"
 tmp="$(mktemp -d)"
 installation="e2e-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 caddy="lws-${installation}-caddy"
@@ -9,6 +10,7 @@ backend_pid=""
 pulled_image=""
 
 cleanup() {
+  set +e
   if [[ -n "$backend_pid" ]]; then
     kill "$backend_pid" 2>/dev/null || true
     wait "$backend_pid" 2>/dev/null || true
@@ -42,8 +44,23 @@ cleanup() {
   fi
   rm -rf "$tmp"
 }
-trap cleanup EXIT
 
+on_exit() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "${LWS_TIMING_LABEL:-}" ]]; then
+    timing_end "$status"
+  fi
+  cleanup || true
+  exit "$status"
+}
+trap on_exit EXIT
+
+timing_begin "Playwright Chromium install"
+npx --prefix "$root/dashboard" playwright install chromium
+timing_end
+
+timing_begin "Caddy image inspect/pull"
 if ! docker image inspect caddy:2.10-alpine >/dev/null 2>&1; then
   docker image ls --all --quiet --no-trunc >"$tmp/images-before"
   docker pull caddy:2.10-alpine >/dev/null
@@ -52,9 +69,18 @@ if ! docker image inspect caddy:2.10-alpine >/dev/null 2>&1; then
     pulled_image="$candidate"
   fi
 fi
+timing_end
+
+timing_begin "Caddy container start"
 web_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 docker run -d --name "$caddy" --label com.labwebsystem.owner=lws --label "com.labwebsystem.installation-id=$installation" caddy:2.10-alpine >/dev/null
+timing_end
+
+timing_begin "E2E backend build"
 go build -o "$tmp/backend" "$root/test/e2e/backend"
+timing_end
+
+timing_begin "E2E backend startup"
 LWS_E2E_ROOT="$tmp" LWS_E2E_INSTALLATION="$installation" LWS_E2E_CADDY="$caddy" LWS_E2E_ORIGIN="http://127.0.0.1:$web_port" "$tmp/backend" >"$tmp/backend.log" 2>&1 &
 backend_pid=$!
 for _ in $(seq 1 100); do
@@ -66,4 +92,8 @@ if [[ ! -s "$tmp/backend-address" ]]; then
   printf 'テスト用Backendを起動できません。\n' >&2
   exit 1
 fi
+timing_end
+
+timing_begin "Playwright ZIP import test"
 LWS_E2E_BACKEND="$(cat "$tmp/backend-address")" LWS_E2E_INSTALLATION="$installation" LWS_E2E_WEB_PORT="$web_port" npm --prefix "$root/dashboard" run test:e2e -- e2e/import-live.spec.ts
+timing_end

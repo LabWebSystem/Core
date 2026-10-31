@@ -1,0 +1,14 @@
+name: Go build cache
+description: Restore and save the Go module and build caches for this quality job
+runs:
+  using: composite
+  steps:
+    - name: Go module/build cacheを復元
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ hashFiles('mise.toml') }}-${{ github.job }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ hashFiles('mise.toml') }}-

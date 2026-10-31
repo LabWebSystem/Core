@@ -18,6 +18,7 @@ jobs:
     needs: version
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/quality.yml
     with:
       profile: full

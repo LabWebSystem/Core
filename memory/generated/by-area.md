@@ -136,6 +136,9 @@
 - CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
 - CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
 
+## CI / 品質ゲート
+- CHG-100 | SHIPPED | CI / 品質ゲート | 品質ゲートの重複作業を分離しキャッシュと工程計測を追加する
+
 ## Dashboard development environment
 - CHG-085 | SHIPPED | Dashboard development environment | Dashboard開発用の未使用状態ディレクトリ指定を削除する
 

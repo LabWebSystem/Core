@@ -7,6 +7,7 @@ jobs:
   quality:
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/quality.yml
     with:
       profile: fast

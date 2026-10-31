@@ -48,7 +48,7 @@ def main() -> int:
         return 1
 
     backend["image"] = args.backend_image
-    backend["pull_policy"] = "build"
+    backend["pull_policy"] = "never"
     backend_environment = backend.setdefault("environment", {})
     backend_environment["LWS_BASE_DOMAIN"] = args.base_domain
     backend_environment["LWS_INSTALLATION_ID"] = args.installation_id
@@ -57,6 +57,7 @@ def main() -> int:
         print("ComposeにAvahi serviceがありません", file=sys.stderr)
         return 1
     avahi["image"] = args.avahi_image
+    avahi["pull_policy"] = "never"
 
     networks = config.get("networks", {})
     internal = networks.get("lws-internal")

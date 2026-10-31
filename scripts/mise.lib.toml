@@ -21,7 +21,7 @@ run = ["scripts/lint.sh", "npm --prefix dashboard run lint"]
 description = "軽量な統合テストを実行"
 run = "scripts/test.sh ${usage_target:-}"
 usage = '''
-arg "[target]" help="テスト対象（fast、fixtures、cli、installer、release、backend、backend-http、backend-docker、infrastructure、architecture）"
+arg "[target]" help="テスト対象（fast、full、fixtures、cli、installer、release、backend、backend-http、backend-docker、infrastructure、architecture）"
 '''
 
 [test-sdk]
@@ -42,7 +42,7 @@ run = ["npx --prefix dashboard playwright install chromium", "npm --prefix dashb
 [test-import-e2e]
 description = "ZIP登録・更新を隔離Docker環境とブラウザで検証"
 depends = ["dashboard-install"]
-run = ["npx --prefix dashboard playwright install chromium", "bash scripts/test-import-e2e.sh"]
+run = "bash scripts/test-import-e2e.sh"
 
 [qa]
 description = "Robot Frameworkの受け入れテストを実行"
