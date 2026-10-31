@@ -747,7 +747,7 @@ func (s *Server) patchApplication(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if p.Subdomain != "" {
-		if err := ValidateSubdomain(p.Subdomain); err != nil {
+		if err := ValidatePublishedSubdomain(p.Subdomain, s.BaseDomain); err != nil {
 			writeValidationError(w, err)
 			return
 		}

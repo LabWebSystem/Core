@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     environment:
       LWS_BASE_DOMAIN: ${LWS_BASE_DOMAIN:-}
+      LWS_BASE_DOMAIN_PREFIX: ${LWS_BASE_DOMAIN_PREFIX:-}
       LWS_VERSION: ${LWS_VERSION:-0.1.0}
       LWS_INSTALLATION_ID: ${LWS_INSTALLATION_ID:-}
       LWS_PUBLIC_ADDRESS: ${LWS_PUBLIC_ADDRESS:-}
@@ -32,7 +33,7 @@ services:
       com.labwebsystem.owner: lws
       com.labwebsystem.installation-id: ${LWS_INSTALLATION_ID:-}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --header=Host:api.$${LWS_BASE_DOMAIN} http://127.0.0.1:8080/api/v1/health/live -O - >/dev/null"]
+      test: ["CMD-SHELL", "wget -q --header=Host:api-$${LWS_BASE_DOMAIN_PREFIX} http://127.0.0.1:8080/api/v1/health/live -O - >/dev/null"]
       interval: 2s
       timeout: 2s
       retries: 30

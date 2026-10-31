@@ -65,7 +65,7 @@ GitHub Actions release
 3. DashboardからGitHub HTTPSリポジトリとref、またはZIPとsubdomainを指定して内容を確認し、アプリを登録する。
 4. BackendがmanifestとComposeを検証し、設定完了まで`CONFIGURING`で保持する。
 5. 環境変数とdevice bindingを設定してアプリを起動する。
-6. `dashboard.<base-domain>`と各アプリURLから利用する。
+6. `dashboard-<base-domain>`と各アプリURLから利用する。
 
 登録直後は自動起動しません。同一app-idの変更は永続FIFOで待機し、Operation APIまたはSSEで進捗を確認します。
 

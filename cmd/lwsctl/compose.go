@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/LabWebSystem/Core/internal/hostname"
 )
 
 func (a *application) compose(arguments ...string) error {
@@ -119,6 +121,7 @@ func (a *application) composeCommand(arguments ...string) (*exec.Cmd, error) {
 	command.Env = setEnvironment(os.Environ(), "LWS_VERSION", a.version)
 	if a.domain != "" {
 		command.Env = setEnvironment(command.Env, "LWS_BASE_DOMAIN", a.domain)
+		command.Env = setEnvironment(command.Env, "LWS_BASE_DOMAIN_PREFIX", hostname.Prefix(a.domain))
 	}
 	if a.installationID != "" {
 		command.Env = setEnvironment(command.Env, "LWS_INSTALLATION_ID", a.installationID)

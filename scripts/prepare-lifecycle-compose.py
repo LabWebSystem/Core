@@ -25,6 +25,8 @@ def main() -> int:
 
     environment = os.environ.copy()
     environment["LWS_BASE_DOMAIN"] = args.base_domain
+    labels = args.base_domain.rstrip(".").split(".")
+    environment["LWS_BASE_DOMAIN_PREFIX"] = "-".join(labels[:-1]) + "." + labels[-1]
     environment["LWS_INSTALLATION_ID"] = args.installation_id
     result = subprocess.run(
         ["docker", "compose", "--project-name", args.project, "--file", str(COMPOSE), "config", "--format", "json"],
@@ -51,6 +53,7 @@ def main() -> int:
     backend["pull_policy"] = "never"
     backend_environment = backend.setdefault("environment", {})
     backend_environment["LWS_BASE_DOMAIN"] = args.base_domain
+    backend_environment["LWS_BASE_DOMAIN_PREFIX"] = environment["LWS_BASE_DOMAIN_PREFIX"]
     backend_environment["LWS_INSTALLATION_ID"] = args.installation_id
     avahi = services.get("avahi")
     if avahi is None:

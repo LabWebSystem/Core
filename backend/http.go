@@ -23,6 +23,7 @@ type Server struct {
 	AppsRoot      string
 	AllowedHost   string
 	AllowedOrigin string
+	BaseDomain    string
 	Ready         func() bool
 	events        *Events
 	worker        *Worker
@@ -225,7 +226,7 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		}
 		seenOverrides[override] = true
 	}
-	if err := ValidateSubdomain(req.Subdomain); err != nil {
+	if err := ValidatePublishedSubdomain(req.Subdomain, s.BaseDomain); err != nil {
 		writeValidationError(w, err)
 		return
 	}

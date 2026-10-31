@@ -82,8 +82,8 @@ const registrationStateLabel = (state: string) =>
     UNREGISTERED: "登録解除済み",
   })[state] ?? state;
 const publicUrl = (app: Application) => {
-  const host = window.location.host.replace(/^dashboard\./, "");
-  return `${window.location.protocol}//${app.subdomain}.${host}`;
+  const baseDomain = window.location.host.replace(/^dashboard-/, "");
+  return `${window.location.protocol}//${app.subdomain}-${baseDomain}`;
 };
 const operationLabel = (kind?: string) =>
   ({

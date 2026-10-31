@@ -411,18 +411,18 @@ func TestHTTPRejectsOrigin(t *testing.T) {
 }
 
 func TestHTTPAcceptsDashboardOriginOnly(t *testing.T) {
-	s := &Server{AllowedHost: "api.example.local", AllowedOrigin: "http://dashboard.example.local"}
+	s := &Server{AllowedHost: "api-example.local", AllowedOrigin: "http://dashboard-example.local"}
 	allowed := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	request.Host = "api.example.local"
-	request.Header.Set("Origin", "http://dashboard.example.local")
+	request.Host = "api-example.local"
+	request.Header.Set("Origin", "http://dashboard-example.local")
 	s.Handler().ServeHTTP(allowed, request)
 	if allowed.Code != http.StatusOK {
 		t.Fatalf("dashboard origin status=%d body=%s", allowed.Code, allowed.Body.String())
 	}
 	rejected := httptest.NewRecorder()
 	request = httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
-	request.Host = "api.example.local"
+	request.Host = "api-example.local"
 	request.Header.Set("Origin", "http://other.example.local")
 	s.Handler().ServeHTTP(rejected, request)
 	if rejected.Code != http.StatusForbidden {
@@ -434,11 +434,11 @@ func TestDerivedDashboardRoute(t *testing.T) {
 	dashboard := PublishedApplication{AppID: "dashboard-id", Subdomain: "dashboard", Service: "web", Port: 80, IsSystem: true}
 	apps := []PublishedApplication{dashboard}
 	hosts := GenerateHosts("example.local", "192.0.2.1", apps)
-	if !strings.Contains(hosts, "192.0.2.1 dashboard.example.local\n") {
+	if !strings.Contains(hosts, "192.0.2.1 dashboard-example.local\n") {
 		t.Fatalf("dashboard host is missing: %s", hosts)
 	}
 	caddy := GenerateCaddyfile("example.local", apps)
-	for _, want := range []string{"http://dashboard.example.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy lws-dashboard-id:80", "header_up Host api.example.local"} {
+	for _, want := range []string{"http://dashboard-example.local", "@backend path /api/* /openapi.json /swagger /swagger/*", "handle @backend", "reverse_proxy lws-dashboard-id:80", "header_up Host api-example.local"} {
 		if !strings.Contains(caddy, want) {
 			t.Fatalf("dashboard route is missing %q: %s", want, caddy)
 		}
@@ -449,7 +449,7 @@ func TestHTTPRejectsUnexpectedHost(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
 	r.Host = "bad.example.local"
 	rr := httptest.NewRecorder()
-	(&Server{AllowedHost: "api.example.local"}).Handler().ServeHTTP(rr, r)
+	(&Server{AllowedHost: "api-example.local"}).Handler().ServeHTTP(rr, r)
 	if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "HOST_FORBIDDEN") {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -1179,7 +1179,7 @@ func TestDerivedConfigIsAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(p)
-	if !strings.Contains(string(data), "app.example.local") {
+	if !strings.Contains(string(data), "app-example.local") {
 		t.Fatal(string(data))
 	}
 }

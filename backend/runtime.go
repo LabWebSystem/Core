@@ -200,7 +200,11 @@ func (e *RuntimeExecutor) Run(ctx context.Context, op Operation) (runErr error) 
 		if request.Subdomain != "" {
 			newSubdomain = request.Subdomain
 		}
-		if err := ValidateSubdomain(newSubdomain); err != nil {
+		baseDomain := ""
+		if e.Derived != nil {
+			baseDomain = e.Derived.BaseDomain
+		}
+		if err := ValidatePublishedSubdomain(newSubdomain, baseDomain); err != nil {
 			return err
 		}
 		if sourceKind == "zip" {

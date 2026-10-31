@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/LabWebSystem/Core/internal/hostname"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
@@ -55,8 +56,23 @@ func ValidateSubdomain(value string) error {
 	if !subdomainPattern.MatchString(value) {
 		return NewValidationError("subdomain", "subdomainが不正です", "INVALID_SUBDOMAIN")
 	}
-	if value == "dashboard" {
-		return NewValidationError("subdomain", "dashboardはLWS Dashboard用に予約されています", "RESERVED_SUBDOMAIN")
+	if value == "dashboard" || value == "api" {
+		return NewValidationError("subdomain", "dashboardとapiはLWS用に予約されています", "RESERVED_SUBDOMAIN")
+	}
+	return nil
+}
+
+func ValidatePublishedSubdomain(value, baseDomain string) error {
+	if err := ValidateSubdomain(value); err != nil {
+		return err
+	}
+	if baseDomain == "" {
+		return nil
+	}
+	publicHost := hostname.Public(value, baseDomain)
+	label := strings.SplitN(publicHost, ".", 2)[0]
+	if len(label) > 63 || len(publicHost) > 253 {
+		return NewValidationError("subdomain", "公開ホスト名が長すぎます", "INVALID_SUBDOMAIN")
 	}
 	return nil
 }

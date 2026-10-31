@@ -185,13 +185,13 @@ lwsctl down --purge
 アプリは次の形式で公開します。
 
 ```text
-<app-name>.<base-domain>
+<app-name>-<base-domain>
 ```
 
 例:
 
 ```text
-dashboard.example.internal
+dashboard-example.internal
 app-a.example.internal
 ```
 

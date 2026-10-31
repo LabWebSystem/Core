@@ -29,10 +29,10 @@ example.local
 登録したアプリにはサブドメインを割り当てます。例えば`予約システム`に`reserve`を割り当てると、次のURLでアクセスできます。
 
 ```text
-reserve.example.local
+reserve-example.local
 ```
 
-Dashboardは`dashboard.example.local`で開きます。名前解決はmDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用端末とLWSホストが同じLAN上にあり、端末のmDNSが有効である必要があります。
+Dashboardは`dashboard-example.local`で開きます。名前解決はmDNS、Webアクセスの振り分けはLWSのReverse Proxyが担当します。利用端末とLWSホストが同じLAN上にあり、端末のmDNSが有効である必要があります。
 
 ## 利用を始める
 
@@ -131,11 +131,11 @@ DashboardでGitHubのURLとref、またはZIPと公開subdomainを指定し、�
 APIを直接使う場合の最小例は次のとおりです。
 
 ```sh
-curl -X POST http://api.example.local/api/v1/applications \
+curl -X POST http://api-example.local/api/v1/applications \
   -H 'Content-Type: application/json' \
   -d '{"repositoryUrl":"https://github.com/example/app","ref":"main","subdomain":"app","requestId":"550e8400-e29b-41d4-a716-446655440000"}'
 
-curl http://api.example.local/api/v1/operations/<operation-id>
+curl http://api-example.local/api/v1/operations/<operation-id>
 ```
 
 変更操作は`202`とOperation名を返します。完了状態はOperation APIまたはSSEで確認します。

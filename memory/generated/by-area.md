@@ -110,6 +110,9 @@
 - SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
 - SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える
 
+## Backend / CLI / Dashboard / Infrastructure
+- CHG-102 | SHIPPED | Backend / CLI / Dashboard / Infrastructure | mDNSの公開ホスト名を単一ラベルのハイフン形式に統一する
+
 ## Backend / Dashboard / Infrastructure / documentation
 - CHG-095 | SHIPPED | Backend / Dashboard / Infrastructure / documentation | Dashboardを削除不可のシステムアプリへ移行する
 

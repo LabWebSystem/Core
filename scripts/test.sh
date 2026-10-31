@@ -539,6 +539,7 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as source:
     compose = json.load(source)
 assert compose["services"]["backend"]["environment"]["LWS_BASE_DOMAIN"] == "qa.example.local"
+assert compose["services"]["backend"]["environment"]["LWS_BASE_DOMAIN_PREFIX"] == "qa-example.local"
 assert compose["services"]["backend"]["environment"]["LWS_INSTALLATION_ID"] == "123e4567-e89b-42d3-a456-426614174000"
 assert compose["services"]["backend"]["image"] == "lws-qa-test-backend:local"
 assert compose["services"]["backend"]["pull_policy"] == "never"

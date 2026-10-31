@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/LabWebSystem/Core/internal/hostname"
 )
 
 type PublishedApplication struct {
@@ -17,21 +19,22 @@ type PublishedApplication struct {
 
 func GenerateHosts(baseDomain, publicAddress string, apps []PublishedApplication) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s api.%s\n", publicAddress, baseDomain)
+	fmt.Fprintf(&b, "%s %s\n", publicAddress, hostname.Public("api", baseDomain))
 	for _, a := range apps {
-		fmt.Fprintf(&b, "%s %s.%s\n", publicAddress, a.Subdomain, baseDomain)
+		fmt.Fprintf(&b, "%s %s\n", publicAddress, hostname.Public(a.Subdomain, baseDomain))
 	}
 	return b.String()
 }
 func GenerateCaddyfile(baseDomain string, apps []PublishedApplication) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "{\n\tauto_https off\n}\n\nhttp://api.%s {\n\treverse_proxy backend:8080\n}\n\n", baseDomain)
+	apiHost := hostname.Public("api", baseDomain)
+	fmt.Fprintf(&b, "{\n\tauto_https off\n}\n\nhttp://%s {\n\treverse_proxy backend:8080\n}\n\n", apiHost)
 	for _, a := range apps {
 		if a.IsSystem {
-			fmt.Fprintf(&b, "http://%s.%s {\n\t@backend path /api/* /openapi.json /swagger /swagger/*\n\thandle @backend {\n\t\treverse_proxy backend:8080 {\n\t\t\theader_up Host api.%s\n\t\t}\n\t}\n\treverse_proxy lws-%s:%d\n}\n", a.Subdomain, baseDomain, baseDomain, a.AppID, a.Port)
+			fmt.Fprintf(&b, "http://%s {\n\t@backend path /api/* /openapi.json /swagger /swagger/*\n\thandle @backend {\n\t\treverse_proxy backend:8080 {\n\t\t\theader_up Host %s\n\t\t}\n\t}\n\treverse_proxy lws-%s:%d\n}\n", hostname.Public(a.Subdomain, baseDomain), apiHost, a.AppID, a.Port)
 			continue
 		}
-		fmt.Fprintf(&b, "http://%s.%s {\n\treverse_proxy lws-%s:%d\n}\n", a.Subdomain, baseDomain, a.AppID, a.Port)
+		fmt.Fprintf(&b, "http://%s {\n\treverse_proxy lws-%s:%d\n}\n", hostname.Public(a.Subdomain, baseDomain), a.AppID, a.Port)
 	}
 	return b.String()
 }

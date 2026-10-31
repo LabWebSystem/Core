@@ -262,7 +262,7 @@ func (s *Server) createImportedApplication(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, 400, "INVALID_ARGUMENT", "取り込み済みsourceにはURLとrefを指定できません", "importId")
 		return
 	}
-	if err := ValidateSubdomain(req.Subdomain); err != nil {
+	if err := ValidatePublishedSubdomain(req.Subdomain, s.BaseDomain); err != nil {
 		writeValidationError(w, err)
 		return
 	}

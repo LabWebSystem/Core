@@ -5,10 +5,11 @@ services:
       network: host
     environment:
       LWS_BASE_DOMAIN: lws.localhost
+      LWS_BASE_DOMAIN_PREFIX: lws.localhost
       LWS_INSTALLATION_ID: dashboard-dev
       LWS_PUBLIC_ADDRESS: 127.0.0.1
       LWS_CADDY_CONTAINER: lws-dashboard-dev-caddy-1
-      LWS_ALLOWED_ORIGIN: http://dashboard.lws.localhost:18180
+      LWS_ALLOWED_ORIGIN: http://dashboard-lws.localhost:18180
       LWS_DASHBOARD_IMAGE: ${LWS_DASHBOARD_IMAGE:-node:22.22.0-alpine}
       LWS_DASHBOARD_DEV_SOURCE: ${LWS_DASHBOARD_DEV_SOURCE:-}
 
