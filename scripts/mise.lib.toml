@@ -74,6 +74,7 @@ run = "scripts/generate-backend.sh"
 
 [check-openapi]
 description = "OpenAPI生成物の差分を検査"
+depends = ["dashboard-install"]
 run = [
   "scripts/generate-backend.sh",
   "npm --prefix dashboard run generate:api",

@@ -75,6 +75,7 @@ check_mise_tasks() {
   require_match '^\[qa-docs\]$' "$mise_lib"
   require_match '^\[generate-backend\]$' "$mise_lib"
   require_match '^\[check-openapi\]$' "$mise_lib"
+  require_match '^depends = \["dashboard-install"\]$' "$mise_lib"
   reject_match '^\[tasks\.(lint|test|test-sdk|test-dashboard|qa|qa-current|qa-live|qa-lifecycle|qa-docs|generate-backend|check-openapi)\]$' "$mise_file"
 }
 

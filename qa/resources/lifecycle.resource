@@ -16,6 +16,10 @@ LWS本体の隔離環境を準備する
     Set Suite Variable    ${QA_ROOT}    ${qa_root}
     ${project}=    Evaluate    'lws-qa-' + __import__('uuid').uuid4().hex[:8]
     Set Suite Variable    ${QA_PROJECT}    ${project}
+    ${installation_id}=    Evaluate    str(__import__('uuid').uuid4())
+    Set Suite Variable    ${QA_INSTALLATION_ID}    ${installation_id}
+    Set Environment Variable    LWS_BASE_DOMAIN    qa.example.local
+    Set Environment Variable    LWS_INSTALLATION_ID    ${installation_id}
     ${backend_image}=    Set Variable    ${project}-backend:local
     ${avahi_image}=    Set Variable    ${project}-avahi:local
     Set Suite Variable    ${BACKEND_IMAGE}    ${backend_image}
@@ -30,10 +34,14 @@ LWS本体の隔離環境を準備する
     Set Environment Variable    LWS_CADDY_CONTAINER    ${project}-caddy-1
     Set Environment Variable    LWS_AVAHI_CONTAINER    ${project}-avahi-1
     Create File    ${qa_root}/version    0.1.0
+    Create Directory    ${qa_root}/etc
+    Create File    ${qa_root}/etc/config.env    LWS_BASE_DOMAIN=qa.example.local\nLWS_VERSION=0.1.0\nLWS_INSTALLATION_ID=${installation_id}\nLWS_PUBLIC_ADDRESS=\n
+    ${chmod}=    Run Process    chmod    0600    ${qa_root}/etc/config.env
+    Should Be Equal As Integers    ${chmod.rc}    0
     ${build}=    Run Process    ${WORKSPACE}/scripts/build-lwsctl.sh    --output    ${qa_root}/lwsctl    cwd=${WORKSPACE}
     Should Be Equal As Integers    ${build.rc}    0
     Set Suite Variable    ${LWSCTL}    ${qa_root}/lwsctl
-    ${compose_prepare}=    Run Process    python3    ${WORKSPACE}/scripts/prepare-lifecycle-compose.py    --output    ${compose_file}    --project    ${project}    --backend-image    ${backend_image}    --avahi-image    ${avahi_image}    cwd=${WORKSPACE}
+    ${compose_prepare}=    Run Process    python3    ${WORKSPACE}/scripts/prepare-lifecycle-compose.py    --output    ${compose_file}    --project    ${project}    --backend-image    ${backend_image}    --avahi-image    ${avahi_image}    --base-domain    qa.example.local    --installation-id    ${installation_id}    cwd=${WORKSPACE}
     Should Be Equal As Integers    ${compose_prepare.rc}    0    ${compose_prepare.stderr}
     ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|5353)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
     Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、5353/udp)が既に使用されています。
@@ -48,6 +56,11 @@ LWS本体を停止して隔離環境を削除する
 
 LWSを起動する
     ${result}=    Run Process    ${LWSCTL}    start    --domain    qa.example.local
+    IF    ${result.rc} != 0
+        ${backend_logs}=    Run Process    docker    compose    --project-name    ${QA_PROJECT}    --file    ${COMPOSE_FILE}    logs    --no-color    backend
+        Log To Console    Backend container logs: ${backend_logs.stdout}
+        Log To Console    Backend compose logs error: ${backend_logs.stderr}
+    END
     Log    stdout=${result.stdout} stderr=${result.stderr}
     Should Be Equal As Integers    ${result.rc}    0
 

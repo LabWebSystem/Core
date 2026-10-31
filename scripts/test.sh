@@ -519,12 +519,16 @@ EOF
   PATH="$fake_bin:$PATH" LWS_TEST_COMPOSE_CONFIG="$config" \
     python3 "$ROOT/scripts/prepare-lifecycle-compose.py" \
       --output "$output" --project lws-qa-test \
-      --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local
+      --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local \
+      --base-domain qa.example.local \
+      --installation-id 123e4567-e89b-42d3-a456-426614174000
   python3 - "$output" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as source:
     compose = json.load(source)
+assert compose["services"]["backend"]["environment"]["LWS_BASE_DOMAIN"] == "qa.example.local"
+assert compose["services"]["backend"]["environment"]["LWS_INSTALLATION_ID"] == "123e4567-e89b-42d3-a456-426614174000"
 assert compose["services"]["backend"]["image"] == "lws-qa-test-backend:local"
 assert compose["services"]["backend"]["pull_policy"] == "build"
 assert compose["services"]["backend"]["build"]["dockerfile"] == "backend/Dockerfile"
@@ -536,7 +540,9 @@ PY
   if PATH="$fake_bin:$PATH" LWS_TEST_COMPOSE_CONFIG="$TMP/lifecycle-compose-invalid.json" \
     python3 "$ROOT/scripts/prepare-lifecycle-compose.py" \
       --output "$TMP/lifecycle-compose-invalid-output.json" --project lws-qa-test \
-      --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local >/dev/null 2>&1; then
+      --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local \
+      --base-domain qa.example.local \
+      --installation-id 123e4567-e89b-42d3-a456-426614174000 >/dev/null 2>&1; then
     printf '不正なBackend build contextを受理しました\n' >&2
     return 1
   fi

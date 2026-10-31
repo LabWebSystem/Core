@@ -19,10 +19,13 @@ def main() -> int:
     parser.add_argument("--project", required=True)
     parser.add_argument("--backend-image", required=True)
     parser.add_argument("--avahi-image", required=True)
+    parser.add_argument("--base-domain", required=True)
+    parser.add_argument("--installation-id", required=True)
     args = parser.parse_args()
 
     environment = os.environ.copy()
-    environment["LWS_INSTALLATION_ID"] = args.project
+    environment["LWS_BASE_DOMAIN"] = args.base_domain
+    environment["LWS_INSTALLATION_ID"] = args.installation_id
     result = subprocess.run(
         ["docker", "compose", "--project-name", args.project, "--file", str(COMPOSE), "config", "--format", "json"],
         check=False,
@@ -46,6 +49,9 @@ def main() -> int:
 
     backend["image"] = args.backend_image
     backend["pull_policy"] = "build"
+    backend_environment = backend.setdefault("environment", {})
+    backend_environment["LWS_BASE_DOMAIN"] = args.base_domain
+    backend_environment["LWS_INSTALLATION_ID"] = args.installation_id
     avahi = services.get("avahi")
     if avahi is None:
         print("ComposeにAvahi serviceがありません", file=sys.stderr)
