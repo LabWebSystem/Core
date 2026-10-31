@@ -1,0 +1,233 @@
+name: LWS品質検証
+run-name: 品質検証 ${{ inputs.profile }} / ${{ github.ref_name }} / ${{ inputs.request_id }}
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: 検証範囲
+        required: true
+        type: string
+      request_id:
+        description: ローカル起動との照合ID
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 検証範囲
+        required: true
+        type: choice
+        options:
+          - fast
+          - full
+        default: full
+      request_id:
+        description: ローカル起動との照合ID
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  static:
+    name: 静的検査
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run lint
+      - name: 検証結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-static
+          path: test/result/
+          if-no-files-found: ignore
+
+  core-fast:
+    name: Core高速テスト
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run test fast
+      - name: 検証結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-core-fast
+          path: test/result/
+          if-no-files-found: ignore
+
+  sdk:
+    name: SDKテストとbuild
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run test-sdk
+      - name: 検証結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-sdk
+          path: test/result/
+          if-no-files-found: ignore
+
+  dashboard:
+    name: Dashboard検証
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run test-dashboard
+      - name: 検証結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-dashboard
+          path: test/result/
+          if-no-files-found: ignore
+
+  core-integration:
+    name: Core統合テスト
+    if: ${{ inputs.profile == 'full' }}
+    needs: [static, core-fast, sdk, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run test
+      - name: 検証結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-core-integration
+          path: test/result/
+          if-no-files-found: ignore
+
+  qa-current:
+    name: 自己完結Robot QA
+    if: ${{ inputs.profile == 'full' }}
+    needs: [static, core-fast, sdk, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run qa-current
+      - name: Robot結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-qa-current
+          path: test/result/robot-current/
+          if-no-files-found: ignore
+
+  qa-lifecycle:
+    name: 隔離ライフサイクルRobot QA
+    if: ${{ inputs.profile == 'full' }}
+    needs: [static, core-fast, sdk, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run qa-lifecycle
+      - name: Robot結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-qa-lifecycle
+          path: test/result/robot-lifecycle/
+          if-no-files-found: ignore
+
+  qa-docs:
+    name: QAテスト項目ドキュメント生成
+    if: ${{ inputs.profile == 'full' }}
+    needs: [static, core-fast, sdk, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run qa-docs
+      - name: 生成docsを保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-qa-docs
+          path: docs/generated/
+          if-no-files-found: ignore
+
+  import-e2e:
+    name: ZIP取り込みブラウザ結合テスト
+    if: ${{ inputs.profile == 'full' }}
+    needs: [static, core-fast, sdk, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v4
+      - run: mise run test-import-e2e
+      - name: 検証結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-import-e2e
+          path: test/result/
+          if-no-files-found: ignore
+
+  summary:
+    name: 品質ゲート集約
+    if: always()
+    needs:
+      - static
+      - core-fast
+      - sdk
+      - dashboard
+      - core-integration
+      - qa-current
+      - qa-lifecycle
+      - qa-docs
+      - import-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: 結果をWorkflow summaryへ集約
+        env:
+          PROFILE: ${{ inputs.profile }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
+          SUMMARY_FILE: ${{ runner.temp }}/quality-summary.md
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          profile = os.environ["PROFILE"]
+          jobs = json.loads(os.environ["JOB_RESULTS"])
+          full_jobs = {"core-integration", "qa-current", "qa-lifecycle", "qa-docs", "import-e2e"}
+          lines = [f"## LWS品質検証: {profile}", "", "| ジョブ | 結果 |", "|---|---|"]
+          failed = False
+          for name, result in jobs.items():
+              state = result["result"]
+              expected_skip = profile == "fast" and name in full_jobs
+              shown = "SKIP（fast profile）" if expected_skip and state == "skipped" else state.upper()
+              lines.append(f"| `{name}` | {shown} |")
+              if expected_skip:
+                  continue
+              if state != "success":
+                  failed = True
+          report = "\n".join(lines) + "\n"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(report)
+          with open(os.environ["SUMMARY_FILE"], "w", encoding="utf-8") as summary:
+              summary.write(report)
+          if profile not in {"fast", "full"}:
+              print(f"未対応の検証範囲です: {profile}", file=sys.stderr)
+              sys.exit(2)
+          if failed:
+              sys.exit(1)
+          PY
+      - name: 集約結果artifactを保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-summary
+          path: ${{ runner.temp }}/quality-summary.md
+          if-no-files-found: ignore

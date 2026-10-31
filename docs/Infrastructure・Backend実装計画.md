@@ -22,9 +22,9 @@
 | `mise run test cli` / `installer` / `release` | CLI、パッケージ、release |
 | `mise run test backend` / `backend-http` / `backend-docker` | Backend、HTTP、Docker境界 |
 | `mise run test infrastructure` | 実Compose、DNS、Caddy、network、volume |
-| `mise run verify` / `verify qa` / `verify release` | 品質ゲート |
+| `mise run verify` / `verify full` | GitHub Actions品質ゲートの起動と結果取得 |
 
-`mise run test`は全targetを順に実行します。通常CIは`mise run verify`、QAを含む確認は`mise run verify qa`、リリース前は`mise run verify release`を使います。CIのWorkflowへ個別テストコマンドを追加しません。
+`mise run test`は全targetをローカルで実行します。通常CIはGitHub Actionsでfast、手動またはリリース前の全品質ゲートはGitHub Actionsでfullを実行します。`mise run verify`はpush済みコミットのActions実行を起動・監視します。CIのWorkflowは共通品質Workflowを呼び出し、各ジョブでは既存の`mise` taskを実行します。
 
 ## 未完了の受け入れ項目
 

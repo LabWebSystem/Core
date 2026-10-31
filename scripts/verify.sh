@@ -1,231 +1,120 @@
 #!/usr/bin/env bash
-set -Euo pipefail
+set -Eeuo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly PROFILE="${1:-fast}"
-readonly RESULT_DIR="$ROOT/test/result"
-readonly RESULT_FILE="$RESULT_DIR/$(date +%F)-verify-result.md"
-readonly COLOR_PASS=$'\033[32m'
-readonly COLOR_FAIL=$'\033[31m'
-readonly COLOR_SKIP=$'\033[33m'
-readonly COLOR_RESET=$'\033[0m'
-
-TMP=""
-STARTED=""
-OVERALL_STATUS=0
-declare -a RECORDS=()
-declare -a LOGS=()
+readonly WORKFLOW='quality.yml'
+PROFILE="${1:-fast}"
 
 usage() {
-  printf '使い方: scripts/verify.sh [fast|qa|release]\n' >&2
+  printf '使い方: mise run verify [fast|full|qa|release]\n' >&2
+}
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+if (($# > 1)); then
+  usage
   exit 2
-}
+fi
 
-append_record() {
-  local id="$1"
-  local status="$2"
-  local description="$3"
-  local elapsed="$4"
+case "$PROFILE" in
+  fast)
+    ;;
+  full|qa|release)
+    PROFILE='full'
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage
+    die "未対応の検証範囲です: $PROFILE"
+    ;;
+esac
 
-  RECORDS+=("$id|$status|$description|$elapsed")
-}
+command -v git >/dev/null 2>&1 || die 'gitが必要です'
+command -v gh >/dev/null 2>&1 || die 'GitHub CLI（gh）が必要です'
+command -v python3 >/dev/null 2>&1 || die 'Python 3が必要です'
 
-print_item() {
-  local id="$1"
-  local status="$2"
-  local description="$3"
-  local elapsed="$4"
-  local color="$COLOR_RESET"
+gh auth status >/dev/null 2>&1 || die 'GitHub CLIで認証してください: gh auth login'
 
-  case "$status" in
-    PASS) color="$COLOR_PASS" ;;
-    FAIL) color="$COLOR_FAIL" ;;
-    SKIP) color="$COLOR_SKIP" ;;
-  esac
-  printf 'VERIFY_ITEM|%s|%s%s%s|%s|%s\n' "$id" "$color" "$status" "$COLOR_RESET" "$description" "$elapsed"
-}
+if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all)" ]]; then
+  die '未コミットの変更があるためActionsを起動できません。変更をcommitしてください'
+fi
 
-render_status() {
-  local status="$1"
+branch="$(git -C "$ROOT" branch --show-current)"
+[[ -n "$branch" ]] || die 'detached HEADでは実行できません。push済みブランチへ切り替えてください'
+head_sha="$(git -C "$ROOT" rev-parse HEAD)"
+upstream="$(git -C "$ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+[[ -n "$upstream" ]] || die '追跡先ブランチがありません。GitHubへブランチをpushしてください'
+remote_name="${upstream%%/*}"
+remote_branch="${upstream#*/}"
+remote_line="$(git -C "$ROOT" ls-remote --heads "$remote_name" "refs/heads/$remote_branch")" || die 'GitHubの追跡先を確認できませんでした'
+remote_sha="${remote_line%%$'\t'*}"
+[[ "$remote_sha" == "$head_sha" ]] || die 'ローカルHEADが追跡先と一致しません。最新のコミットをGitHubへpushしてください'
 
-  case "$status" in
-    PASS) printf '<span style="color: #2e7d32"><strong>PASS</strong></span>' ;;
-    FAIL) printf '<span style="color: #c62828"><strong>FAIL</strong></span>' ;;
-    SKIP) printf '<span style="color: #f9a825"><strong>SKIP</strong></span>' ;;
-    *) printf '%s' "$status" ;;
-  esac
-}
+repository="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')"
+before_ids="$(gh run list \
+  --repo "$repository" \
+  --workflow "$WORKFLOW" \
+  --event workflow_dispatch \
+  --branch "$branch" \
+  --limit 100 \
+  --json databaseId \
+  --jq '[.[].databaseId]')"
+request_id="verify-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 
-run_step() {
-  local id="$1"
-  local description="$2"
-  shift 2
-  local log="$TMP/$id.log"
-  local started finished elapsed
+printf 'GitHub Actionsで%s品質検証を開始します: %s @ %s\n' "$PROFILE" "$branch" "${head_sha:0:12}"
+gh workflow run "$WORKFLOW" \
+  --repo "$repository" \
+  --ref "$branch" \
+  --field "profile=$PROFILE" \
+  --field "request_id=$request_id"
 
-  started="$(date +%s)"
-  if "$@" >"$log" 2>&1; then
-    finished="$(date +%s)"
-    elapsed="$((finished - started))秒"
-    append_record "$id" 'PASS' "$description" "$elapsed"
-    LOGS+=("$id|$description|$log")
-    print_item "$id" 'PASS' "$description" "$elapsed"
-    return 0
-  fi
+run_json=''
+run_id=''
+for _ in $(seq 1 30); do
+  run_json="$(gh run list \
+    --repo "$repository" \
+    --workflow "$WORKFLOW" \
+    --event workflow_dispatch \
+    --branch "$branch" \
+    --limit 100 \
+    --json databaseId,headSha,createdAt,url,displayTitle)"
+  run_id="$(BEFORE_IDS="$before_ids" RUNS_JSON="$run_json" HEAD_SHA="$head_sha" REQUEST_ID="$request_id" python3 - <<'PY'
+import json
+import os
 
-  finished="$(date +%s)"
-  elapsed="$((finished - started))秒"
-  append_record "$id" 'FAIL' "$description" "$elapsed"
-  LOGS+=("$id|$description|$log")
-  print_item "$id" 'FAIL' "$description" "$elapsed" >&2
-  return 1
-}
+before = set(json.loads(os.environ["BEFORE_IDS"]))
+runs = json.loads(os.environ["RUNS_JSON"])
+sha = os.environ["HEAD_SHA"]
+request_id = os.environ["REQUEST_ID"]
+matches = [run for run in runs if run["headSha"] == sha and run["databaseId"] not in before and request_id in run["displayTitle"]]
+matches.sort(key=lambda run: run["createdAt"])
+print(matches[-1]["databaseId"] if matches else "")
+PY
+  )"
+  [[ -z "$run_id" ]] || break
+  sleep 2
+done
 
-skip_step() {
-  local id="$1"
-  local description="$2"
+[[ -n "$run_id" ]] || die 'Workflow runを確認できませんでした。GitHub Actionsの画面を確認してください'
+run_url="$(gh run view "$run_id" --repo "$repository" --json url --jq '.url')"
+printf '実行URL: %s\n' "$run_url"
 
-  append_record "$id" 'SKIP' "$description" '-'
-  print_item "$id" 'SKIP' "$description" '-'
-}
+watch_status=0
+gh run watch "$run_id" --repo "$repository" --exit-status --compact || watch_status=$?
 
-run_fast() {
-  local status=0
+artifact_dir="$ROOT/test/result/actions/$run_id"
+mkdir -p "$artifact_dir"
+if gh run download "$run_id" --repo "$repository" --dir "$artifact_dir"; then
+  printf '検証artifact: %s\n' "$artifact_dir"
+else
+  printf '検証artifactを取得できませんでした。実行URLから確認してください: %s\n' "$run_url" >&2
+  [[ "$watch_status" != 0 ]] || watch_status=1
+fi
 
-  run_step 'VFY-001' '静的検査' mise run lint || status=1
-  run_step 'VFY-002' 'Core高速テスト' mise run test fast || status=1
-  run_step 'VFY-003' 'SDKテストとbuild' mise run test-sdk || status=1
-  run_step 'VFY-004' 'Dashboardイメージbuild' mise run test-dashboard || status=1
-  return "$status"
-}
-
-run_qa() {
-  local status=0
-
-  run_step 'VFY-005' 'Core統合テスト' mise run test || status=1
-  run_step 'VFY-006' '自己完結Robot QA' mise run qa-current || status=1
-  run_step 'VFY-007' '隔離ライフサイクルRobot QA' mise run qa-lifecycle || status=1
-  run_step 'VFY-008' 'QAテスト項目ドキュメント生成' mise run qa-docs || status=1
-  run_step 'VFY-010' 'ZIP取り込みブラウザ結合テスト' mise run test-import-e2e || status=1
-  return "$status"
-}
-
-append_robot_artifact() {
-  local directory="$1"
-  local label="$2"
-
-  if [[ -f "$RESULT_DIR/$directory/report.html" ]]; then
-    printf -- '- [%s report](%s/report.html) / [%s log](%s/log.html)\n' "$label" "$directory" "$label" "$directory"
-  fi
-}
-
-has_step() {
-  local expected="$1"
-  local record
-
-  for record in "${RECORDS[@]}"; do
-    [[ "$record" == "$expected"'|'* ]] && return 0
-  done
-  return 1
-}
-
-write_result() {
-  local status="$1"
-  local result='PASS'
-  local finished
-  local record id item_status description elapsed log_id log_description log_path
-
-  if [[ "$status" != 0 ]]; then
-    result='FAIL'
-  fi
-  finished="$(date --iso-8601=seconds)"
-  mkdir -p "$RESULT_DIR"
-
-  {
-    printf '# LWS 品質ゲート結果\n\n'
-    printf -- '- プロファイル: `%s`\n' "$PROFILE"
-    printf -- '- 結果: %s\n' "$(render_status "$result")"
-    printf -- '- 終了status: `%s`\n' "$status"
-    printf -- '- 開始: `%s`\n' "$STARTED"
-    printf -- '- 終了: `%s`\n' "$finished"
-    printf '\n## 検証項目\n\n'
-    printf '| ID | 結果 | 内容 | 所要時間 |\n'
-    printf '|---|---|---|---|\n'
-    for record in "${RECORDS[@]}"; do
-      IFS='|' read -r id item_status description elapsed <<<"$record"
-      printf '| `%s` | %s | %s | %s |\n' "$id" "$(render_status "$item_status")" "$description" "$elapsed"
-    done
-    printf '\n## Robot Frameworkの詳細結果\n\n'
-    if has_step 'VFY-006'; then
-      append_robot_artifact 'robot-current' '自己完結QA'
-    fi
-    if has_step 'VFY-007'; then
-      append_robot_artifact 'robot-lifecycle' '隔離ライフサイクルQA'
-    fi
-    if ! has_step 'VFY-006' && ! has_step 'VFY-007'; then
-      printf -- '- このプロファイルではRobot Frameworkを実行していません。\n'
-    fi
-    printf '\n## 実行ログ\n'
-    for record in "${LOGS[@]}"; do
-      IFS='|' read -r log_id log_description log_path <<<"$record"
-      printf '\n### %s: %s\n\n' "$log_id" "$log_description"
-      printf '```text\n'
-      sed 's/\r$//' "$log_path"
-      printf '```\n'
-    done
-  } >"$RESULT_FILE"
-}
-
-cleanup() {
-  local status=$?
-
-  if [[ -n "$TMP" ]]; then
-    write_result "$status"
-    rm -rf "$TMP"
-  fi
-}
-
-main() {
-  case "$PROFILE" in
-    fast|qa|release) ;;
-    *) usage ;;
-  esac
-
-  TMP="$(mktemp -d)"
-  STARTED="$(date --iso-8601=seconds)"
-  trap cleanup EXIT
-
-  if ! run_fast; then
-    OVERALL_STATUS=1
-  fi
-
-  if [[ "$PROFILE" == qa || "$PROFILE" == release ]]; then
-    if [[ "$OVERALL_STATUS" == 0 ]]; then
-      run_qa || OVERALL_STATUS=1
-    else
-      skip_step 'VFY-005' 'Core統合テスト（fast失敗のため）'
-      skip_step 'VFY-006' '自己完結Robot QA（fast失敗のため）'
-      skip_step 'VFY-007' '隔離ライフサイクルRobot QA（fast失敗のため）'
-      skip_step 'VFY-008' 'QAテスト項目ドキュメント生成（fast失敗のため）'
-      skip_step 'VFY-010' 'ZIP取り込みブラウザ結合テスト（fast失敗のため）'
-    fi
-  fi
-
-  if [[ "$PROFILE" == release ]]; then
-    if [[ "$OVERALL_STATUS" == 0 ]]; then
-      run_step 'VFY-009' 'リリースパッケージ生成' mise run package || OVERALL_STATUS=1
-    else
-      skip_step 'VFY-009' 'リリースパッケージ生成（前提検証失敗のため）'
-    fi
-  fi
-
-  if [[ "$OVERALL_STATUS" == 0 ]]; then
-    printf 'VERIFY_RESULT|%s|%sPASS%s\n' "$PROFILE" "$COLOR_PASS" "$COLOR_RESET"
-  else
-    printf 'VERIFY_RESULT|%s|%sFAIL%s\n' "$PROFILE" "$COLOR_FAIL" "$COLOR_RESET"
-  fi
-  printf 'VERIFY_REPORT|%s\n' "$RESULT_FILE"
-  return "$OVERALL_STATUS"
-}
-
-main "$@"
+exit "$watch_status"

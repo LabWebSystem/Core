@@ -156,6 +156,10 @@ write_checksums() {
 main() {
   (($# == 0)) || die 'パッケージのバージョンはmise run version coreで設定してください'
 
+  if [[ "${LWS_RELEASE_MODE:-}" == '1' ]]; then
+    "$ROOT/scripts/validate-release-digests.sh"
+  fi
+
   VERSION="$("$ROOT/scripts/version.sh" core)"
 
   trap cleanup EXIT

@@ -8,10 +8,10 @@ uv = "0.12.5"
 includes = ["scripts/mise.lib.toml"]
 
 [tasks.verify]
-description = "品質ゲートを実行（fast、qa、release）"
+description = "GitHub Actionsで品質検証を実行し結果を取得"
 run = "scripts/verify.sh ${usage_profile:-fast}"
 usage = '''
-arg "[profile]" help="検証プロファイル（fast、qa、release）"
+arg "[profile]" help="検証範囲（fast、full。qaとreleaseはfullの互換指定）"
 '''
 
 [tasks.build]

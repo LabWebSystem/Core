@@ -468,6 +468,113 @@ test_package_upgrade_config_hook() {
   grep -qF 'lws.preinst' "$ROOT/scripts/package.sh"
 }
 
+test_release_digest_validation() {
+  local digest="sha256:$(printf 'a%.0s' {1..64})"
+
+  LWS_BACKEND_DIGEST="$digest" \
+  LWS_DASHBOARD_DIGEST="$digest" \
+  LWS_AVAHI_DIGEST="$digest" \
+    "$ROOT/scripts/validate-release-digests.sh"
+
+  if env -u LWS_BACKEND_DIGEST -u LWS_DASHBOARD_DIGEST -u LWS_AVAHI_DIGEST \
+    LWS_DASHBOARD_DIGEST="$digest" LWS_AVAHI_DIGEST="$digest" \
+    "$ROOT/scripts/validate-release-digests.sh" >/dev/null 2>&1; then
+    printf '必須digestの欠落を受理しました\n' >&2
+    return 1
+  fi
+
+  if LWS_BACKEND_DIGEST=sha256:invalid LWS_DASHBOARD_DIGEST="$digest" LWS_AVAHI_DIGEST="$digest" \
+    "$ROOT/scripts/validate-release-digests.sh" >/dev/null 2>&1; then
+    printf '形式不正のdigestを受理しました\n' >&2
+    return 1
+  fi
+
+  if LWS_BACKEND_DIGEST="$digest" LWS_DASHBOARD_DIGEST="$digest" \
+    LWS_AVAHI_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+    "$ROOT/scripts/validate-release-digests.sh" >/dev/null 2>&1; then
+    printf 'Avahiのplaceholder digestを受理しました\n' >&2
+    return 1
+  fi
+
+  if env -u LWS_BACKEND_DIGEST -u LWS_DASHBOARD_DIGEST -u LWS_AVAHI_DIGEST \
+    LWS_RELEASE_MODE=1 "$ROOT/scripts/package.sh" >/dev/null 2>&1; then
+    printf 'digest未指定のrelease packageを受理しました\n' >&2
+    return 1
+  fi
+}
+
+test_lifecycle_compose_fixture() {
+  local fake_bin="$TMP/lifecycle-compose-bin"
+  local config="$TMP/lifecycle-compose-input.json"
+  local output="$TMP/lifecycle-compose-output.json"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+cat "${LWS_TEST_COMPOSE_CONFIG:?}"
+EOF
+  chmod +x "$fake_bin/docker"
+  cat >"$config" <<EOF
+{"services":{"backend":{"image":"ghcr.io/labwebsystem/lws-backend:0.1.0","build":{"context":"$ROOT","dockerfile":"backend/Dockerfile"}},"avahi":{"image":"ghcr.io/labwebsystem/lws-avahi:0.1.0"}},"networks":{"lws-internal":{"name":"lws-internal"}}}
+EOF
+  PATH="$fake_bin:$PATH" LWS_TEST_COMPOSE_CONFIG="$config" \
+    python3 "$ROOT/scripts/prepare-lifecycle-compose.py" \
+      --output "$output" --project lws-qa-test \
+      --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local
+  python3 - "$output" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    compose = json.load(source)
+assert compose["services"]["backend"]["image"] == "lws-qa-test-backend:local"
+assert compose["services"]["backend"]["pull_policy"] == "build"
+assert compose["services"]["backend"]["build"]["dockerfile"] == "backend/Dockerfile"
+assert compose["services"]["avahi"]["image"] == "lws-qa-test-avahi:local"
+assert compose["networks"]["lws-internal"]["name"] == "lws-qa-test-internal"
+PY
+
+  sed "s|\"context\":\"$ROOT\"|\"context\":\"$TMP\"|" "$config" >"$TMP/lifecycle-compose-invalid.json"
+  if PATH="$fake_bin:$PATH" LWS_TEST_COMPOSE_CONFIG="$TMP/lifecycle-compose-invalid.json" \
+    python3 "$ROOT/scripts/prepare-lifecycle-compose.py" \
+      --output "$TMP/lifecycle-compose-invalid-output.json" --project lws-qa-test \
+      --backend-image lws-qa-test-backend:local --avahi-image lws-qa-test-avahi:local >/dev/null 2>&1; then
+    printf '不正なBackend build contextを受理しました\n' >&2
+    return 1
+  fi
+}
+
+test_image_cleanup_preserves_container_images() {
+  local fake_bin="$TMP/image-cleanup-bin"
+  local marker="$TMP/image-cleanup-marker"
+  local log="$TMP/image-cleanup.log"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  'image ls --all --quiet --no-trunc')
+    [[ -f "$LWS_TEST_IMAGE_MARKER" ]] && printf 'new-image-id\n'
+    ;;
+  'ps --all --quiet --filter ancestor=new-image-id')
+    [[ "${LWS_TEST_IMAGE_IN_USE:-}" == 1 ]] && printf 'qa-container-id\n'
+    ;;
+  'image rm new-image-id')
+    printf 'removed\n' >>"$LWS_TEST_IMAGE_LOG"
+    ;;
+esac
+exit 0
+EOF
+  chmod +x "$fake_bin/docker"
+  : >"$log"
+
+  PATH="$fake_bin:$PATH" LWS_TEST_IMAGE_MARKER="$marker" LWS_TEST_IMAGE_LOG="$log" LWS_TEST_IMAGE_IN_USE=1 \
+    "$ROOT/scripts/run-with-image-cleanup.sh" touch "$marker" >/dev/null
+  test ! -s "$log"
+
+  rm -f "$marker"
+  PATH="$fake_bin:$PATH" LWS_TEST_IMAGE_MARKER="$marker" LWS_TEST_IMAGE_LOG="$log" \
+    "$ROOT/scripts/run-with-image-cleanup.sh" touch "$marker" >/dev/null
+  grep -q '^removed$' "$log"
+}
+
 test_release_selected_components() {
   local deploy_tmp="$TMP/deploy"
   local fake_bin="$deploy_tmp/bin"
@@ -591,6 +698,7 @@ main() {
   fi
   if [[ "$target" == all || "$target" == fast || "$target" == architecture ]]; then
     "$ROOT/scripts/test-quality-architecture.sh"
+    "$ROOT/scripts/test-verify-dispatch.sh"
   fi
   if [[ "$target" == all || "$target" == cli ]]; then
     setup_cli_environment
@@ -611,6 +719,13 @@ main() {
     test_package_upgrade_config_hook
     test_installer_almalinux 'lws-0.1.0.x86_64.rpm'
     test_installer_almalinux 'lws-0.1.0.rpm'
+  fi
+  if [[ "$target" == all || "$target" == fast || "$target" == architecture || "$target" == release ]]; then
+    test_release_digest_validation
+  fi
+  if [[ "$target" == all || "$target" == fast || "$target" == architecture ]]; then
+    test_lifecycle_compose_fixture
+    test_image_cleanup_preserves_container_images
   fi
   if [[ "$target" == all || "$target" == release ]]; then
     test_release_selected_components

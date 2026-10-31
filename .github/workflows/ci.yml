@@ -1,16 +1,12 @@
 name: 継続的インテグレーション
-on: [push, pull_request]
+on:
+  push:
+    branches: ['**']
+  pull_request:
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run verify
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lws-quality-results
-          path: |
-            test/result/
-            docs/generated/
+  quality:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/quality.yml
+    with:
+      profile: fast

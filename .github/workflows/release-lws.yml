@@ -15,18 +15,11 @@ jobs:
         run: test "$(scripts/version.sh core)" = "${GITHUB_REF_NAME#lws-v}"
   quality:
     needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - run: mise run verify release
-      - name: 品質ゲート結果を保存
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: quality-test-results
-          path: test/result/
-          if-no-files-found: ignore
+    permissions:
+      contents: read
+    uses: ./.github/workflows/quality.yml
+    with:
+      profile: full
   backend-image:
     needs: [quality]
     runs-on: ubuntu-latest
@@ -119,6 +112,7 @@ jobs:
           LWS_BACKEND_DIGEST: ${{ needs.backend-image.outputs.digest }}
           LWS_DASHBOARD_DIGEST: ${{ needs.dashboard-image.outputs.digest }}
           LWS_AVAHI_DIGEST: ${{ needs.avahi-image.outputs.digest }}
+          LWS_RELEASE_MODE: '1'
         run: mise run package
       - uses: actions/upload-artifact@v7
         with:

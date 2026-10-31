@@ -9,7 +9,6 @@
 - ADR-007 | ACCEPTED | - | purge、原子性、起動時Docker再調整の方針
 - ADR-008 | ACCEPTED | - | Infrastructure・Backend開発フェーズの現状
 - ADR-009 | ACCEPTED | - | 機能受け入れテストをRobot Frameworkで分離する
-- ADR-010 | ACCEPTED | - | miseを品質ゲートの正本とする
 - ADR-011 | ACCEPTED | - | Dashboardはデバッグルームから段階的に洗練する
 - ADR-012 | ACCEPTED | - | DashboardをReact・Chakra UIの同一画面管理クライアントとして実装する
 - ADR-013 | ACCEPTED | - | Backend集約の永続ログ収集・検索・配信
@@ -18,6 +17,7 @@
 - ADR-016 | ACCEPTED | - | Avahiコンテナで`.local` mDNSだけを提供する
 - ADR-017 | ACCEPTED | - | Dashboardを削除不可のシステムアプリとして実行する
 - ADR-018 | ACCEPTED | - | GitHubとZIPからアプリを取り込む
+- ADR-019 | ACCEPTED | - | GitHub ActionsをCore品質ゲートの実行正本とする
 - BUG-001 | VERIFIED | installer | AlmaLinuxでOSバージョンをLWSリリース版として参照する
 - BUG-002 | VERIFIED | cli | 初回startでComposeへベースドメインを渡さない
 - BUG-003 | VERIFIED | cli | stopが保存済みのベースドメインをComposeへ渡さない

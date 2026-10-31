@@ -48,18 +48,15 @@ BackendだけがDocker socketを使います。登録アプリにはsocketを渡
 ```text
 mise install
   ↓
-mise run verify
-  ↓
-mise run verify qa
-  ↓
-mise run verify release
-  ↓
-GitHub Actions
-  ├─ lws-v<x.y.z> → LWS packageとGHCR image
+mise run verify full
+  └─ GitHub Actionsで検証・結果取得
+      ↓
+GitHub Actions release
+  ├─ lws-v<x.y.z> → 品質ゲート → GHCR image → digest付きLWS package → GitHub Release
   └─ sdk-v<x.y.z> → TypeScript SDK
 ```
 
-通常CIは`mise run verify`を呼び出します。リリースWorkflowは品質ゲートを通過した後に、LWS packageとBackend・Dashboard imageのversionを揃えて公開します。
+通常CIはGitHub Actionsの共通品質Workflowでfast検証を実行します。`mise run verify`はpush済みコミットを同Workflowで検証する入口です。リリースWorkflowは全品質ゲート成功後にイメージを公開し、取得したdigestを使ってLWS packageを生成します。
 
 ## LWSの利用フロー
 

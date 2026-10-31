@@ -135,9 +135,11 @@ OpenAPIの仕様は`http://api.<base-domain>/openapi.json`または`http://dashb
 
 ```sh
 mise install
-mise run verify          # 普段の開発・通常CI用
-mise run verify qa       # DockerとRobot QAを含む確認
-mise run verify release  # リリース前の確認とパッケージ生成
+gh auth login            # 初回のみ
+mise run verify          # GitHub Actionsでfast検証を実行
+mise run verify full     # GitHub Actionsで全品質ゲートを実行
+mise run verify release  # fullの互換指定
+mise run package         # ローカルでパッケージを生成
 mise run dev             # 開発用Composeを起動
 mise run dev-dashboard   # HMR対応のDashboardと実Backendを起動
 mise run dev-dashboard-build # 初回またはBackend変更時に再ビルドして起動
@@ -167,7 +169,8 @@ mise run dev-dashboard-down
 mise run dev-dashboard-reset
 ```
 
-品質ゲートの結果とログは、`test/result/YYYY-MM-DD-verify-result.md`に保存されます。
+`mise run verify`はGitHub CLIを使ってGitHub Actionsを起動し、終了まで待機します。作業ツリーがcleanで、現在のコミットが追跡先ブランチへpush済みであることが必要です。引数なしはfast、`full`・`qa`・`release`は全品質ゲートを実行し、Actions画面からの手動起動も初期値をfullとします。PR・ブランチpushは自動でfast検証します。結果artifactは`test/result/actions/<run-id>/`へ取得されます。Release公開はLWSタグpush後にGitHub Actionsが実行します。
+
 QAとDashboardのイメージ検証は、実行中に新しく取得・作成したDockerイメージを終了時に削除します。
 
 | 作業 | コマンド |

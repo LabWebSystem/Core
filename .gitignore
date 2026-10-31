@@ -40,6 +40,7 @@ test/result/robot/
 test/result/robot-current/
 test/result/robot-live/
 test/result/robot-lifecycle/
+test/result/actions/
 docs/generated/
 qa/.venv/
 dashboard/test-results/

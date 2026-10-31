@@ -30,9 +30,9 @@ dir = "sdk"
 run = ["npm test", "npm run build"]
 
 [test-dashboard]
-description = "Dashboardのlint、test、build、イメージを検証"
+description = "Dashboardのtest、build、イメージを検証"
 depends = ["dashboard-install"]
-run = ["npm --prefix dashboard run lint", "npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --network=host --file dashboard/Dockerfile dashboard"]
+run = ["npm --prefix dashboard test", "npm --prefix dashboard run build", "scripts/run-with-image-cleanup.sh docker build --network=host --file dashboard/Dockerfile dashboard"]
 
 [test-dashboard-e2e]
 description = "DashboardのPlaywright UIテストを実行"

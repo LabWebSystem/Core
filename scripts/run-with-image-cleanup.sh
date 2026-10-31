@@ -27,6 +27,10 @@ docker image ls --all --quiet --no-trunc | sort -u >"$tmp/images-after"
 cleanup_status=0
 while IFS= read -r image; do
   [[ -z "$image" ]] && continue
+  if [[ -n "$(docker ps --all --quiet --filter "ancestor=$image")" ]]; then
+    printf 'コンテナが使用中のDocker imageは削除しません: %s\n' "$image"
+    continue
+  fi
   if docker image rm "$image"; then
     printf 'テストで取得したDocker imageを削除しました: %s\n' "$image"
   else
