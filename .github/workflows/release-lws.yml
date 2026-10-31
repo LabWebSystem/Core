@@ -2,9 +2,9 @@ name: LWSリリース
 on:
   push:
     tags: ['lws-v*']
+  workflow_dispatch:
 permissions:
-  contents: write
-  packages: write
+  contents: read
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v4
       - name: Coreバージョンをリリースタグと照合
+        if: github.event_name == 'push'
         run: test "$(scripts/version.sh core)" = "${GITHUB_REF_NAME#lws-v}"
   quality:
     needs: version
@@ -22,10 +23,14 @@ jobs:
       profile: full
   backend-image:
     needs: [quality]
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: docker/login-action@v4
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -34,8 +39,9 @@ jobs:
       - name: Backendイメージ名を作成
         id: image
         run: echo "image=ghcr.io/labwebsystem/lws-backend:${GITHUB_REF_NAME#lws-v}" >> "$GITHUB_OUTPUT"
-      - name: Backendイメージをキャッシュ付きでビルドして公開
+      - name: Backendイメージをビルドして公開
         id: publish
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -44,14 +50,28 @@ jobs:
           tags: ${{ steps.image.outputs.image }}
           cache-from: type=gha,scope=lws-backend
           cache-to: type=gha,mode=max,scope=lws-backend
+      - name: Backendイメージを公開せずにビルド
+        id: dry_run
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          outputs: type=image,name=${{ steps.image.outputs.image }}
+          cache-from: type=gha,scope=lws-backend
+          cache-to: type=gha,mode=max,scope=lws-backend
     outputs:
-      digest: ${{ steps.publish.outputs.digest }}
+      digest: ${{ steps.publish.outputs.digest || steps.dry_run.outputs.digest }}
   dashboard-image:
     needs: [quality]
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: docker/login-action@v4
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -60,8 +80,9 @@ jobs:
       - name: Dashboardイメージ名を作成
         id: image
         run: echo "image=ghcr.io/labwebsystem/lws-dashboard:${GITHUB_REF_NAME#lws-v}" >> "$GITHUB_OUTPUT"
-      - name: Dashboardイメージをキャッシュ付きでビルドして公開
+      - name: Dashboardイメージをビルドして公開
         id: publish
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v7
         with:
           context: dashboard
@@ -69,15 +90,28 @@ jobs:
           tags: ${{ steps.image.outputs.image }}
           cache-from: type=gha,scope=lws-dashboard
           cache-to: type=gha,mode=max,scope=lws-dashboard
+      - name: Dashboardイメージを公開せずにビルド
+        id: dry_run
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v7
+        with:
+          context: dashboard
+          outputs: type=image,name=${{ steps.image.outputs.image }}
+          cache-from: type=gha,scope=lws-dashboard
+          cache-to: type=gha,mode=max,scope=lws-dashboard
     outputs:
-      digest: ${{ steps.publish.outputs.digest }}
+      digest: ${{ steps.publish.outputs.digest || steps.dry_run.outputs.digest }}
 
   avahi-image:
     needs: [quality]
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: docker/login-action@v4
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -88,6 +122,7 @@ jobs:
         run: echo "image=ghcr.io/labwebsystem/lws-avahi:${GITHUB_REF_NAME#lws-v}" >> "$GITHUB_OUTPUT"
       - name: Avahiイメージをビルドして公開
         id: publish
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -98,8 +133,20 @@ jobs:
           tags: ${{ steps.image.outputs.image }}
           cache-from: type=gha,scope=lws-avahi
           cache-to: type=gha,mode=max,scope=lws-avahi
+      - name: Avahiイメージを公開せずにビルド
+        id: dry_run
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infrastructure/Dockerfile.avahi
+          network: host
+          allow: network.host
+          outputs: type=image,name=${{ steps.image.outputs.image }}
+          cache-from: type=gha,scope=lws-avahi
+          cache-to: type=gha,mode=max,scope=lws-avahi
     outputs:
-      digest: ${{ steps.publish.outputs.digest }}
+      digest: ${{ steps.publish.outputs.digest || steps.dry_run.outputs.digest }}
 
   package:
     needs: [quality, backend-image, dashboard-image, avahi-image]
@@ -121,6 +168,9 @@ jobs:
           if-no-files-found: error
   release:
     needs: [quality, package, backend-image, dashboard-image, avahi-image]
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
