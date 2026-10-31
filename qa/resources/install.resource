@@ -11,8 +11,8 @@ Ubuntuコンテナでinstallスクリプトをroot実行する
     Should Be Equal As Integers    ${result.rc}    0    msg=${result.stderr}
 
 AlmaLinuxコンテナでinstallスクリプトをroot実行する
-    ${script}=    Set Variable    dnf install -y ca-certificates curl-minimal sudo && test "$(id -u)" = 0 && curl -fsSL ${INSTALL_SCRIPT_URL} | sudo bash
-    ${result}=    Run Process    docker    run    --network    host    --rm    --pull    missing    almalinux:9    bash    -ceu    ${script}    timeout=600s
+    ${script}=    Set Variable    test "$(id -u)" = 0 && command -v curl >/dev/null && bash /tmp/lws-install.sh
+    ${result}=    Run Process    docker    run    --network    host    --rm    --pull    missing    --volume    ${EXECDIR}/scripts/install.sh:/tmp/lws-install.sh:ro    almalinux:9    bash    -ceu    ${script}    timeout=600s
     Should Be Equal As Integers    ${result.rc}    0    msg=${result.stderr}
 
 非対応OSコンテナでinstallスクリプトを拒否する

@@ -105,6 +105,7 @@
 - CHG-081 | SHIPPED | - | Backend内のDocker Composeをv5.5.0へ固定する
 - CHG-082 | SHIPPED | - | アプリ起動前に公開状態を反映する
 - CHG-098 | SHIPPED | - | Core品質ゲートをActionsで並列実行しローカル入口をremote化
+- CHG-099 | SHIPPED | - | AlmaLinuxインストールQAのDNF待ち時間を削減する
 - SUP-001 | ACTIVE | - | Robotの内部テスト代理実行を通常参照から外す
 - SUP-002 | ACTIVE | - | CoreDNS mDNS案をAvahi方式へ置き換える
 - SUP-003 | ACTIVE | - | manifest必須のアプリ取得方式を置き換える

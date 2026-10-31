@@ -122,6 +122,7 @@
 - CHG-096 | SHIPPED | Backend / manifest | manifestでメインComposeファイルを指定する
 - CHG-097 | SHIPPED | Backend / Dashboard / アプリ登録 | ZIPとmanifestなしアプリを取り込む
 - CHG-098 | SHIPPED | - | Core品質ゲートをActionsで並列実行しローカル入口をremote化
+- CHG-099 | SHIPPED | - | AlmaLinuxインストールQAのDNF待ち時間を削減する
 
 ## SUPERSEDED
 - ADR-002 | SUPERSEDED | - | InfrastructureとBackendの正本およびアプリ実行方式

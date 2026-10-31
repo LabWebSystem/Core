@@ -458,7 +458,7 @@ EOF
     "$ROOT/scripts/install.sh"
 
   grep -q \
-    "install -y .*${asset_name}" \
+    "install -y --disablerepo=\\* .*${asset_name}" \
     "$dnf_log"
 }
 

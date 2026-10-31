@@ -155,7 +155,11 @@ main() {
   package_file="$TMPDIR/$(basename "$asset")"
   download "$asset" "$package_file"
 
-  "$PACKAGE_MANAGER" install -y "$package_file"
+  if [[ "$PACKAGE_KIND" == 'rpm' ]]; then
+    "$PACKAGE_MANAGER" install -y --disablerepo='*' "$package_file"
+  else
+    "$PACKAGE_MANAGER" install -y "$package_file"
+  fi
 
   printf 'LWSをインストールしました。実行例: sudo lwsctl start --domain home.local\n'
 }
