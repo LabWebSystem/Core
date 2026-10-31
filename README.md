@@ -171,7 +171,7 @@ mise run dev-dashboard-reset
 
 `mise run verify`はGitHub CLIを使ってGitHub Actionsを起動し、終了まで待機します。作業ツリーがcleanで、現在のコミットが追跡先ブランチへpush済みであることが必要です。引数なしはfast、`full`・`qa`・`release`は全品質ゲートを実行し、Actions画面からの手動起動も初期値をfullとします。PR・ブランチpushは自動でfast検証します。結果artifactは`test/result/actions/<run-id>/`へ取得されます。
 
-LWSのリリース相当検証は、GitHub Actionsの「LWSリリース」から「Run workflow」で起動します。手動起動は常にdry-runとなり、全品質ゲート、3イメージのビルド、digest検証付きパッケージ生成を行い、パッケージをartifactとして保存します。GHCRへのイメージpushとGitHub Release公開は行いません。通常リリースは`lws-v*`タグのpushで同じworkflowから実行します。
+CoreとSDKの公開前に、対象commitをGitHubへpushした状態で`mise run verify full`を実行し、全品質ゲートの成功を確認してください。検証に成功したらcommitを切り替えず、`mise run release core`、`mise run release sdk`または`mise run release all`を実行します。リリースコマンドはバージョンタグをpushして公開Workflowを起動します。LWSリリースWorkflowはイメージ作成・公開とdigest検証付きパッケージ生成を行い、SDKリリースWorkflowは公開用成果物をbuildしてGitHub Packagesへ公開します。検証と公開の間にcommitを追加・切り替えないでください。
 
 QAとDashboardのイメージ検証は、実行中に新しく取得・作成したDockerイメージを終了時に削除します。
 

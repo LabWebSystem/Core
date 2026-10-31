@@ -3,23 +3,10 @@ on:
   push:
     tags: ['sdk-v*']
 permissions:
+  contents: read
   packages: write
 jobs:
-  quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - name: SDKバージョンをリリースタグと照合
-        run: test "$(node -p "require('./sdk/package.json').version")" = "${GITHUB_REF_NAME#sdk-v}"
-      - run: mise run test-sdk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lws-sdk-dist
-          path: sdk/dist
-          if-no-files-found: error
   publish:
-    needs: [quality]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,10 +17,11 @@ jobs:
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
-      - uses: actions/download-artifact@v4
-        with:
-          name: lws-sdk-dist
-          path: sdk/dist
-      - run: npm publish
+      - name: SDKバージョンをリリースタグと照合
+        run: test "$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME#sdk-v}"
+      - name: 公開用成果物を生成
+        run: npm run build
+      - name: SDKを公開
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

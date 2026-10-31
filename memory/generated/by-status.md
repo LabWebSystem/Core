@@ -124,6 +124,7 @@
 - CHG-098 | SHIPPED | - | Core品質ゲートをActionsで並列実行しローカル入口をremote化
 - CHG-099 | SHIPPED | - | AlmaLinuxインストールQAのDNF待ち時間を削減する
 - CHG-100 | SHIPPED | CI / 品質ゲート | 品質ゲートの重複作業を分離しキャッシュと工程計測を追加する
+- CHG-101 | SHIPPED | CI / Release | リリースWorkflowから事前品質検証を分離する
 
 ## SUPERSEDED
 - ADR-002 | SUPERSEDED | - | InfrastructureとBackendの正本およびアプリ実行方式

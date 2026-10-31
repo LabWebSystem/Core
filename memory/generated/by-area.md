@@ -136,6 +136,9 @@
 - CHG-088 | SHIPPED | Backend HTTP API | BackendのOpenAPI仕様とSwagger UIをWeb公開する
 - CHG-090 | SHIPPED | Backend HTTP API | Operation path parameterのUUID契約をOpenAPIへ追加する
 
+## CI / Release
+- CHG-101 | SHIPPED | CI / Release | リリースWorkflowから事前品質検証を分離する
+
 ## CI / 品質ゲート
 - CHG-100 | SHIPPED | CI / 品質ゲート | 品質ゲートの重複作業を分離しキャッシュと工程計測を追加する
 
