@@ -45,10 +45,10 @@ LWS本体の隔離環境を準備する
     Should Be Equal As Integers    ${compose_prepare.rc}    0    ${compose_prepare.stderr}
     ${ports}=    Run Process    python3    -c    import re,subprocess,sys; sys.exit(1 if re.search(r':(?:80|5353)(?:\\s|$)',subprocess.check_output(['ss','-H','-ltnup']).decode()) else 0)
     Run Keyword If    ${ports.rc} != 0    Skip    LWSの必須ポート(80/tcp、5353/udp)が既に使用されています。
-    ${backend_build}=    Run Process    ${WORKSPACE}/scripts/build-test-image.sh    ${WORKSPACE}/backend/Dockerfile    ${BACKEND_IMAGE}    lws-backend    ${WORKSPACE}    cwd=${WORKSPACE}
+    ${backend_build}=    Run Process    ${WORKSPACE}/scripts/build-test-image.sh    ${WORKSPACE}/backend/Dockerfile    ${BACKEND_IMAGE}    lws-backend-qa    ${WORKSPACE}    cwd=${WORKSPACE}
     Log    Backend image build stdout=${backend_build.stdout} stderr=${backend_build.stderr}
     Should Be Equal As Integers    ${backend_build.rc}    0    ${backend_build.stderr}
-    ${avahi_build}=    Run Process    ${WORKSPACE}/scripts/build-test-image.sh    ${WORKSPACE}/infrastructure/Dockerfile.avahi    ${AVAHI_IMAGE}    lws-avahi    ${WORKSPACE}    cwd=${WORKSPACE}
+    ${avahi_build}=    Run Process    ${WORKSPACE}/scripts/build-test-image.sh    ${WORKSPACE}/infrastructure/Dockerfile.avahi    ${AVAHI_IMAGE}    lws-avahi-qa    ${WORKSPACE}    cwd=${WORKSPACE}
     Log    Avahi image build stdout=${avahi_build.stdout} stderr=${avahi_build.stderr}
     Should Be Equal As Integers    ${avahi_build.rc}    0    ${avahi_build.stderr}
 

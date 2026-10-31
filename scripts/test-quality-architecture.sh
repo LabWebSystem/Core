@@ -137,6 +137,8 @@ check_workflows() {
   require_match 'LWS_AVAHI_DIGEST' "$ROOT/scripts/validate-release-digests.sh"
   require_match 'type=gha,scope=\$CACHE_SCOPE' "$ROOT/scripts/build-test-image.sh"
   require_match 'ACTIONS_RUNTIME_TOKEN' "$ROOT/scripts/build-test-image.sh"
+  require_match 'lws-backend-qa' "$ROOT/qa/resources/lifecycle.resource"
+  require_match 'lws-avahi-qa' "$ROOT/qa/resources/lifecycle.resource"
   require_match '"config", "--format", "json"' "$ROOT/scripts/prepare-lifecycle-compose.py"
   require_match 'context != ROOT' "$ROOT/scripts/prepare-lifecycle-compose.py"
   require_match 'backend\["image"\] = args[.]backend_image' "$ROOT/scripts/prepare-lifecycle-compose.py"
